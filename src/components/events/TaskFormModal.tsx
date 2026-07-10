@@ -1,0 +1,187 @@
+import { useEffect } from 'react';
+import { Controller, useForm } from 'react-hook-form';
+import { Modal } from '../ui/Modal';
+import { Button } from '../ui/Button';
+import { Input, Select } from '../ui/Input';
+import { RichTextEditor } from '../editor/RichTextEditor';
+import { useLanguage } from '../../i18n';
+import { useTaskMutations } from '../../hooks/useTasks';
+import { useToast } from '../ui/Toast';
+import { useAuth } from '../../contexts/AuthContext';
+import { PRIORITIES, TASK_STATUSES } from '../../lib/constants';
+import { combineDateTime, extractTime } from '../../lib/utils';
+import type { Department, EventTask, Priority, TaskStatus } from '../../types';
+
+interface TaskFormValues {
+  title: string;
+  department_id: string;
+  description: string;
+  instructions: string;
+  work_location: string;
+  setup_location: string;
+  assigned_staff: string;
+  start_time: string;
+  completion_time: string;
+  priority: Priority;
+  status: TaskStatus;
+}
+
+interface TaskFormModalProps {
+  open: boolean;
+  onClose: () => void;
+  eventId: string;
+  eventDate: string;
+  departments: Department[];
+  /** Preselected department when adding from a section */
+  defaultDepartmentId?: string;
+  /** When set, the modal edits this task */
+  task?: EventTask | null;
+}
+
+export function TaskFormModal({ open, onClose, eventId, eventDate, departments, defaultDepartmentId, task }: TaskFormModalProps) {
+  const { t, deptName } = useLanguage();
+  const { toast } = useToast();
+  const { profile } = useAuth();
+  const { createTask, updateTask } = useTaskMutations(eventId);
+
+  const { register, handleSubmit, control, reset, formState } = useForm<TaskFormValues>({
+    defaultValues: emptyValues(defaultDepartmentId)
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    if (task) {
+      reset({
+        title: task.title,
+        department_id: task.department_id,
+        description: task.description,
+        instructions: task.instructions,
+        work_location: task.work_location,
+        setup_location: task.setup_location,
+        assigned_staff: task.assigned_staff,
+        start_time: extractTime(task.start_time) ?? '',
+        completion_time: extractTime(task.completion_time) ?? '',
+        priority: task.priority,
+        status: task.status
+      });
+    } else {
+      reset(emptyValues(defaultDepartmentId));
+    }
+  }, [open, task, defaultDepartmentId, reset]);
+
+  const onSubmit = async (values: TaskFormValues) => {
+    const payload = {
+      title: values.title.trim(),
+      department_id: values.department_id,
+      description: values.description,
+      instructions: values.instructions,
+      work_location: values.work_location.trim(),
+      setup_location: values.setup_location.trim(),
+      assigned_staff: values.assigned_staff.trim(),
+      start_time: combineDateTime(eventDate, values.start_time || null),
+      completion_time: combineDateTime(eventDate, values.completion_time || null),
+      priority: values.priority,
+      status: values.status
+    };
+    try {
+      if (task) {
+        await updateTask.mutateAsync({ id: task.id, ...payload });
+      } else {
+        await createTask.mutateAsync({ ...payload, event_id: eventId, created_by: profile?.id ?? null });
+      }
+      toast(t('common.savedSuccess'));
+      onClose();
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={task ? t('tasks.editTask') : t('tasks.addTask')}
+      size="lg"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
+          <Button onClick={handleSubmit(onSubmit)} loading={createTask.isPending || updateTask.isPending}>
+            {t('common.save')}
+          </Button>
+        </>
+      }
+    >
+      <form className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label={t('tasks.taskTitle')}
+            required
+            error={formState.errors.title && t('validation.required')}
+            {...register('title', { required: true })}
+            className="sm:col-span-2"
+          />
+          <Select label={t('common.department')} required {...register('department_id', { required: true })}>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>{deptName(d)}</option>
+            ))}
+          </Select>
+          <Input label={t('tasks.assignedStaff')} {...register('assigned_staff')} />
+          <Input label={t('tasks.workLocation')} {...register('work_location')} />
+          <Input label={t('tasks.setupLocation')} {...register('setup_location')} />
+          <Input label={t('tasks.startTime')} type="time" {...register('start_time')} />
+          <Input label={t('tasks.completionTime')} type="time" {...register('completion_time')} />
+          <Select label={t('common.priority')} {...register('priority')}>
+            {PRIORITIES.map((p) => (
+              <option key={p} value={p}>{t(`priority.${p}`)}</option>
+            ))}
+          </Select>
+          <Select label={t('common.status')} {...register('status')}>
+            {TASK_STATUSES.map((s) => (
+              <option key={s} value={s}>{t(`taskStatus.${s}`)}</option>
+            ))}
+          </Select>
+        </div>
+        <Controller
+          control={control}
+          name="description"
+          render={({ field }) => (
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {t('tasks.taskDescription')}
+              </label>
+              <RichTextEditor value={field.value} onChange={field.onChange} />
+            </div>
+          )}
+        />
+        <Controller
+          control={control}
+          name="instructions"
+          render={({ field }) => (
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {t('tasks.instructions')}
+              </label>
+              <RichTextEditor value={field.value} onChange={field.onChange} />
+            </div>
+          )}
+        />
+      </form>
+    </Modal>
+  );
+}
+
+function emptyValues(defaultDepartmentId?: string): TaskFormValues {
+  return {
+    title: '',
+    department_id: defaultDepartmentId ?? '',
+    description: '',
+    instructions: '',
+    work_location: '',
+    setup_location: '',
+    assigned_staff: '',
+    start_time: '',
+    completion_time: '',
+    priority: 'medium',
+    status: 'not_started'
+  };
+}
