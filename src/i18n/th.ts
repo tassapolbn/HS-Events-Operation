@@ -220,6 +220,9 @@ export const th: Dict = {
   },
   display: {
     boardTitle: 'บอร์ดแสดงผล',
+    upNext: 'งานที่ใกล้จะถึง',
+    soon: 'ใกล้ถึงเวลา',
+    tapToView: 'แตะเพื่อดูกิจกรรม',
     eventsTitle: 'บอร์ดแสดงงานกิจกรรม',
     requestsTitle: 'บอร์ดแจ้งงานแผนก',
     liveBoard: 'อัปเดตอัตโนมัติแบบเรียลไทม์',

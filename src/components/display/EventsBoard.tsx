@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import {
-  CalendarDays, Check, ChevronDown, Clock, MapPin, Paperclip, StickyNote, User
+  AlarmClock, CalendarDays, Check, ChevronDown, Clock, MapPin, Paperclip, StickyNote, User
 } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { getSignedUrl } from '../../hooks/useAttachments';
@@ -50,6 +50,21 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
   const { t, deptName, lang } = useLanguage();
   const toggleTask = useToggleDisplayTask();
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+
+  /** Jump from an upcoming task card to its event: expand, scroll, flash */
+  const goToEvent = (eventId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.delete(eventId);
+      return next;
+    });
+    setHighlighted(eventId);
+    window.setTimeout(() => {
+      document.getElementById(`event-${eventId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+    window.setTimeout(() => setHighlighted(null), 2600);
+  };
 
   const toggleCollapsed = (eventId: string) => {
     setCollapsed((prev) => {
@@ -243,8 +258,110 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     </div>
   );
 
+  // Upcoming tasks across ALL events, sorted by start time, so staff never
+  // miss work from another event happening the same day.
+  const nowMs = Date.now();
+  const horizonMs = nowMs + 48 * 3600 * 1000;
+  const upcoming = events
+    .flatMap((ev) =>
+      ev.tasks
+        .filter((task) => task.start_time && task.status !== 'completed' && task.status !== 'cancelled')
+        .filter((task) => {
+          const ts = new Date(task.start_time as string).getTime();
+          return ts >= nowMs - 30 * 60000 && ts <= horizonMs;
+        })
+        .filter((task) => !selectedDept || task.department_id === selectedDept)
+        .map((task) => ({ task, event: ev }))
+    )
+    .sort((a, b) => (a.task.start_time as string).localeCompare(b.task.start_time as string))
+    .slice(0, 10);
+
+  const relativeLabel = (iso: string): string | null => {
+    const mins = Math.round((new Date(iso).getTime() - nowMs) / 60000);
+    if (mins < -5) return null;
+    if (mins <= 60) return lang === 'th' ? `อีก ${Math.max(mins, 0)} นาที` : `in ${Math.max(mins, 0)} min`;
+    return null;
+  };
+
   return (
     <div className="space-y-6">
+      {/* Upcoming tasks rail */}
+      {upcoming.length > 0 && (
+        <section className="animate-slide-up rounded-3xl border border-gold-200 bg-gradient-to-r from-gold-50 via-white to-white p-4 shadow-sm dark:border-gold-900 dark:from-gold-950/30 dark:via-slate-900 dark:to-slate-900">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gold-400 text-navy-900">
+              <AlarmClock className="h-4 w-4" />
+            </span>
+            <h2 className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">{t('display.upNext')}</h2>
+            <span className="rounded-full bg-gold-100 px-2.5 py-0.5 text-xs font-bold text-gold-700 dark:bg-gold-900/60 dark:text-gold-300">
+              {upcoming.length}
+            </span>
+          </div>
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {upcoming.map(({ task, event }) => {
+              const dept = departments.find((d) => d.id === task.department_id);
+              const DeptIcon = departmentIcon(dept?.icon ?? 'users');
+              const sameDay = extractDate(task.start_time) === formatDate(new Date(), 'en', 'yyyy-MM-dd');
+              const soon = relativeLabel(task.start_time as string);
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => goToEvent(event.id)}
+                  title={t('display.tapToView')}
+                  className={cn(
+                    'flex w-64 shrink-0 cursor-pointer flex-col gap-1.5 rounded-2xl border bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-900',
+                    soon ? 'border-gold-300 ring-1 ring-gold-300/60 dark:border-gold-700' : 'border-slate-200 dark:border-slate-700'
+                  )}
+                  style={{ borderLeft: `5px solid ${event.header_color || '#1a3c5e'}` }}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg font-extrabold tabular-nums tracking-tight text-navy-800 dark:text-gold-300">
+                      {sameDay ? '' : `${formatDate(task.start_time, lang, 'd MMM')} `}
+                      {formatTime(task.start_time, lang)}
+                    </span>
+                    {soon && (
+                      <span className="animate-pulse rounded-full bg-gold-400 px-2 py-0.5 text-[0.65rem] font-extrabold text-navy-900">
+                        {soon}
+                      </span>
+                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleTask.mutate({ taskId: task.id, done: true });
+                      }}
+                      title={t('display.tapToComplete')}
+                      className="group ml-auto flex h-6 w-6 items-center justify-center rounded-lg border-2 border-slate-300 bg-white transition-all hover:scale-110 hover:border-emerald-400 dark:border-slate-600 dark:bg-slate-800"
+                    >
+                      <Check className="h-3.5 w-3.5 text-transparent transition-colors group-hover:text-emerald-500" />
+                    </button>
+                  </div>
+                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">{task.title}</p>
+                  <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                    <span className="inline-flex max-w-full items-center gap-1.5 truncate font-bold" style={{ color: event.header_color || '#1a3c5e' }}>
+                      <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: event.header_color || '#1a3c5e' }} />
+                      <span className="truncate">{event.name}</span>
+                    </span>
+                    {dept && (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold"
+                        style={{ backgroundColor: `${dept.color}1a`, color: dept.color }}
+                      >
+                        <DeptIcon className="h-3 w-3" /> {deptName(dept)}
+                      </span>
+                    )}
+                    {(task.work_location || task.setup_location) && (
+                      <span className="inline-flex items-center gap-1 text-slate-400">
+                        <MapPin className="h-3 w-3" /> {task.work_location || task.setup_location}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {events.map((event) => {
         const isCollapsed = collapsed.has(event.id);
         const anyVisibleTask = event.tasks.some((task) => !selectedDept || task.department_id === selectedDept);
@@ -258,7 +375,11 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
         return (
           <section
             key={event.id}
-            className="animate-slide-up overflow-hidden rounded-3xl border bg-white transition-all duration-300 shadow-[0_10px_30px_-12px_var(--event-glow)] hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-12px_var(--event-glow)] dark:bg-slate-900"
+            id={`event-${event.id}`}
+            className={cn(
+              'animate-slide-up scroll-mt-4 overflow-hidden rounded-3xl border bg-white transition-all duration-300 shadow-[0_10px_30px_-12px_var(--event-glow)] hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-12px_var(--event-glow)] dark:bg-slate-900',
+              highlighted === event.id && 'ring-4 ring-gold-400/80'
+            )}
             style={{
               '--event-glow': `${event.header_color || '#1a3c5e'}59`,
               borderColor: `${event.header_color || '#1a3c5e'}40`

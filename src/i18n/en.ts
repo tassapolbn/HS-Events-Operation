@@ -218,6 +218,9 @@ export const en = {
   },
   display: {
     boardTitle: 'Display Board',
+    upNext: 'Upcoming Tasks',
+    soon: 'Soon',
+    tapToView: 'Tap to view the event',
     eventsTitle: 'Events Display',
     requestsTitle: 'Department Requests Display',
     liveBoard: 'Live board, updates automatically',
