@@ -39,8 +39,8 @@ export function EventDetailPage() {
   const { data: event, isLoading, error } = useEvent(id);
   const { data: departments } = useDepartments();
   const { data: attachments } = useAttachments('event', id);
-  const { deleteEvent } = useEventMutations();
-  const { createTask } = useTaskMutations(id);
+  const { deleteEvent, updateEvent } = useEventMutations();
+  const { createTask, updateTask, deleteTask } = useTaskMutations(id);
   const { deleteSession } = useSessionMutations(id ?? '');
 
   const [viewMode, setViewMode] = useState<'overview' | 'department'>('overview');
@@ -56,6 +56,8 @@ export function EventDetailPage() {
   const [sessionFormOpen, setSessionFormOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<EventSession | null>(null);
   const [deletingSession, setDeletingSession] = useState<EventSession | null>(null);
+  const [deletingTask, setDeletingTask] = useState<EventTask | null>(null);
+  const [notifyDeptIds, setNotifyDeptIds] = useState<string[] | null>(null);
 
   const sortedDepartments = departments ?? [];
 
@@ -129,6 +131,18 @@ export function EventDetailPage() {
               sort_order: tasks.filter((task) => task.department_id === departmentId).length,
               created_by: profile?.id ?? null
             });
+          }}
+          onEditTask={openEditTask}
+          onDeleteTask={(task) => setDeletingTask(task)}
+          onNotify={(departmentId) => {
+            setNotifyDeptIds([departmentId]);
+            setNotifyOpen(true);
+          }}
+          onDropTask={async (taskId) => {
+            const moving = event.event_tasks.find((task) => task.id === taskId);
+            if (!moving || (moving.department_id === dept.id && (moving.session_id ?? null) === sessionId)) return;
+            await updateTask.mutateAsync({ id: taskId, department_id: dept.id, session_id: sessionId });
+            toast(t('common.savedSuccess'));
           }}
         />
       ))}
@@ -221,7 +235,7 @@ export function EventDetailPage() {
           </div>
           {isEventsTeam && (
             <div className="no-print flex items-center gap-1.5">
-              <Button variant="gold" size="sm" onClick={() => setNotifyOpen(true)}>
+              <Button variant="gold" size="sm" onClick={() => { setNotifyDeptIds(null); setNotifyOpen(true); }}>
                 <Bell className="h-4 w-4" /> <span className="hidden sm:inline">{t('events.notify')}</span>
               </Button>
               <Link to={`/events/${event.id}/edit`}>
@@ -366,6 +380,10 @@ export function EventDetailPage() {
         defaultDepartmentId={taskFormDeptId}
         defaultSessionId={taskFormSessionId}
         task={editingTask}
+        eventNotes={event.additional_notes}
+        onSaveEventNotes={async (html) => {
+          await updateEvent.mutateAsync({ id: event.id, additional_notes: html });
+        }}
       />
       <TaskDetailModal
         open={!!viewingTask}
@@ -388,11 +406,11 @@ export function EventDetailPage() {
       {notifyOpen && (
         <NotifyModal
           open={notifyOpen}
-          onClose={() => setNotifyOpen(false)}
+          onClose={() => { setNotifyOpen(false); setNotifyDeptIds(null); }}
           type="event"
           targetId={event.id}
           departments={sortedDepartments}
-          suggestedIds={departmentsWithTasks.map((d) => d.id)}
+          suggestedIds={notifyDeptIds ?? departmentsWithTasks.map((d) => d.id)}
         />
       )}
       {templateOpen && (
@@ -411,6 +429,19 @@ export function EventDetailPage() {
         title={t('events.deleteConfirm')}
         message={t('events.deleteConfirmText')}
         loading={deleteEvent.isPending}
+      />
+      <ConfirmDialog
+        open={!!deletingTask}
+        onClose={() => setDeletingTask(null)}
+        onConfirm={async () => {
+          if (deletingTask) {
+            await deleteTask.mutateAsync(deletingTask.id);
+            setDeletingTask(null);
+            toast(t('common.deletedSuccess'));
+          }
+        }}
+        title={t('tasks.deleteTaskConfirm')}
+        loading={deleteTask.isPending}
       />
       <ConfirmDialog
         open={!!deletingSession}

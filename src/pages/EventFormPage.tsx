@@ -13,6 +13,7 @@ import { RichTextEditor } from '../components/editor/RichTextEditor';
 import { Spinner } from '../components/ui/Spinner';
 import { EVENT_CATEGORIES, EVENT_STATUSES } from '../lib/constants';
 import { combineDateTime, extractDate, extractTime } from '../lib/utils';
+import { supabase } from '../lib/supabase';
 import type { EventStatus } from '../types';
 
 const SCHEDULE_FIELDS = [
@@ -142,6 +143,19 @@ export function EventFormPage() {
         navigate(`/events/${id}`);
       } else {
         const created = await createEvent.mutateAsync({ ...payload, created_by: profile?.id ?? null });
+        // Every new event starts with a ready-to-use session (same date and place)
+        try {
+          await supabase.from('event_sessions').insert({
+            event_id: created.id,
+            session_date: values.event_date,
+            location: values.location.trim(),
+            start_time: milestone('event_start'),
+            end_time: milestone('event_finish'),
+            sort_order: 0
+          });
+        } catch {
+          /* non-critical */
+        }
         toast(t('common.savedSuccess'));
         navigate(`/events/${created.id}`);
       }

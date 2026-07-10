@@ -210,3 +210,18 @@ board is now **one page with tabs** (`/display`) for Events and Department
 Requests (the old two links still work); the board got a refreshed design
 with gradients, hover animations, and events that **collapse or expand**
 when their header is clicked, sorted by date.
+
+---
+
+## Update 3: Board redesign and task management (July 2026)
+
+No database changes. Just Commit and Push from GitHub Desktop.
+
+What is new: redesigned light display board with a Display Size control
+(S / M / L / XL, saved per device) for TVs, monitors and tablets; session
+timeline with calendar date tiles; Setup Begins and Venue Ready emphasized
+in gold everywhere; whole-event Additional Notes editable from the task form
+and shown as a note panel on the board; edit and delete buttons directly on
+task rows; drag a task onto another department or session to move it;
+a bell on each department column to notify only that department; and every
+new event starts with a ready default session.

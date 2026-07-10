@@ -45,7 +45,7 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading }
           <article
             key={request.id}
             className={cn(
-              'animate-slide-up overflow-hidden rounded-2xl bg-white shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl dark:bg-slate-900',
+              'animate-slide-up overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900',
               completed && 'opacity-70'
             )}
             style={{ borderLeft: `6px solid ${dept?.color ?? '#1a3c5e'}` }}
@@ -54,8 +54,8 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading }
               <div className="flex flex-wrap items-start gap-3">
                 {dept && (
                   <span
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow"
-                    style={{ background: `linear-gradient(135deg, ${dept.color} 0%, ${darkenColor(dept.color)} 100%)` }}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: `${dept.color}1a`, color: dept.color }}
                   >
                     <Icon className="h-6 w-6" />
                   </span>

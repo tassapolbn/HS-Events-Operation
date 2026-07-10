@@ -5,7 +5,7 @@
 -- Run after 005_display_mode.sql.
 -- ============================================================
 
-create table event_sessions (
+create table if not exists event_sessions (
   id uuid primary key default gen_random_uuid(),
   event_id uuid not null references events (id) on delete cascade,
   title text not null default '',
@@ -20,16 +20,20 @@ create table event_sessions (
 
 alter table event_tasks add column if not exists session_id uuid references event_sessions (id) on delete set null;
 
-create index idx_sessions_event on event_sessions (event_id, session_date);
-create index idx_tasks_session on event_tasks (session_id);
+create index if not exists idx_sessions_event on event_sessions (event_id, session_date);
+create index if not exists idx_tasks_session on event_tasks (session_id);
 
+drop trigger if exists trg_sessions_updated on event_sessions;
 create trigger trg_sessions_updated before update on event_sessions for each row execute function set_updated_at();
+drop trigger if exists trg_audit_sessions on event_sessions;
 create trigger trg_audit_sessions after insert or update or delete on event_sessions for each row execute function write_audit_log();
 
 alter table event_sessions enable row level security;
 
+drop policy if exists "sessions_select" on event_sessions;
 create policy "sessions_select" on event_sessions
   for select to authenticated using (true);
+drop policy if exists "sessions_write" on event_sessions;
 create policy "sessions_write" on event_sessions
   for all to authenticated using (is_events_team()) with check (is_events_team());
 

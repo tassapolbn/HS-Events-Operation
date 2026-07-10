@@ -1,13 +1,15 @@
 import { useState, type ReactNode } from 'react';
-import { CalendarDays, Check, ChevronDown, Clock, Layers, MapPin, Paperclip, User } from 'lucide-react';
+import {
+  CalendarDays, Check, ChevronDown, Clock, MapPin, Paperclip, StickyNote, User
+} from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { getSignedUrl } from '../../hooks/useAttachments';
 import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
 import { Spinner } from '../ui/Spinner';
 import { departmentIcon } from '../../lib/constants';
-import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
-import type { DisplayAttachment, DisplayDepartment, DisplayEvent, DisplayTask } from '../../types';
+import { cn, extractDate, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
+import type { DisplayAttachment, DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
 
 function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
   const open = async (file: DisplayAttachment) => {
@@ -20,7 +22,7 @@ function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
   };
   if (files.length === 0) return null;
   return (
-    <span className="mt-1.5 flex flex-wrap gap-1.5">
+    <span className="mt-2 flex flex-wrap gap-1.5">
       {files.map((file) => (
         <button
           key={file.id}
@@ -28,7 +30,7 @@ function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
             e.stopPropagation();
             open(file);
           }}
-          className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 transition-transform hover:scale-105 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-all hover:-translate-y-0.5 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
         >
           <Paperclip className="h-3 w-3" /> {file.file_name}
         </button>
@@ -63,15 +65,42 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     return <p className="py-24 text-center text-xl text-slate-400">{t('display.noEvents')}</p>;
   }
 
-  const milestones = (event: DisplayEvent) =>
-    [
-      { label: t('timeline.setupBegins'), value: event.setup_start },
-      { label: t('timeline.venueReady'), value: event.venue_ready },
-      { label: t('timeline.eventStarts'), value: event.event_start },
-      { label: t('timeline.eventEnds'), value: event.event_finish },
-      { label: t('timeline.breakdownBegins'), value: event.breakdown_start },
-      { label: t('timeline.breakdownComplete'), value: event.breakdown_deadline }
+  const milestonePills = (event: DisplayEvent): ReactNode => {
+    const items = [
+      { label: t('timeline.setupBegins'), value: event.setup_start, key: true },
+      { label: t('timeline.venueReady'), value: event.venue_ready, key: true },
+      { label: t('timeline.eventStarts'), value: event.event_start, key: false },
+      { label: t('timeline.eventEnds'), value: event.event_finish, key: false },
+      { label: t('timeline.breakdownBegins'), value: event.breakdown_start, key: false },
+      { label: t('timeline.breakdownComplete'), value: event.breakdown_deadline, key: false }
     ].filter((m) => m.value);
+    if (items.length === 0) return null;
+    return (
+      <div className="mt-4 flex flex-wrap gap-2">
+        {items.map((m) => {
+          const sameDay = extractDate(m.value) === event.event_date;
+          return (
+            <span
+              key={m.label}
+              className={cn(
+                'inline-flex items-baseline gap-1.5 rounded-xl border px-3 py-1.5 transition-transform hover:scale-[1.03]',
+                m.key
+                  ? 'border-gold-300 bg-gold-50 dark:border-gold-800 dark:bg-gold-950/40'
+                  : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60'
+              )}
+            >
+              <span className={cn('text-xs font-semibold', m.key ? 'text-gold-700 dark:text-gold-400' : 'text-slate-400')}>
+                {m.label}
+              </span>
+              <span className={cn('text-sm font-extrabold tabular-nums', m.key ? 'text-gold-800 dark:text-gold-300' : 'text-slate-700 dark:text-slate-200')}>
+                {sameDay ? '' : `${formatDate(m.value, lang, 'd MMM')} `}{formatTime(m.value, lang)}
+              </span>
+            </span>
+          );
+        })}
+      </div>
+    );
+  };
 
   const renderPanels = (tasks: DisplayTask[]): ReactNode => {
     const visibleDepts = departments.filter(
@@ -79,7 +108,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     );
     if (visibleDepts.length === 0) return null;
     return (
-      <div className={cn('grid gap-3 2xl:gap-4', selectedDept ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4')}>
+      <div className={cn('grid gap-4', selectedDept ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4')}>
         {visibleDepts.map((dept) => {
           const Icon = departmentIcon(dept.icon);
           const deptTasks = tasks.filter((task) => task.department_id === dept.id);
@@ -87,66 +116,69 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
           return (
             <div
               key={dept.id}
-              className="flex flex-col overflow-hidden rounded-2xl border-2 bg-slate-50 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:bg-slate-800/50"
-              style={{ borderColor: dept.color }}
+              className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
             >
-              <div
-                className="flex items-center gap-2.5 px-3.5 py-2.5 text-white 2xl:px-4 2xl:py-3"
-                style={{ background: `linear-gradient(120deg, ${dept.color} 0%, ${darkenColor(dept.color)} 100%)` }}
-              >
-                <Icon className="h-5 w-5 2xl:h-6 2xl:w-6" />
-                <h3 className="flex-1 text-sm font-extrabold lg:text-base 2xl:text-lg">{deptName(dept)}</h3>
-                <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm font-bold">
+              <div className="h-1" style={{ backgroundColor: dept.color }} />
+              <div className="flex items-center gap-2.5 px-4 py-3">
+                <span
+                  className="flex h-9 w-9 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: `${dept.color}1a`, color: dept.color }}
+                >
+                  <Icon className="h-5 w-5" />
+                </span>
+                <h3 className="flex-1 truncate text-sm font-bold text-slate-800 dark:text-slate-100">{deptName(dept)}</h3>
+                <span
+                  className="rounded-full px-2.5 py-0.5 text-xs font-bold"
+                  style={{ backgroundColor: `${dept.color}1a`, color: dept.color }}
+                >
                   {done}/{deptTasks.length}
                 </span>
               </div>
-              <ul className="flex-1 divide-y divide-slate-200/70 dark:divide-slate-700/60">
+              <ul className="flex-1 divide-y divide-slate-100 dark:divide-slate-800">
                 {deptTasks.map((task, index) => {
                   const completed = task.status === 'completed';
                   return (
                     <li
                       key={task.id}
                       className={cn(
-                        'flex items-start gap-2.5 px-3.5 py-2.5 transition-colors 2xl:gap-3 2xl:px-4 2xl:py-3.5',
-                        completed
-                          ? 'bg-gradient-to-r from-emerald-50 to-transparent dark:from-emerald-950/40'
-                          : 'hover:bg-white dark:hover:bg-slate-800'
+                        'flex items-start gap-3 px-4 py-3 transition-colors',
+                        completed ? 'bg-emerald-50/70 dark:bg-emerald-950/25' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
                       )}
                     >
                       <button
                         onClick={() => toggleTask.mutate({ taskId: task.id, done: !completed })}
                         className={cn(
-                          'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 hover:scale-110 active:scale-90 2xl:h-8 2xl:w-8',
+                          'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 hover:scale-110 active:scale-90',
                           completed
-                            ? 'border-emerald-500 bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow'
+                            ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
                             : 'border-slate-300 bg-white hover:border-emerald-400 dark:border-slate-600 dark:bg-slate-900'
                         )}
                         title={t('display.tapToComplete')}
                         aria-label={t('display.tapToComplete')}
                       >
-                        {completed && <Check className="h-4 w-4 2xl:h-5 2xl:w-5" strokeWidth={3} />}
+                        {completed && <Check className="h-4 w-4" strokeWidth={3} />}
                       </button>
                       <div className="min-w-0 flex-1">
                         <p
                           className={cn(
-                            'text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100 lg:text-[15px] 2xl:text-lg',
+                            'text-[0.95rem] font-semibold leading-snug text-slate-800 dark:text-slate-100',
                             completed && 'text-slate-400 line-through dark:text-slate-500'
                           )}
                         >
-                          <span className="mr-1.5 text-slate-300 dark:text-slate-600">{index + 1}.</span>
+                          <span className="mr-1.5 font-bold text-slate-300 dark:text-slate-600">{index + 1}.</span>
                           {task.title}
                         </p>
                         {!isRichTextEmpty(task.description) && !completed && (
                           <RichTextViewer html={task.description} className="mt-1 text-sm text-slate-500" />
                         )}
-                        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 2xl:text-sm">
+                        <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-400">
                           {(task.work_location || task.setup_location) && (
                             <span className="inline-flex items-center gap-1">
                               <MapPin className="h-3.5 w-3.5" /> {task.work_location || task.setup_location}
                             </span>
                           )}
                           {task.start_time && (
-                            <span className="inline-flex items-center gap-1 font-semibold">
+                            <span className="inline-flex items-center gap-1 font-semibold text-slate-500 dark:text-slate-300">
                               <Clock className="h-3.5 w-3.5" /> {formatTime(task.start_time, lang)}
                               {task.completion_time && <> - {formatTime(task.completion_time, lang)}</>}
                             </span>
@@ -178,6 +210,39 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     );
   };
 
+  const sessionHeader = (session: DisplaySession): ReactNode => (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      {/* Calendar tile */}
+      <span className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900">
+        <span className="text-lg font-extrabold leading-none">{formatDate(session.session_date, lang, 'd')}</span>
+        <span className="text-[0.6rem] font-bold uppercase leading-tight opacity-80">
+          {formatDate(session.session_date, lang, 'MMM')}
+        </span>
+      </span>
+      <div className="min-w-0">
+        <p className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
+          {session.title || formatDate(session.session_date, lang, 'EEEE d MMMM')}
+        </p>
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+          <span className="inline-flex items-center gap-1">
+            <CalendarDays className="h-3.5 w-3.5 text-gold-500" /> {formatDate(session.session_date, lang)}
+          </span>
+          {session.location && (
+            <span className="inline-flex items-center gap-1 text-sm font-bold text-navy-700 dark:text-gold-300">
+              <MapPin className="h-4 w-4" /> {session.location}
+            </span>
+          )}
+          {session.start_time && (
+            <span className="inline-flex items-center gap-1 font-semibold">
+              <Clock className="h-3.5 w-3.5 text-gold-500" /> {formatTime(session.start_time, lang)}
+              {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
+            </span>
+          )}
+        </p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {events.map((event) => {
@@ -186,119 +251,95 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
         if (selectedDept && !anyVisibleTask) return null;
         const totalTasks = event.tasks.length;
         const doneTasks = event.tasks.filter((task) => task.status === 'completed').length;
-        const sessionIds = new Set(event.sessions.map((s) => s.id));
+        const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+        const sessions = event.sessions ?? [];
+        const sessionIds = new Set(sessions.map((s) => s.id));
         const generalTasks = event.tasks.filter((task) => !task.session_id || !sessionIds.has(task.session_id));
         return (
           <section
             key={event.id}
-            className="animate-slide-up overflow-hidden rounded-3xl bg-white shadow-md transition-shadow hover:shadow-xl dark:bg-slate-900"
+            className="animate-slide-up overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-lg dark:border-slate-800 dark:bg-slate-900"
           >
-            {/* Clickable gradient header: collapse / full details */}
+            {/* Event header: light, title-first */}
             <header
               onClick={() => toggleCollapsed(event.id)}
-              className="cursor-pointer select-none px-5 py-4 transition-all 2xl:px-8 2xl:py-5"
-              style={{
-                background: `linear-gradient(135deg, ${event.header_color} 0%, ${darkenColor(event.header_color)} 100%)`,
-                color: event.header_text_color
-              }}
+              className="cursor-pointer select-none px-6 py-5"
+              style={{ borderLeft: `6px solid ${event.header_color || '#1a3c5e'}` }}
             >
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                <h2 className="text-xl font-extrabold tracking-tight lg:text-2xl 2xl:text-4xl">{event.name}</h2>
-                <span className="flex items-center gap-2 text-sm font-semibold opacity-90 lg:text-base 2xl:text-xl">
-                  <CalendarDays className="h-4 w-4 2xl:h-5 2xl:w-5" /> {formatDate(event.event_date, lang, 'EEEE d MMMM yyyy')}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: event.header_color || '#1a3c5e' }} />
+                <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white 2xl:text-3xl">
+                  {event.name}
+                </h2>
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  <CalendarDays className="h-4 w-4" /> {formatDate(event.event_date, lang, 'EEE d MMM yyyy')}
                 </span>
                 {event.location && (
-                  <span className="flex items-center gap-2 text-sm font-semibold opacity-90 lg:text-base 2xl:text-xl">
-                    <MapPin className="h-4 w-4 2xl:h-5 2xl:w-5" /> {event.location}
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <MapPin className="h-4 w-4" /> {event.location}
                   </span>
                 )}
-                <span className="ml-auto flex items-center gap-2">
-                  <span
-                    className="rounded-full px-3 py-1 text-sm font-bold 2xl:text-base"
-                    style={{ backgroundColor: 'rgba(255,255,255,0.18)' }}
-                  >
-                    {doneTasks}/{totalTasks} <Check className="ml-0.5 inline h-4 w-4" strokeWidth={3} />
+                <span className="ml-auto flex items-center gap-3">
+                  <span className="hidden w-28 sm:block">
+                    <span className="mb-1 block text-right text-xs font-bold text-slate-400">
+                      {doneTasks}/{totalTasks}
+                    </span>
+                    <span className="block h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                      <span className="block h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
+                    </span>
                   </span>
-                  <ChevronDown
-                    className={cn('h-6 w-6 opacity-80 transition-transform duration-300', isCollapsed && '-rotate-90')}
-                  />
+                  <ChevronDown className={cn('h-6 w-6 text-slate-300 transition-transform duration-300', isCollapsed && '-rotate-90')} />
                 </span>
               </div>
+
               {!isCollapsed && (
                 <>
-                  {milestones(event).length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {milestones(event).map((m) => {
-                        const sameDay = extractDate(m.value) === event.event_date;
-                        return (
-                          <span
-                            key={m.label}
-                            className="rounded-full border border-white/20 bg-white/15 px-2.5 py-1 text-xs font-bold backdrop-blur transition-transform hover:scale-105 lg:text-sm 2xl:px-3 2xl:py-1.5 2xl:text-base"
-                          >
-                            {m.label} {sameDay ? '' : `${formatDate(m.value, lang, 'd MMM')} `}{formatTime(m.value, lang)}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {milestonePills(event)}
                   {!isRichTextEmpty(event.description) && (
-                    <RichTextViewer html={event.description} className="mt-3 max-w-4xl !text-inherit opacity-95" />
+                    <RichTextViewer html={event.description} className="mt-4 max-w-4xl text-slate-600 dark:text-slate-300" />
+                  )}
+                  {!isRichTextEmpty(event.additional_notes) && (
+                    <div className="mt-4 flex max-w-4xl items-start gap-2.5 rounded-r-xl border-l-4 border-amber-400 bg-amber-50 px-4 py-3 dark:border-amber-500 dark:bg-amber-950/30">
+                      <StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                      <RichTextViewer html={event.additional_notes} className="!text-amber-900 dark:!text-amber-200" />
+                    </div>
                   )}
                   <AttachmentChips files={event.attachments} />
                 </>
               )}
             </header>
 
-            {/* Task groups: sessions or whole event */}
+            {/* Sessions timeline */}
             {!isCollapsed && (
-              <div className="space-y-4 p-4 2xl:p-6">
-                {event.sessions.length === 0 ? (
+              <div className="border-t border-slate-100 px-6 py-5 dark:border-slate-800">
+                {sessions.length === 0 ? (
                   renderPanels(event.tasks)
                 ) : (
-                  <>
+                  <div className="relative space-y-6 pl-5">
+                    <span className="absolute bottom-2 left-[7px] top-2 w-0.5 rounded-full bg-gradient-to-b from-gold-400 via-slate-200 to-slate-200 dark:via-slate-700 dark:to-slate-700" />
                     {generalTasks.length > 0 && (
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2 dark:bg-slate-800">
-                          <Layers className="h-4 w-4 text-slate-400" />
-                          <span className="text-sm font-extrabold text-slate-600 dark:text-slate-300 2xl:text-base">
-                            {t('sessions.generalTasks')}
-                          </span>
+                      <div className="relative space-y-3">
+                        <span className="absolute -left-5 top-4 h-3 w-3 rounded-full border-2 border-white bg-slate-300 dark:border-slate-900 dark:bg-slate-600" />
+                        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800/50">
+                          <span className="text-sm font-bold text-slate-500 dark:text-slate-300">{t('sessions.generalTasks')}</span>
                         </div>
                         {renderPanels(generalTasks)}
                       </div>
                     )}
-                    {event.sessions.map((session) => {
+                    {sessions.map((session) => {
                       const sessionTasks = event.tasks.filter((task) => task.session_id === session.id);
                       if (sessionTasks.length === 0) return null;
                       const panels = renderPanels(sessionTasks);
                       if (!panels) return null;
                       return (
-                        <div key={session.id} className="space-y-3">
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl bg-gradient-to-r from-navy-800 to-navy-600 px-4 py-2.5 text-white shadow-sm">
-                            <Layers className="h-4 w-4 text-gold-400" />
-                            <span className="text-sm font-extrabold 2xl:text-base">
-                              {session.title || formatDate(session.session_date, lang, 'EEEE d MMMM')}
-                            </span>
-                            <span className="flex items-center gap-1.5 text-xs text-white/80 2xl:text-sm">
-                              <CalendarDays className="h-3.5 w-3.5" /> {formatDate(session.session_date, lang)}
-                            </span>
-                            {session.location && (
-                              <span className="flex items-center gap-1.5 text-xs text-white/80 2xl:text-sm">
-                                <MapPin className="h-3.5 w-3.5" /> {session.location}
-                              </span>
-                            )}
-                            {session.start_time && (
-                              <span className="flex items-center gap-1.5 text-xs text-white/80 2xl:text-sm">
-                                <Clock className="h-3.5 w-3.5" /> {formatTime(session.start_time, lang)}
-                                {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
-                              </span>
-                            )}
-                          </div>
+                        <div key={session.id} className="relative space-y-3">
+                          <span className="absolute -left-5 top-5 h-3 w-3 rounded-full border-2 border-white bg-gold-400 dark:border-slate-900" />
+                          {sessionHeader(session)}
                           {panels}
                         </div>
                       );
                     })}
-                  </>
+                  </div>
                 )}
               </div>
             )}

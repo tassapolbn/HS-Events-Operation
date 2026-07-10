@@ -16,11 +16,14 @@ export function EventTimeline({ event }: { event: EventRow }) {
   const { t, lang } = useLanguage();
   const now = Date.now();
 
+  // Setup Begins and Venue Ready are the critical times for operational staff
+  const emphasized = new Set(['setup_start', 'venue_ready']);
   const items = MILESTONES.map((m) => {
     const value = event[m.field] as string | null;
     const sameDay = !value || extractDate(value) === event.event_date;
     return {
       label: t(m.key),
+      emphasized: emphasized.has(m.field),
       time: value,
       display: value
         ? sameDay
@@ -54,12 +57,21 @@ export function EventTimeline({ event }: { event: EventRow }) {
                   'z-10 flex h-7 w-7 items-center justify-center rounded-full border-2 text-[10px] font-bold transition-colors',
                   item.passed
                     ? 'border-gold-400 bg-gold-400 text-navy-900'
-                    : 'border-slate-300 bg-white text-slate-400 dark:border-slate-600 dark:bg-slate-900'
+                    : item.emphasized
+                      ? 'border-gold-400 bg-white text-gold-600 ring-2 ring-gold-200 dark:bg-slate-900 dark:ring-gold-900'
+                      : 'border-slate-300 bg-white text-slate-400 dark:border-slate-600 dark:bg-slate-900'
                 )}
               >
                 {item.passed ? <Check className="h-3.5 w-3.5" /> : index + 1}
               </span>
-              <span className="text-[11px] font-semibold leading-tight text-slate-600 dark:text-slate-300">{item.label}</span>
+              <span
+                className={cn(
+                  'text-[11px] font-semibold leading-tight',
+                  item.emphasized ? 'font-bold text-gold-700 dark:text-gold-300' : 'text-slate-600 dark:text-slate-300'
+                )}
+              >
+                {item.label}
+              </span>
               <span className={cn('text-xs font-bold', item.passed ? 'text-navy-800 dark:text-gold-300' : 'text-slate-400')}>
                 {item.display}
               </span>
@@ -85,13 +97,17 @@ export function EventTimeline({ event }: { event: EventRow }) {
                 'z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 text-[10px] font-bold',
                 item.passed
                   ? 'border-gold-400 bg-gold-400 text-navy-900'
-                  : 'border-slate-300 bg-white text-slate-400 dark:border-slate-600 dark:bg-slate-900'
+                  : item.emphasized
+                    ? 'border-gold-400 bg-white text-gold-600 ring-2 ring-gold-200 dark:bg-slate-900 dark:ring-gold-900'
+                    : 'border-slate-300 bg-white text-slate-400 dark:border-slate-600 dark:bg-slate-900'
               )}
             >
               {item.passed ? <Check className="h-3.5 w-3.5" /> : index + 1}
             </span>
             <div className="flex flex-1 items-center justify-between">
-              <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{item.label}</span>
+              <span className={cn('text-sm font-medium', item.emphasized ? 'font-bold text-gold-700 dark:text-gold-300' : 'text-slate-700 dark:text-slate-200')}>
+                {item.label}
+              </span>
               <span className={cn('text-sm font-bold', item.passed ? 'text-navy-800 dark:text-gold-300' : 'text-slate-400')}>
                 {item.display}
               </span>

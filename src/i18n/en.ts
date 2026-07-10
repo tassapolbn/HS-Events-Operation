@@ -185,6 +185,8 @@ export const en = {
     startTime: 'Start Time',
     completionTime: 'Completion Time',
     checklist: 'Checklist',
+    eventNotesHint: 'Applies to the whole event and is shown on the display board',
+    dragHint: 'Drag a task onto another department or session to move it',
     quickAddPlaceholder: 'Type a task and press Enter',
     detailedTask: 'Detailed task (times, instructions, files)',
     addChecklistItem: 'Add checklist item...',
@@ -206,6 +208,13 @@ export const en = {
     hint: 'A session is one part of the event: a specific day, venue or time slot',
     generalTasks: 'Whole event tasks',
     whole: 'Whole event'
+  },
+  displaySize: {
+    label: 'Display size',
+    small: 'S',
+    medium: 'M',
+    large: 'L',
+    xlarge: 'XL'
   },
   display: {
     boardTitle: 'Display Board',

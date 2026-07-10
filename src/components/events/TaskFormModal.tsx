@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -40,17 +40,26 @@ interface TaskFormModalProps {
   defaultSessionId?: string | null;
   /** When set, the modal edits this task */
   task?: EventTask | null;
+  /** The event's Additional Notes (whole event), editable at the bottom of the form */
+  eventNotes: string;
+  onSaveEventNotes: (html: string) => Promise<void>;
 }
 
-export function TaskFormModal({ open, onClose, eventId, eventDate, departments, sessions, defaultDepartmentId, defaultSessionId, task }: TaskFormModalProps) {
+export function TaskFormModal({ open, onClose, eventId, eventDate, departments, sessions, defaultDepartmentId, defaultSessionId, task, eventNotes, onSaveEventNotes }: TaskFormModalProps) {
   const { t, deptName, lang } = useLanguage();
   const { toast } = useToast();
   const { profile } = useAuth();
   const { createTask, updateTask } = useTaskMutations(eventId);
+  const [notesDraft, setNotesDraft] = useState(eventNotes);
 
   const { register, handleSubmit, control, reset, formState } = useForm<TaskFormValues>({
     defaultValues: emptyValues(defaultDepartmentId, defaultSessionId)
   });
+
+  useEffect(() => {
+    if (open) setNotesDraft(eventNotes);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -94,6 +103,9 @@ export function TaskFormModal({ open, onClose, eventId, eventDate, departments, 
         await updateTask.mutateAsync({ id: task.id, ...payload });
       } else {
         await createTask.mutateAsync({ ...payload, event_id: eventId, created_by: profile?.id ?? null });
+      }
+      if (notesDraft !== eventNotes) {
+        await onSaveEventNotes(notesDraft);
       }
       toast(t('common.savedSuccess'));
       onClose();
@@ -183,6 +195,15 @@ export function TaskFormModal({ open, onClose, eventId, eventDate, departments, 
             </div>
           )}
         />
+
+        {/* Whole-event Additional Notes */}
+        <div className="space-y-1.5 rounded-xl border border-gold-200 bg-gold-50/60 p-3 dark:border-gold-900 dark:bg-gold-950/20">
+          <label className="block text-xs font-semibold uppercase tracking-wide text-gold-700 dark:text-gold-400">
+            {t('events.additionalNotes')}
+          </label>
+          <p className="text-xs text-slate-400">{t('tasks.eventNotesHint')}</p>
+          <RichTextEditor value={notesDraft} onChange={setNotesDraft} />
+        </div>
       </form>
     </Modal>
   );

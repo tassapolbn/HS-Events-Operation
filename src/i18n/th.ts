@@ -187,6 +187,8 @@ export const th: Dict = {
     startTime: 'เวลาเริ่มงาน',
     completionTime: 'เวลาที่ต้องเสร็จ',
     checklist: 'รายการตรวจสอบ',
+    eventNotesHint: 'ใช้กับทั้งกิจกรรม และแสดงบนบอร์ดแสดงผล',
+    dragHint: 'ลากงานไปวางที่แผนกหรือ Session อื่นเพื่อย้ายงาน',
     quickAddPlaceholder: 'พิมพ์งานแล้วกด Enter',
     detailedTask: 'งานแบบละเอียด (เวลา คำสั่งงาน ไฟล์)',
     addChecklistItem: 'เพิ่มรายการตรวจสอบ...',
@@ -208,6 +210,13 @@ export const th: Dict = {
     hint: 'Session คือช่วงหนึ่งของกิจกรรม เช่น วัน สถานที่ หรือช่วงเวลาที่ต่างกัน',
     generalTasks: 'งานรวมของทั้งกิจกรรม',
     whole: 'ทั้งกิจกรรม'
+  },
+  displaySize: {
+    label: 'ขนาดการแสดงผล',
+    small: 'S',
+    medium: 'M',
+    large: 'L',
+    xlarge: 'XL'
   },
   display: {
     boardTitle: 'บอร์ดแสดงผล',
