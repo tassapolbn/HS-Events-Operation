@@ -55,6 +55,12 @@ export function extractTime(value: string | null): string | null {
   return format(parseISO(value), 'HH:mm');
 }
 
+/** Extract the local yyyy-MM-dd date from an ISO string */
+export function extractDate(value: string | null): string | null {
+  if (!value) return null;
+  return format(parseISO(value), 'yyyy-MM-dd');
+}
+
 export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;

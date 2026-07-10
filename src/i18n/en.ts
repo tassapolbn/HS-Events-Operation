@@ -104,6 +104,7 @@ export const en = {
     category: 'Category',
     eventDate: 'Event Date',
     eventLocation: 'Event Location',
+    scheduleDateHint: 'Each step can be on a different day. If you leave a date empty, the event date is used.',
     headerColor: 'Header Background Color',
     headerTextColor: 'Header Text Color',
     headerColorsHint: 'Used on the event header and the public display board',

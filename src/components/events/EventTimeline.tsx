@@ -1,6 +1,6 @@
 import { Check } from 'lucide-react';
 import { useLanguage } from '../../i18n';
-import { cn, formatTime } from '../../lib/utils';
+import { cn, extractDate, formatDate, formatTime } from '../../lib/utils';
 import type { EventRow } from '../../types';
 
 const MILESTONES = [
@@ -18,9 +18,15 @@ export function EventTimeline({ event }: { event: EventRow }) {
 
   const items = MILESTONES.map((m) => {
     const value = event[m.field] as string | null;
+    const sameDay = !value || extractDate(value) === event.event_date;
     return {
       label: t(m.key),
       time: value,
+      display: value
+        ? sameDay
+          ? formatTime(value, lang)
+          : `${formatDate(value, lang, 'd MMM')} ${formatTime(value, lang)}`
+        : '-',
       passed: value ? new Date(value).getTime() <= now : false
     };
   });
@@ -55,7 +61,7 @@ export function EventTimeline({ event }: { event: EventRow }) {
               </span>
               <span className="text-[11px] font-semibold leading-tight text-slate-600 dark:text-slate-300">{item.label}</span>
               <span className={cn('text-xs font-bold', item.passed ? 'text-navy-800 dark:text-gold-300' : 'text-slate-400')}>
-                {item.time ? formatTime(item.time, lang) : '-'}
+                {item.display}
               </span>
             </div>
           </li>
@@ -87,7 +93,7 @@ export function EventTimeline({ event }: { event: EventRow }) {
             <div className="flex flex-1 items-center justify-between">
               <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{item.label}</span>
               <span className={cn('text-sm font-bold', item.passed ? 'text-navy-800 dark:text-gold-300' : 'text-slate-400')}>
-                {item.time ? formatTime(item.time, lang) : '-'}
+                {item.display}
               </span>
             </div>
           </li>

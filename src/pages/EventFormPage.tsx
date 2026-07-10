@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, useForm, type Path } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useEvent, useEventMutations } from '../hooks/useEvents';
@@ -12,20 +12,31 @@ import { Input, Select } from '../components/ui/Input';
 import { RichTextEditor } from '../components/editor/RichTextEditor';
 import { Spinner } from '../components/ui/Spinner';
 import { EVENT_CATEGORIES, EVENT_STATUSES } from '../lib/constants';
-import { combineDateTime, extractTime } from '../lib/utils';
+import { combineDateTime, extractDate, extractTime } from '../lib/utils';
 import type { EventStatus } from '../types';
+
+const SCHEDULE_FIELDS = [
+  { name: 'setup_start', label: 'events.setupStart' },
+  { name: 'venue_ready', label: 'events.venueReady' },
+  { name: 'event_start', label: 'events.eventStart' },
+  { name: 'event_finish', label: 'events.eventFinish' },
+  { name: 'breakdown_start', label: 'events.breakdownStart' },
+  { name: 'breakdown_deadline', label: 'events.breakdownDeadline' }
+] as const;
+
+type ScheduleFieldName = (typeof SCHEDULE_FIELDS)[number]['name'];
+
+interface ScheduleSlot {
+  date: string;
+  time: string;
+}
 
 interface EventFormValues {
   name: string;
   category: string;
   event_date: string;
   location: string;
-  setup_start: string;
-  venue_ready: string;
-  event_start: string;
-  event_finish: string;
-  breakdown_start: string;
-  breakdown_deadline: string;
+  schedule: Record<ScheduleFieldName, ScheduleSlot>;
   description: string;
   additional_notes: string;
   internal_notes: string;
@@ -34,14 +45,14 @@ interface EventFormValues {
   header_text_color: string;
 }
 
-const TIME_FIELDS = [
-  { name: 'setup_start', label: 'events.setupStart' },
-  { name: 'venue_ready', label: 'events.venueReady' },
-  { name: 'event_start', label: 'events.eventStart' },
-  { name: 'event_finish', label: 'events.eventFinish' },
-  { name: 'breakdown_start', label: 'events.breakdownStart' },
-  { name: 'breakdown_deadline', label: 'events.breakdownDeadline' }
-] as const;
+const emptySchedule = (): Record<ScheduleFieldName, ScheduleSlot> => ({
+  setup_start: { date: '', time: '' },
+  venue_ready: { date: '', time: '' },
+  event_start: { date: '', time: '' },
+  event_finish: { date: '', time: '' },
+  breakdown_start: { date: '', time: '' },
+  breakdown_deadline: { date: '', time: '' }
+});
 
 export function EventFormPage() {
   const { id } = useParams();
@@ -59,12 +70,7 @@ export function EventFormPage() {
       category: 'general',
       event_date: '',
       location: '',
-      setup_start: '',
-      venue_ready: '',
-      event_start: '',
-      event_finish: '',
-      breakdown_start: '',
-      breakdown_deadline: '',
+      schedule: emptySchedule(),
       description: '',
       additional_notes: '',
       internal_notes: '',
@@ -76,17 +82,25 @@ export function EventFormPage() {
 
   useEffect(() => {
     if (existing && isEdit) {
+      const schedule = emptySchedule();
+      for (const field of SCHEDULE_FIELDS) {
+        const iso = existing[field.name];
+        schedule[field.name] = {
+          date: extractDate(iso) ?? '',
+          time: extractTime(iso) ?? ''
+        };
+        // When the milestone falls on the event date itself, leave the
+        // date box empty so the form stays clean and simple.
+        if (schedule[field.name].date === existing.event_date) {
+          schedule[field.name].date = '';
+        }
+      }
       reset({
         name: existing.name,
         category: existing.category,
         event_date: existing.event_date,
         location: existing.location,
-        setup_start: extractTime(existing.setup_start) ?? '',
-        venue_ready: extractTime(existing.venue_ready) ?? '',
-        event_start: extractTime(existing.event_start) ?? '',
-        event_finish: extractTime(existing.event_finish) ?? '',
-        breakdown_start: extractTime(existing.breakdown_start) ?? '',
-        breakdown_deadline: extractTime(existing.breakdown_deadline) ?? '',
+        schedule,
         description: existing.description,
         additional_notes: existing.additional_notes,
         internal_notes: existing.internal_notes,
@@ -98,17 +112,22 @@ export function EventFormPage() {
   }, [existing, isEdit, reset]);
 
   const onSubmit = async (values: EventFormValues) => {
+    const milestone = (name: ScheduleFieldName) => {
+      const slot = values.schedule[name];
+      if (!slot.time) return null;
+      return combineDateTime(slot.date || values.event_date, slot.time);
+    };
     const payload = {
       name: values.name.trim(),
       category: values.category,
       event_date: values.event_date,
       location: values.location.trim(),
-      setup_start: combineDateTime(values.event_date, values.setup_start || null),
-      venue_ready: combineDateTime(values.event_date, values.venue_ready || null),
-      event_start: combineDateTime(values.event_date, values.event_start || null),
-      event_finish: combineDateTime(values.event_date, values.event_finish || null),
-      breakdown_start: combineDateTime(values.event_date, values.breakdown_start || null),
-      breakdown_deadline: combineDateTime(values.event_date, values.breakdown_deadline || null),
+      setup_start: milestone('setup_start'),
+      venue_ready: milestone('venue_ready'),
+      event_start: milestone('event_start'),
+      event_finish: milestone('event_finish'),
+      breakdown_start: milestone('breakdown_start'),
+      breakdown_deadline: milestone('breakdown_deadline'),
       description: values.description,
       additional_notes: values.additional_notes,
       internal_notes: values.internal_notes,
@@ -150,7 +169,7 @@ export function EventFormPage() {
   );
 
   return (
-    <div className="animate-fade-in mx-auto max-w-4xl space-y-5">
+    <div className="animate-fade-in mx-auto max-w-4xl space-y-6">
       <div className="flex items-center gap-3">
         <Link to={isEdit && id ? `/events/${id}` : '/events'}>
           <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /> {t('common.back')}</Button>
@@ -160,7 +179,7 @@ export function EventFormPage() {
         </h1>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <Card>
           <CardHeader><CardTitle>{t('events.basicInfo')}</CardTitle></CardHeader>
           <CardBody className="grid gap-4 sm:grid-cols-2">
@@ -205,10 +224,31 @@ export function EventFormPage() {
 
         <Card>
           <CardHeader><CardTitle>{t('events.schedule')}</CardTitle></CardHeader>
-          <CardBody className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {TIME_FIELDS.map((field) => (
-              <Input key={field.name} label={t(field.label)} type="time" {...register(field.name)} />
-            ))}
+          <CardBody>
+            <p className="mb-4 text-xs text-slate-400">{t('events.scheduleDateHint')}</p>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {SCHEDULE_FIELDS.map((field) => (
+                <div key={field.name} className="space-y-1.5 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                  <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                    {t(field.label)}
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="date"
+                      {...register(`schedule.${field.name}.date` as Path<EventFormValues>)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-navy-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
+                      aria-label={`${t(field.label)} ${t('common.date')}`}
+                    />
+                    <input
+                      type="time"
+                      {...register(`schedule.${field.name}.time` as Path<EventFormValues>)}
+                      className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-navy-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
+                      aria-label={`${t(field.label)} ${t('events.times')}`}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </CardBody>
         </Card>
 

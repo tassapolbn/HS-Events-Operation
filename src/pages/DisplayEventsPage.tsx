@@ -9,7 +9,7 @@ import { DisplayShell } from '../components/display/DisplayShell';
 import { RichTextViewer } from '../components/editor/RichTextViewer';
 import { Spinner } from '../components/ui/Spinner';
 import { departmentIcon } from '../lib/constants';
-import { cn, formatDate, formatTime, isRichTextEmpty } from '../lib/utils';
+import { cn, extractDate, formatDate, formatTime, isRichTextEmpty } from '../lib/utils';
 import type { DisplayAttachment, DisplayEvent } from '../types';
 
 function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
@@ -79,31 +79,34 @@ export function DisplayEventsPage() {
               <section key={event.id} className="overflow-hidden rounded-3xl bg-white shadow-md dark:bg-slate-900">
                 {/* Event header with custom colors */}
                 <header
-                  className="px-6 py-5 lg:px-8"
+                  className="px-5 py-4 2xl:px-8 2xl:py-5"
                   style={{ backgroundColor: event.header_color, color: event.header_text_color }}
                 >
                   <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
-                    <h2 className="text-2xl font-extrabold tracking-tight lg:text-4xl">{event.name}</h2>
-                    <span className="flex items-center gap-2 text-base font-semibold opacity-90 lg:text-xl">
-                      <CalendarDays className="h-5 w-5" /> {formatDate(event.event_date, lang, 'EEEE d MMMM yyyy')}
+                    <h2 className="text-xl font-extrabold tracking-tight lg:text-2xl 2xl:text-4xl">{event.name}</h2>
+                    <span className="flex items-center gap-2 text-sm font-semibold opacity-90 lg:text-base 2xl:text-xl">
+                      <CalendarDays className="h-4 w-4 2xl:h-5 2xl:w-5" /> {formatDate(event.event_date, lang, 'EEEE d MMMM yyyy')}
                     </span>
                     {event.location && (
-                      <span className="flex items-center gap-2 text-base font-semibold opacity-90 lg:text-xl">
-                        <MapPin className="h-5 w-5" /> {event.location}
+                      <span className="flex items-center gap-2 text-sm font-semibold opacity-90 lg:text-base 2xl:text-xl">
+                        <MapPin className="h-4 w-4 2xl:h-5 2xl:w-5" /> {event.location}
                       </span>
                     )}
                   </div>
                   {milestones(event).length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {milestones(event).map((m) => (
-                        <span
-                          key={m.label}
-                          className="rounded-full px-3 py-1.5 text-sm font-bold lg:text-base"
-                          style={{ backgroundColor: 'rgba(255,255,255,0.16)' }}
-                        >
-                          {m.label} {formatTime(m.value, lang)}
-                        </span>
-                      ))}
+                      {milestones(event).map((m) => {
+                        const sameDay = extractDate(m.value) === event.event_date;
+                        return (
+                          <span
+                            key={m.label}
+                            className="rounded-full px-2.5 py-1 text-xs font-bold lg:text-sm 2xl:px-3 2xl:py-1.5 2xl:text-base"
+                            style={{ backgroundColor: 'rgba(255,255,255,0.16)' }}
+                          >
+                            {m.label} {sameDay ? '' : `${formatDate(m.value, lang, 'd MMM')} `}{formatTime(m.value, lang)}
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
                   {!isRichTextEmpty(event.description) && (
@@ -115,8 +118,8 @@ export function DisplayEventsPage() {
                 {/* Department panels */}
                 <div
                   className={cn(
-                    'grid gap-4 p-5 lg:p-6',
-                    selectedDept ? 'grid-cols-1' : 'md:grid-cols-2 xl:grid-cols-4'
+                    'grid gap-3 p-4 2xl:gap-4 2xl:p-6',
+                    selectedDept ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
                   )}
                 >
                   {visibleDepts.map((dept) => {
@@ -129,9 +132,9 @@ export function DisplayEventsPage() {
                         className="flex flex-col overflow-hidden rounded-2xl border-2 bg-slate-50 dark:bg-slate-800/50"
                         style={{ borderColor: dept.color }}
                       >
-                        <div className="flex items-center gap-3 px-4 py-3 text-white" style={{ backgroundColor: dept.color }}>
-                          <Icon className="h-6 w-6" />
-                          <h3 className="flex-1 text-base font-extrabold lg:text-lg">{deptName(dept)}</h3>
+                        <div className="flex items-center gap-2.5 px-3.5 py-2.5 text-white 2xl:px-4 2xl:py-3" style={{ backgroundColor: dept.color }}>
+                          <Icon className="h-5 w-5 2xl:h-6 2xl:w-6" />
+                          <h3 className="flex-1 text-sm font-extrabold lg:text-base 2xl:text-lg">{deptName(dept)}</h3>
                           <span className="rounded-full bg-white/20 px-2.5 py-0.5 text-sm font-bold">
                             {done}/{tasks.length}
                           </span>
@@ -143,14 +146,14 @@ export function DisplayEventsPage() {
                               <li
                                 key={task.id}
                                 className={cn(
-                                  'flex items-start gap-3 px-4 py-3.5 transition-colors',
+                                  'flex items-start gap-2.5 px-3.5 py-2.5 transition-colors 2xl:gap-3 2xl:px-4 2xl:py-3.5',
                                   completed && 'bg-emerald-50 dark:bg-emerald-950/30'
                                 )}
                               >
                                 <button
                                   onClick={() => toggleTask.mutate({ taskId: task.id, done: !completed })}
                                   className={cn(
-                                    'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all lg:h-8 lg:w-8',
+                                    'mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition-all 2xl:h-8 2xl:w-8',
                                     completed
                                       ? 'border-emerald-500 bg-emerald-500 text-white'
                                       : 'border-slate-300 bg-white hover:border-emerald-400 dark:border-slate-600 dark:bg-slate-900'
@@ -158,12 +161,12 @@ export function DisplayEventsPage() {
                                   title={t('display.tapToComplete')}
                                   aria-label={t('display.tapToComplete')}
                                 >
-                                  {completed && <Check className="h-5 w-5" strokeWidth={3} />}
+                                  {completed && <Check className="h-4 w-4 2xl:h-5 2xl:w-5" strokeWidth={3} />}
                                 </button>
                                 <div className="min-w-0 flex-1">
                                   <p
                                     className={cn(
-                                      'text-base font-semibold leading-snug text-slate-800 dark:text-slate-100 lg:text-lg',
+                                      'text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100 lg:text-[15px] 2xl:text-lg',
                                       completed && 'text-slate-400 line-through dark:text-slate-500'
                                     )}
                                   >
@@ -173,7 +176,7 @@ export function DisplayEventsPage() {
                                   {!isRichTextEmpty(task.description) && !completed && (
                                     <RichTextViewer html={task.description} className="mt-1 text-sm text-slate-500" />
                                   )}
-                                  <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-slate-500 dark:text-slate-400">
+                                  <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400 2xl:text-sm">
                                     {(task.work_location || task.setup_location) && (
                                       <span className="inline-flex items-center gap-1">
                                         <MapPin className="h-3.5 w-3.5" /> {task.work_location || task.setup_location}

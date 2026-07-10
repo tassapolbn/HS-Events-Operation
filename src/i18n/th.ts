@@ -106,6 +106,7 @@ export const th: Dict = {
     category: 'ประเภทกิจกรรม',
     eventDate: 'วันที่จัดกิจกรรม',
     eventLocation: 'สถานที่จัดกิจกรรม',
+    scheduleDateHint: 'แต่ละช่วงอาจเป็นคนละวันได้ หากเว้นวันที่ว่างไว้ ระบบจะใช้วันที่จัดกิจกรรม',
     headerColor: 'สีพื้นหลังหัวกิจกรรม',
     headerTextColor: 'สีตัวอักษรหัวกิจกรรม',
     headerColorsHint: 'ใช้กับหัวกิจกรรมและบอร์ดแสดงผลสาธารณะ',

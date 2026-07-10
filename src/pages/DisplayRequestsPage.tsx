@@ -46,7 +46,7 @@ export function DisplayRequestsPage() {
       ) : visible.length === 0 ? (
         <p className="py-24 text-center text-xl text-slate-400">{t('display.noRequests')}</p>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3 2xl:gap-4">
           {visible.map((request) => {
             const dept = (departments ?? []).find((d) => d.id === request.department_id);
             const Icon = departmentIcon(dept?.icon ?? 'users');
@@ -60,7 +60,7 @@ export function DisplayRequestsPage() {
                 )}
                 style={{ borderLeft: `6px solid ${dept?.color ?? '#1a3c5e'}` }}
               >
-                <div className="p-5 lg:p-6">
+                <div className="p-4 2xl:p-6">
                   <div className="flex flex-wrap items-start gap-3">
                     {dept && (
                       <span
@@ -73,7 +73,7 @@ export function DisplayRequestsPage() {
                     <div className="min-w-0 flex-1">
                       <h3
                         className={cn(
-                          'text-lg font-extrabold leading-snug text-slate-800 dark:text-slate-100 lg:text-xl',
+                          'text-base font-extrabold leading-snug text-slate-800 dark:text-slate-100 2xl:text-xl',
                           completed && 'line-through'
                         )}
                       >
@@ -91,7 +91,7 @@ export function DisplayRequestsPage() {
                     </div>
                   </div>
 
-                  <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500 dark:text-slate-400 lg:text-base">
+                  <p className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400 2xl:text-sm">
                     <span className="inline-flex items-center gap-1.5">
                       <CalendarDays className="h-4 w-4" /> {formatDate(request.request_date, lang)}
                     </span>
@@ -142,7 +142,7 @@ export function DisplayRequestsPage() {
                             key={status}
                             onClick={() => !active && setStatus.mutate({ requestId: request.id, status })}
                             className={cn(
-                              'flex items-center gap-1.5 rounded-xl border-2 px-3.5 py-2 text-sm font-bold transition-all lg:text-base',
+                              'flex items-center gap-1.5 rounded-xl border-2 px-3 py-1.5 text-xs font-bold transition-all 2xl:px-3.5 2xl:py-2 2xl:text-sm',
                               active
                                 ? 'text-white shadow'
                                 : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
