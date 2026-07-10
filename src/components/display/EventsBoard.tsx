@@ -258,7 +258,11 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
         return (
           <section
             key={event.id}
-            className="animate-slide-up overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-lg dark:border-slate-800 dark:bg-slate-900"
+            className="animate-slide-up overflow-hidden rounded-3xl border bg-white transition-all duration-300 shadow-[0_10px_30px_-12px_var(--event-glow)] hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-12px_var(--event-glow)] dark:bg-slate-900"
+            style={{
+              '--event-glow': `${event.header_color || '#1a3c5e'}59`,
+              borderColor: `${event.header_color || '#1a3c5e'}40`
+            } as React.CSSProperties}
           >
             {/* Event header: light, title-first */}
             <header

@@ -51,17 +51,16 @@ export function DisplayShell({
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur dark:border-slate-800 dark:bg-slate-900/90">
+      <header className="bg-gradient-to-r from-navy-950 via-navy-800 to-navy-600 shadow-md">
         <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3.5 lg:px-8">
-          <img src="/logo-landscape-light.png" alt="HeadStart International School" className="h-10 w-auto object-contain dark:hidden" />
-          <img src="/logo-landscape-dark.png" alt="HeadStart International School" className="hidden h-10 w-auto object-contain dark:block" />
+          <img src="/logo-landscape-dark.png" alt="HeadStart International School" className="h-10 w-auto object-contain" />
           <div className="min-w-0">
-            <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-gold-500">{t('app.school')}</p>
-            <h1 className="text-lg font-extrabold tracking-tight text-navy-800 dark:text-white">{t('display.boardTitle')}</h1>
+            <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-gold-400">{t('app.school')}</p>
+            <h1 className="text-lg font-extrabold tracking-tight text-white">{t('display.boardTitle')}</h1>
           </div>
 
           {/* Tabs */}
-          <div className="flex rounded-2xl bg-slate-100 p-1 dark:bg-slate-800">
+          <div className="flex rounded-2xl bg-white/10 p-1 backdrop-blur">
             {tabs.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
@@ -69,8 +68,8 @@ export function DisplayShell({
                 className={cn(
                   'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-all duration-200',
                   tab === key
-                    ? 'bg-white text-navy-800 shadow-sm dark:bg-slate-700 dark:text-white'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                    ? 'bg-gradient-to-r from-gold-400 to-gold-300 text-navy-900 shadow-md'
+                    : 'text-white/75 hover:bg-white/10 hover:text-white'
                 )}
               >
                 <Icon className="h-4 w-4" /> {label}
@@ -79,13 +78,13 @@ export function DisplayShell({
           </div>
 
           <div className="ml-auto hidden text-right sm:block">
-            <p className="text-2xl font-extrabold tabular-nums tracking-tight text-navy-800 dark:text-gold-400">{clock}</p>
-            <p className="text-xs capitalize text-slate-400">{dateLine}</p>
+            <p className="text-2xl font-extrabold tabular-nums tracking-tight text-gold-400">{clock}</p>
+            <p className="text-xs capitalize text-white/70">{dateLine}</p>
           </div>
 
           {/* Display size */}
-          <div className="flex items-center gap-1 rounded-2xl bg-slate-100 p-1 dark:bg-slate-800" title={t('displaySize.label')}>
-            <Type className="ml-1.5 h-4 w-4 text-slate-400" />
+          <div className="flex items-center gap-1 rounded-2xl bg-white/10 p-1 backdrop-blur" title={t('displaySize.label')}>
+            <Type className="ml-1.5 h-4 w-4 text-white/60" />
             {SCALES.map((s) => (
               <button
                 key={s}
@@ -93,8 +92,8 @@ export function DisplayShell({
                 className={cn(
                   'rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all',
                   scale === s
-                    ? 'bg-navy-800 text-white shadow-sm dark:bg-gold-400 dark:text-navy-900'
-                    : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-200'
+                    ? 'bg-gold-400 text-navy-900 shadow-sm'
+                    : 'text-white/70 hover:bg-white/10 hover:text-white'
                 )}
               >
                 {t(`displaySize.${s}`)}
@@ -105,13 +104,13 @@ export function DisplayShell({
           <div className="flex items-center gap-1.5">
             <button
               onClick={() => setLang(lang === 'en' ? 'th' : 'en')}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 transition-all hover:border-slate-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold text-white transition-all hover:scale-105 hover:bg-white/20"
             >
               <Globe className="h-4 w-4" /> {lang === 'en' ? 'ไทย' : 'EN'}
             </button>
             <button
               onClick={onRefresh}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-600 transition-all hover:border-slate-300 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              className="rounded-xl bg-white/10 px-3 py-2 text-white transition-all hover:scale-105 hover:bg-white/20"
               title={t('display.refresh')}
             >
               <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
@@ -124,10 +123,10 @@ export function DisplayShell({
           <button
             onClick={() => onSelectDepartment('')}
             className={cn(
-              'rounded-full border px-4 py-1.5 text-sm font-bold transition-all duration-200 hover:-translate-y-0.5',
+              'rounded-full px-4 py-1.5 text-sm font-bold transition-all duration-200 hover:-translate-y-0.5',
               selectedDepartmentId === ''
-                ? 'border-navy-800 bg-navy-800 text-white shadow-md dark:border-gold-400 dark:bg-gold-400 dark:text-navy-900'
-                : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                ? 'bg-gradient-to-r from-gold-400 to-gold-300 text-navy-900 shadow-md'
+                : 'bg-white/10 text-white/85 hover:bg-white/20'
             )}
           >
             {t('display.allDepartments')}
@@ -140,21 +139,20 @@ export function DisplayShell({
                 key={dept.id}
                 onClick={() => onSelectDepartment(active ? '' : dept.id)}
                 className={cn(
-                  'flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-bold transition-all duration-200 hover:-translate-y-0.5',
-                  active
-                    ? 'text-white shadow-md'
-                    : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                  'flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold transition-all duration-200 hover:-translate-y-0.5',
+                  active ? 'text-white shadow-md' : 'bg-white/10 text-white/85 hover:bg-white/20'
                 )}
-                style={active ? { backgroundColor: dept.color, borderColor: dept.color } : undefined}
+                style={active ? { backgroundColor: dept.color } : undefined}
               >
-                <Icon className="h-4 w-4" style={active ? undefined : { color: dept.color }} /> {deptName(dept)}
+                <Icon className="h-4 w-4" /> {deptName(dept)}
               </button>
             );
           })}
-          <span className="ml-auto hidden text-xs text-slate-400 md:block">
+          <span className="ml-auto hidden text-xs text-white/50 md:block">
             {updatedAt && `${t('display.updated')} ${updatedAt.toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-GB')}`}
           </span>
         </div>
+        <div className="h-1 bg-gradient-to-r from-gold-400 via-gold-300/70 to-transparent" />
       </header>
 
       <main className="mx-auto max-w-[1800px] px-5 py-6 lg:px-8">{children}</main>
