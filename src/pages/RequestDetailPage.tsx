@@ -16,7 +16,7 @@ import { RichTextViewer } from '../components/editor/RichTextViewer';
 import { NotifyModal } from '../components/events/NotifyModal';
 import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
-import { departmentIcon, TASK_STATUSES } from '../lib/constants';
+import { departmentIcon, REQUEST_STATUSES } from '../lib/constants';
 import { formatDate, isRichTextEmpty } from '../lib/utils';
 import type { TaskStatus } from '../types';
 
@@ -149,7 +149,7 @@ export function RequestDetailPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400">{t('myDept.updateStatus')}:</span>
               <Select value={request.status} onChange={(e) => changeStatus(e.target.value as TaskStatus)} className="w-44">
-                {TASK_STATUSES.map((s) => <option key={s} value={s}>{t(`taskStatus.${s}`)}</option>)}
+                {REQUEST_STATUSES.map((s) => <option key={s} value={s}>{t(`taskStatus.${s}`)}</option>)}
               </Select>
             </div>
           )}

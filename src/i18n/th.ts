@@ -106,6 +106,9 @@ export const th: Dict = {
     category: 'ประเภทกิจกรรม',
     eventDate: 'วันที่จัดกิจกรรม',
     eventLocation: 'สถานที่จัดกิจกรรม',
+    headerColor: 'สีพื้นหลังหัวกิจกรรม',
+    headerTextColor: 'สีตัวอักษรหัวกิจกรรม',
+    headerColorsHint: 'ใช้กับหัวกิจกรรมและบอร์ดแสดงผลสาธารณะ',
     setupStart: 'เริ่มจัดเตรียมสถานที่',
     venueReady: 'สถานที่พร้อม',
     eventStart: 'เริ่มกิจกรรม',
@@ -160,7 +163,10 @@ export const th: Dict = {
     in_progress: 'กำลังทำ',
     waiting: 'รอดำเนินการ',
     completed: 'เสร็จแล้ว',
-    cancelled: 'ยกเลิก'
+    cancelled: 'ยกเลิก',
+    new: 'งานใหม่',
+    acknowledged: 'รับทราบแล้ว',
+    needs_revision: 'ต้องแก้ไข'
   },
   priority: {
     low: 'ต่ำ',
@@ -180,6 +186,8 @@ export const th: Dict = {
     startTime: 'เวลาเริ่มงาน',
     completionTime: 'เวลาที่ต้องเสร็จ',
     checklist: 'รายการตรวจสอบ',
+    quickAddPlaceholder: 'พิมพ์งานแล้วกด Enter',
+    detailedTask: 'งานแบบละเอียด (เวลา คำสั่งงาน ไฟล์)',
     addChecklistItem: 'เพิ่มรายการตรวจสอบ...',
     deleteTask: 'ลบงาน',
     deleteTaskConfirm: 'ต้องการลบงานนี้และรายการตรวจสอบหรือไม่?',
@@ -188,6 +196,22 @@ export const th: Dict = {
     departmentNotes: 'บันทึกจากแผนก',
     notesHint: 'หมายเหตุจากทีมของแผนก',
     progress: 'ความคืบหน้า'
+  },
+  display: {
+    eventsTitle: 'บอร์ดแสดงงานกิจกรรม',
+    requestsTitle: 'บอร์ดแจ้งงานแผนก',
+    liveBoard: 'อัปเดตอัตโนมัติแบบเรียลไทม์',
+    allDepartments: 'ทุกแผนก',
+    updated: 'อัปเดตล่าสุด',
+    refresh: 'รีเฟรช',
+    noEvents: 'ไม่มีกิจกรรมที่กำลังจะมาถึง',
+    noRequests: 'ไม่มีงานค้าง',
+    completedLabel: 'เสร็จแล้ว',
+    tapToComplete: 'แตะเมื่อทำเสร็จ',
+    setStatus: 'อัปเดตสถานะ',
+    files: 'ไฟล์',
+    due: 'กำหนดเสร็จ',
+    openFull: 'เปิดแอปพลิเคชันเต็ม'
   },
   requests: {
     title: 'แจ้งงานแผนก',
@@ -206,6 +230,9 @@ export const th: Dict = {
     requestDetails: 'รายละเอียดงาน',
     jobDetails: 'รายละเอียดงาน',
     requestedBy: 'ผู้แจ้งงาน',
+    referencePhotos: 'รูปภาพประกอบ',
+    referencePhotosHint: 'เพิ่มรูปของสิ่งของหรือจุดที่ต้องการ เช่น อุปกรณ์ที่ชำรุด หรือเฟอร์นิเจอร์ที่ต้องย้าย',
+    addPhotos: 'เพิ่มรูปภาพ',
     searchPlaceholder: 'ค้นหาจากหัวข้อ อ้างอิง หรือสถานที่...'
   },
   calendar: {

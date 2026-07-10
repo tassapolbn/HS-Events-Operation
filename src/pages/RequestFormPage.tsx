@@ -1,9 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ImagePlus, X } from 'lucide-react';
 import { useRequest, useRequestMutations } from '../hooks/useRequests';
 import { useDepartments } from '../hooks/useDepartments';
+import { useAttachments, useAttachmentMutations } from '../hooks/useAttachments';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../i18n';
 import { useToast } from '../components/ui/Toast';
@@ -12,14 +13,16 @@ import { Card, CardBody, CardHeader, CardTitle } from '../components/ui/Card';
 import { Input, Select } from '../components/ui/Input';
 import { RichTextEditor } from '../components/editor/RichTextEditor';
 import { Spinner } from '../components/ui/Spinner';
-import { PRIORITIES, TASK_STATUSES } from '../lib/constants';
-import type { Priority, TaskStatus } from '../types';
+import { PRIORITIES, REQUEST_STATUSES } from '../lib/constants';
+import { supabase } from '../lib/supabase';
+import { getSignedUrl } from '../hooks/useAttachments';
+import { MAX_FILE_SIZE, randomId } from '../lib/utils';
+import type { Attachment, Priority, TaskStatus } from '../types';
 
 interface RequestFormValues {
   department_id: string;
   title: string;
   reference: string;
-  head_responsible: string;
   location: string;
   request_date: string;
   due_date: string;
@@ -27,6 +30,37 @@ interface RequestFormValues {
   status: TaskStatus;
   description: string;
   notes: string;
+}
+
+interface PendingPhoto {
+  id: string;
+  file: File;
+  previewUrl: string;
+}
+
+/** Existing image attachment with a resolved preview URL (edit mode) */
+function ExistingPhoto({ attachment, onRemove }: { attachment: Attachment; onRemove: () => void }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    let mounted = true;
+    getSignedUrl(attachment.storage_path).then((signed) => mounted && setUrl(signed)).catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, [attachment.storage_path]);
+  return (
+    <div className="group relative h-24 w-24 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
+      {url && <img src={url} alt={attachment.file_name} className="h-full w-full object-cover" />}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+        aria-label="Remove"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
 }
 
 export function RequestFormPage() {
@@ -40,17 +74,26 @@ export function RequestFormPage() {
   const { data: existing, isLoading } = useRequest(isEdit ? id : undefined);
   const { createRequest, updateRequest } = useRequestMutations();
 
+  // Existing image attachments (edit mode)
+  const { data: attachments } = useAttachments('request', isEdit ? id : undefined);
+  const { remove: removeAttachment } = useAttachmentMutations('request', isEdit ? id : undefined);
+  const existingPhotos = (attachments ?? []).filter((a) => a.mime_type.startsWith('image/'));
+
+  // New photos chosen but not yet uploaded
+  const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [saving, setSaving] = useState(false);
+
   const { register, handleSubmit, control, reset, formState } = useForm<RequestFormValues>({
     defaultValues: {
       department_id: '',
       title: '',
       reference: '',
-      head_responsible: '',
       location: '',
       request_date: new Date().toISOString().slice(0, 10),
       due_date: '',
       priority: 'medium',
-      status: 'not_started',
+      status: 'new',
       description: '',
       notes: ''
     }
@@ -62,7 +105,6 @@ export function RequestFormPage() {
         department_id: existing.department_id,
         title: existing.title,
         reference: existing.reference,
-        head_responsible: existing.head_responsible,
         location: existing.location,
         request_date: existing.request_date,
         due_date: existing.due_date ?? '',
@@ -74,12 +116,62 @@ export function RequestFormPage() {
     }
   }, [existing, isEdit, reset]);
 
+  useEffect(() => {
+    return () => pendingPhotos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const addPhotos = (files: FileList | null) => {
+    if (!files) return;
+    const next: PendingPhoto[] = [];
+    for (const file of Array.from(files)) {
+      if (!file.type.startsWith('image/')) {
+        toast(`${file.name}: ${t('attachments.unsupported')}`, 'error');
+        continue;
+      }
+      if (file.size > MAX_FILE_SIZE) {
+        toast(`${file.name}: ${t('attachments.tooLarge')}`, 'error');
+        continue;
+      }
+      next.push({ id: randomId(), file, previewUrl: URL.createObjectURL(file) });
+    }
+    setPendingPhotos((prev) => [...prev, ...next]);
+    if (photoInputRef.current) photoInputRef.current.value = '';
+  };
+
+  const removePending = (photoId: string) => {
+    setPendingPhotos((prev) => {
+      const target = prev.find((photo) => photo.id === photoId);
+      if (target) URL.revokeObjectURL(target.previewUrl);
+      return prev.filter((photo) => photo.id !== photoId);
+    });
+  };
+
+  const uploadPendingPhotos = async (requestId: string) => {
+    for (const photo of pendingPhotos) {
+      const safeName = photo.file.name.replace(/[^\w.\-() ]+/g, '_');
+      const path = `request/${requestId}/${randomId()}-${safeName}`;
+      const { error: storageError } = await supabase.storage.from('attachments').upload(path, photo.file);
+      if (storageError) throw storageError;
+      const { error: rowError } = await supabase.from('attachments').insert({
+        entity_type: 'request',
+        entity_id: requestId,
+        file_name: photo.file.name,
+        storage_path: path,
+        mime_type: photo.file.type,
+        size_bytes: photo.file.size,
+        uploaded_by: profile?.id ?? null
+      });
+      if (rowError) throw rowError;
+    }
+  };
+
   const onSubmit = async (values: RequestFormValues) => {
+    setSaving(true);
     const payload = {
       department_id: values.department_id,
       title: values.title.trim(),
       reference: values.reference.trim(),
-      head_responsible: values.head_responsible.trim(),
       location: values.location.trim(),
       request_date: values.request_date,
       due_date: values.due_date || null,
@@ -89,34 +181,39 @@ export function RequestFormPage() {
       notes: values.notes
     };
     try {
+      let requestId = id;
       if (isEdit && id) {
         await updateRequest.mutateAsync({ id, ...payload });
-        toast(t('common.savedSuccess'));
-        navigate(`/requests/${id}`);
       } else {
         const created = await createRequest.mutateAsync({ ...payload, requested_by: profile?.id ?? null });
-        toast(t('common.savedSuccess'));
-        navigate(`/requests/${created.id}`);
+        requestId = created.id;
       }
+      if (requestId && pendingPhotos.length > 0) {
+        await uploadPendingPhotos(requestId);
+      }
+      toast(t('common.savedSuccess'));
+      navigate(`/requests/${requestId}`);
     } catch {
       toast(t('common.errorGeneric'), 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
   if (isEdit && isLoading) return <Spinner />;
 
   return (
-    <div className="animate-fade-in mx-auto max-w-3xl space-y-5">
+    <div className="animate-fade-in mx-auto max-w-3xl space-y-6">
       <div className="flex items-center gap-3">
         <Link to={isEdit && id ? `/requests/${id}` : '/requests'}>
           <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /> {t('common.back')}</Button>
         </Link>
-        <h1 className="text-2xl font-bold text-navy-800 dark:text-white">
+        <h1 className="text-2xl font-extrabold tracking-tight text-navy-800 dark:text-white lg:text-3xl">
           {isEdit ? t('requests.editRequest') : t('requests.newRequest')}
         </h1>
       </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <Card>
           <CardHeader><CardTitle>{t('requests.requestDetails')}</CardTitle></CardHeader>
           <CardBody className="grid gap-4 sm:grid-cols-2">
@@ -137,9 +234,8 @@ export function RequestFormPage() {
               {...register('title', { required: true })}
               className="sm:col-span-2"
             />
+            <Input label={t('common.location')} {...register('location')} />
             <Input label={t('requests.reference')} {...register('reference')} />
-            <Input label={t('requests.headResponsible')} {...register('head_responsible')} />
-            <Input label={t('common.location')} {...register('location')} className="sm:col-span-2" />
             <Input
               label={t('requests.requestDate')}
               type="date"
@@ -152,8 +248,50 @@ export function RequestFormPage() {
               {PRIORITIES.map((p) => <option key={p} value={p}>{t(`priority.${p}`)}</option>)}
             </Select>
             <Select label={t('common.status')} {...register('status')}>
-              {TASK_STATUSES.map((s) => <option key={s} value={s}>{t(`taskStatus.${s}`)}</option>)}
+              {REQUEST_STATUSES.map((s) => <option key={s} value={s}>{t(`taskStatus.${s}`)}</option>)}
             </Select>
+
+            {/* Reference photos: multiple images with preview and removal */}
+            <div className="space-y-2 sm:col-span-2">
+              <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {t('requests.referencePhotos')}
+              </label>
+              <p className="text-xs text-slate-400">{t('requests.referencePhotosHint')}</p>
+              <div className="flex flex-wrap gap-3">
+                {existingPhotos.map((photo) => (
+                  <ExistingPhoto key={photo.id} attachment={photo} onRemove={() => removeAttachment.mutate(photo)} />
+                ))}
+                {pendingPhotos.map((photo) => (
+                  <div key={photo.id} className="group relative h-24 w-24 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                    <img src={photo.previewUrl} alt={photo.file.name} className="h-full w-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removePending(photo.id)}
+                      className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100"
+                      aria-label={t('common.remove')}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => photoInputRef.current?.click()}
+                  className="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-slate-300 text-slate-400 transition-colors hover:border-navy-400 hover:text-navy-600 dark:border-slate-700 dark:hover:border-gold-400 dark:hover:text-gold-400"
+                >
+                  <ImagePlus className="h-6 w-6" />
+                  <span className="text-[10px] font-semibold">{t('requests.addPhotos')}</span>
+                </button>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => addPhotos(e.target.files)}
+                />
+              </div>
+            </div>
           </CardBody>
         </Card>
 
@@ -191,7 +329,7 @@ export function RequestFormPage() {
           <Link to={isEdit && id ? `/requests/${id}` : '/requests'}>
             <Button variant="outline" type="button">{t('common.cancel')}</Button>
           </Link>
-          <Button type="submit" loading={createRequest.isPending || updateRequest.isPending}>
+          <Button type="submit" loading={saving}>
             {t('common.save')}
           </Button>
         </div>

@@ -3,7 +3,15 @@
 export type UserRole = 'admin' | 'events_team' | 'department_manager' | 'department_staff';
 export type Priority = 'low' | 'medium' | 'high' | 'urgent';
 export type EventStatus = 'draft' | 'scheduled' | 'active' | 'completed' | 'archived';
-export type TaskStatus = 'not_started' | 'in_progress' | 'waiting' | 'completed' | 'cancelled';
+export type TaskStatus =
+  | 'not_started'
+  | 'in_progress'
+  | 'waiting'
+  | 'completed'
+  | 'cancelled'
+  | 'new'
+  | 'acknowledged'
+  | 'needs_revision';
 export type EntityType = 'event' | 'event_task' | 'request' | 'template';
 
 export interface Department {
@@ -44,6 +52,8 @@ export interface EventRow {
   internal_notes: string;
   priority: Priority;
   status: EventStatus;
+  header_color: string;
+  header_text_color: string;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -183,4 +193,74 @@ export interface AuditEntry {
 
 export interface EventWithTasks extends EventRow {
   event_tasks: EventTask[];
+}
+
+// ---------- Public display board types (returned by RPC functions) ----------
+
+export interface DisplayAttachment {
+  id: string;
+  file_name: string;
+  storage_path: string;
+  mime_type: string;
+}
+
+export interface DisplayTask {
+  id: string;
+  department_id: string;
+  title: string;
+  description: string;
+  work_location: string;
+  setup_location: string;
+  assigned_staff: string;
+  start_time: string | null;
+  completion_time: string | null;
+  status: TaskStatus;
+  notes: string;
+  attachments: DisplayAttachment[];
+}
+
+export interface DisplayEvent {
+  id: string;
+  name: string;
+  category: string;
+  event_date: string;
+  location: string;
+  setup_start: string | null;
+  venue_ready: string | null;
+  event_start: string | null;
+  event_finish: string | null;
+  breakdown_start: string | null;
+  breakdown_deadline: string | null;
+  description: string;
+  additional_notes: string;
+  status: EventStatus;
+  header_color: string;
+  header_text_color: string;
+  attachments: DisplayAttachment[];
+  tasks: DisplayTask[];
+}
+
+export interface DisplayRequest {
+  id: string;
+  department_id: string;
+  title: string;
+  reference: string;
+  location: string;
+  request_date: string;
+  due_date: string | null;
+  priority: Priority;
+  status: TaskStatus;
+  description: string;
+  notes: string;
+  attachments: DisplayAttachment[];
+}
+
+export interface DisplayDepartment {
+  id: string;
+  code: string;
+  name_en: string;
+  name_th: string;
+  color: string;
+  icon: string;
+  sort_order: number;
 }

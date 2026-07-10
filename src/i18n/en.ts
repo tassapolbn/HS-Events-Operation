@@ -104,6 +104,9 @@ export const en = {
     category: 'Category',
     eventDate: 'Event Date',
     eventLocation: 'Event Location',
+    headerColor: 'Header Background Color',
+    headerTextColor: 'Header Text Color',
+    headerColorsHint: 'Used on the event header and the public display board',
     setupStart: 'Setup Start',
     venueReady: 'Venue Ready',
     eventStart: 'Event Start',
@@ -158,7 +161,10 @@ export const en = {
     in_progress: 'In Progress',
     waiting: 'Waiting',
     completed: 'Completed',
-    cancelled: 'Cancelled'
+    cancelled: 'Cancelled',
+    new: 'New',
+    acknowledged: 'Acknowledged',
+    needs_revision: 'Needs Revision'
   },
   priority: {
     low: 'Low',
@@ -178,6 +184,8 @@ export const en = {
     startTime: 'Start Time',
     completionTime: 'Completion Time',
     checklist: 'Checklist',
+    quickAddPlaceholder: 'Type a task and press Enter',
+    detailedTask: 'Detailed task (times, instructions, files)',
     addChecklistItem: 'Add checklist item...',
     deleteTask: 'Delete task',
     deleteTaskConfirm: 'Delete this task and its checklist?',
@@ -186,6 +194,22 @@ export const en = {
     departmentNotes: 'Department Notes',
     notesHint: 'Notes from the department team',
     progress: 'Progress'
+  },
+  display: {
+    eventsTitle: 'Events Display',
+    requestsTitle: 'Department Requests Display',
+    liveBoard: 'Live board, updates automatically',
+    allDepartments: 'All Departments',
+    updated: 'Updated',
+    refresh: 'Refresh',
+    noEvents: 'No upcoming events',
+    noRequests: 'No open requests',
+    completedLabel: 'Completed',
+    tapToComplete: 'Tap when done',
+    setStatus: 'Update status',
+    files: 'Files',
+    due: 'Due',
+    openFull: 'Open the full application'
   },
   requests: {
     title: 'Department Requests',
@@ -204,6 +228,9 @@ export const en = {
     requestDetails: 'Request Details',
     jobDetails: 'Job Details',
     requestedBy: 'Requested by',
+    referencePhotos: 'Reference Photos',
+    referencePhotosHint: 'Add photos of the item or location, for example broken equipment or furniture to move',
+    addPhotos: 'Add photos',
     searchPlaceholder: 'Search by title, reference or location...'
   },
   calendar: {

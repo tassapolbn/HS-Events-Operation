@@ -49,7 +49,7 @@ export function TemplatesPage() {
   return (
     <div className="animate-fade-in space-y-5">
       <div>
-        <h1 className="text-2xl font-bold text-navy-800 dark:text-white">{t('templates.title')}</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-navy-800 dark:text-white lg:text-3xl">{t('templates.title')}</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('templates.subtitle')}</p>
       </div>
 

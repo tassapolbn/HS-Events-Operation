@@ -11,9 +11,9 @@ import { Card, CardBody, CardHeader, CardTitle } from '../components/ui/Card';
 import { Input, Select } from '../components/ui/Input';
 import { RichTextEditor } from '../components/editor/RichTextEditor';
 import { Spinner } from '../components/ui/Spinner';
-import { EVENT_CATEGORIES, EVENT_STATUSES, PRIORITIES } from '../lib/constants';
+import { EVENT_CATEGORIES, EVENT_STATUSES } from '../lib/constants';
 import { combineDateTime, extractTime } from '../lib/utils';
-import type { EventStatus, Priority } from '../types';
+import type { EventStatus } from '../types';
 
 interface EventFormValues {
   name: string;
@@ -29,8 +29,9 @@ interface EventFormValues {
   description: string;
   additional_notes: string;
   internal_notes: string;
-  priority: Priority;
   status: EventStatus;
+  header_color: string;
+  header_text_color: string;
 }
 
 const TIME_FIELDS = [
@@ -67,8 +68,9 @@ export function EventFormPage() {
       description: '',
       additional_notes: '',
       internal_notes: '',
-      priority: 'medium',
-      status: 'draft'
+      status: 'draft',
+      header_color: '#1a3c5e',
+      header_text_color: '#FFFFFF'
     }
   });
 
@@ -88,8 +90,9 @@ export function EventFormPage() {
         description: existing.description,
         additional_notes: existing.additional_notes,
         internal_notes: existing.internal_notes,
-        priority: existing.priority,
-        status: existing.status
+        status: existing.status,
+        header_color: existing.header_color || '#1a3c5e',
+        header_text_color: existing.header_text_color || '#FFFFFF'
       });
     }
   }, [existing, isEdit, reset]);
@@ -109,8 +112,9 @@ export function EventFormPage() {
       description: values.description,
       additional_notes: values.additional_notes,
       internal_notes: values.internal_notes,
-      priority: values.priority,
-      status: values.status
+      status: values.status,
+      header_color: values.header_color,
+      header_text_color: values.header_text_color
     };
     try {
       if (isEdit && id) {
@@ -151,7 +155,7 @@ export function EventFormPage() {
         <Link to={isEdit && id ? `/events/${id}` : '/events'}>
           <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /> {t('common.back')}</Button>
         </Link>
-        <h1 className="text-2xl font-bold text-navy-800 dark:text-white">
+        <h1 className="text-2xl font-extrabold tracking-tight text-navy-800 dark:text-white lg:text-3xl">
           {isEdit ? t('events.editEvent') : t('events.newEvent')}
         </h1>
       </div>
@@ -178,12 +182,24 @@ export function EventFormPage() {
               {...register('event_date', { required: true })}
             />
             <Input label={t('events.eventLocation')} {...register('location')} className="sm:col-span-2" />
-            <Select label={t('common.priority')} {...register('priority')}>
-              {PRIORITIES.map((p) => <option key={p} value={p}>{t(`priority.${p}`)}</option>)}
-            </Select>
             <Select label={t('common.status')} {...register('status')}>
               {EVENT_STATUSES.map((s) => <option key={s} value={s}>{t(`eventStatus.${s}`)}</option>)}
             </Select>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {t('events.headerColor')}
+                </label>
+                <input type="color" {...register('header_color')} className="h-10 w-full cursor-pointer rounded-xl border border-slate-300 bg-white p-1 dark:border-slate-700 dark:bg-slate-900" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                  {t('events.headerTextColor')}
+                </label>
+                <input type="color" {...register('header_text_color')} className="h-10 w-full cursor-pointer rounded-xl border border-slate-300 bg-white p-1 dark:border-slate-700 dark:bg-slate-900" />
+              </div>
+              <p className="col-span-2 -mt-2 text-xs text-slate-400">{t('events.headerColorsHint')}</p>
+            </div>
           </CardBody>
         </Card>
 

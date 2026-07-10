@@ -1,17 +1,18 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Bell, CalendarDays, LayoutTemplate, MapPin, Pencil, Trash2, Eye, LayoutGrid
+  ArrowLeft, Bell, CalendarDays, Clock, LayoutTemplate, MapPin, Pencil, Trash2, Eye, LayoutGrid
 } from 'lucide-react';
 import { useEvent, useEventMutations } from '../hooks/useEvents';
 import { useDepartments } from '../hooks/useDepartments';
 import { useAttachments } from '../hooks/useAttachments';
+import { useTaskMutations } from '../hooks/useTasks';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../i18n';
 import { useToast } from '../components/ui/Toast';
 import { Button } from '../components/ui/Button';
 import { Card, CardBody, CardHeader, CardTitle } from '../components/ui/Card';
-import { EventStatusBadge, PriorityBadge, Badge } from '../components/ui/Badge';
+import { EventStatusBadge, Badge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { RichTextViewer } from '../components/editor/RichTextViewer';
@@ -23,7 +24,7 @@ import { NotifyModal } from '../components/events/NotifyModal';
 import { SaveTemplateModal } from '../components/events/SaveTemplateModal';
 import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
-import { cn, formatDate, isRichTextEmpty } from '../lib/utils';
+import { cn, formatDate, formatTime, isRichTextEmpty } from '../lib/utils';
 import type { EventTask } from '../types';
 
 export function EventDetailPage() {
@@ -37,6 +38,7 @@ export function EventDetailPage() {
   const { data: departments } = useDepartments();
   const { data: attachments } = useAttachments('event', id);
   const { deleteEvent } = useEventMutations();
+  const { createTask } = useTaskMutations(id);
 
   const [viewMode, setViewMode] = useState<'overview' | 'department'>('overview');
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
@@ -94,7 +96,10 @@ export function EventDetailPage() {
   return (
     <div className="animate-fade-in space-y-5">
       {/* Sticky event header */}
-      <div className="sticky top-16 z-10 -mx-4 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 lg:-mx-8 lg:px-8">
+      <div
+        className="sticky top-16 z-10 -mx-4 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 lg:-mx-8 lg:px-8"
+        style={{ borderTop: `4px solid ${event.header_color || '#1a3c5e'}` }}
+      >
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2">
           <Link to="/events" className="no-print">
             <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /></Button>
@@ -110,13 +115,18 @@ export function EventDetailPage() {
                   <MapPin className="h-3.5 w-3.5" /> {event.location}
                 </span>
               )}
+              {event.event_start && (
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3.5 w-3.5" /> {formatTime(event.event_start, lang)}
+                  {event.event_finish && <> - {formatTime(event.event_finish, lang)}</>}
+                </span>
+              )}
               <Badge className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 {t(`categories.${event.category}` as never)}
               </Badge>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            <PriorityBadge priority={event.priority} />
             <EventStatusBadge status={event.status} />
           </div>
           {isEventsTeam && (
@@ -224,8 +234,13 @@ export function EventDetailPage() {
         )}
       </div>
 
-      {/* Department sections: every department on one screen */}
-      <div className="space-y-4">
+      {/* Department sections: side-by-side columns, like the original job request sheet */}
+      <div
+        className={cn(
+          'gap-4',
+          viewMode === 'overview' ? 'grid items-start md:grid-cols-2 xl:grid-cols-4' : 'grid grid-cols-1'
+        )}
+      >
         {visibleDepartments.map((dept) => (
           <DepartmentSection
             key={dept.id}
@@ -234,6 +249,15 @@ export function EventDetailPage() {
             canEdit={isEventsTeam}
             onAddTask={openAddTask}
             onOpenTask={(task) => setViewingTask(task)}
+            onQuickAdd={async (departmentId, title) => {
+              await createTask.mutateAsync({
+                event_id: event.id,
+                department_id: departmentId,
+                title,
+                sort_order: event.event_tasks.filter((task) => task.department_id === departmentId).length,
+                created_by: profile?.id ?? null
+              });
+            }}
           />
         ))}
       </div>

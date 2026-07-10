@@ -41,7 +41,7 @@ export function MyDepartmentPage() {
           </span>
         )}
         <div>
-          <h1 className="text-2xl font-bold text-navy-800 dark:text-white">{deptName(dept)}</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-navy-800 dark:text-white lg:text-3xl">{deptName(dept)}</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('myDept.title')}</p>
         </div>
       </div>

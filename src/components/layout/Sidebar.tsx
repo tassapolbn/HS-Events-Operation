@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, CalendarDays, ClipboardList, Inbox, LayoutTemplate, Building2, X
+  LayoutDashboard, CalendarDays, ClipboardList, Inbox, LayoutTemplate, Building2, X, MonitorPlay, ExternalLink
 } from 'lucide-react';
 import { useLanguage } from '../../i18n';
 import { useAuth } from '../../contexts/AuthContext';
@@ -65,6 +65,31 @@ export function Sidebar({ open, onClose }: SidebarProps) {
                 {item.label}
               </NavLink>
             ))}
+          <div className="mt-5 border-t border-white/10 pt-4">
+            <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
+              {t('display.liveBoard')}
+            </p>
+            <a
+              href="/display/events"
+              target="_blank"
+              rel="noopener"
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <MonitorPlay className="h-[18px] w-[18px]" />
+              <span className="flex-1">{t('display.eventsTitle')}</span>
+              <ExternalLink className="h-3.5 w-3.5 opacity-50" />
+            </a>
+            <a
+              href="/display/requests"
+              target="_blank"
+              rel="noopener"
+              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <MonitorPlay className="h-[18px] w-[18px]" />
+              <span className="flex-1">{t('display.requestsTitle')}</span>
+              <ExternalLink className="h-3.5 w-3.5 opacity-50" />
+            </a>
+          </div>
         </nav>
         <div className="border-t border-white/10 px-5 py-4">
           <p className="text-xs text-white/50">{t('app.school')}</p>

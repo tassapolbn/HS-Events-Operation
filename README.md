@@ -8,6 +8,7 @@ A modern, bilingual (English/Thai) web application for HeadStart International S
 - **General Department Requests**: standalone job requests sent to one selected department (the digital version of the EVENT JOB REQUEST sheet, including Reference and Head Responsible fields).
 - **Event Timeline**: Setup Begins, Venue Ready, Event Starts, Event Ends, Breakdown Begins, Breakdown Complete.
 - **Notifications**: in-app notification feed plus notification emails per department via a Supabase Edge Function, delivered from the school Gmail account through Google Apps Script (no domain setup needed), with Resend supported as an alternative.
+- **Public display boards**: no-login pages for TVs and tablets showing event tasks per department (with tap-to-complete) and open department requests (with tap-to-update status).
 - **Templates**: save any event as a reusable template (tasks, schedule, instructions, checklists, optional attachments) and create new events from it in seconds.
 - **Attachments**: PDF, PNG, JPG, DOCX, XLSX with in-app preview (images and PDF natively, Office files via Microsoft Office viewer).
 - **Rich text** everywhere it matters: bold, italic, underline, lists, alignment, links.

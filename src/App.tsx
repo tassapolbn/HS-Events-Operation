@@ -18,6 +18,8 @@ import { CalendarPage } from './pages/CalendarPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { MyDepartmentPage } from './pages/MyDepartmentPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { DisplayEventsPage } from './pages/DisplayEventsPage';
+import { DisplayRequestsPage } from './pages/DisplayRequestsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,6 +61,9 @@ export default function App() {
               <BrowserRouter>
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
+                  {/* Public display boards: no sign in required */}
+                  <Route path="/display/events" element={<DisplayEventsPage />} />
+                  <Route path="/display/requests" element={<DisplayRequestsPage />} />
                   <Route element={<RequireAuth />}>
                     <Route element={<AppLayout />}>
                       <Route path="/" element={<DashboardPage />} />

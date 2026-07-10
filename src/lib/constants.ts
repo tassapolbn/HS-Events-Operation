@@ -37,12 +37,31 @@ export const TASK_STATUS_STYLES: Record<TaskStatus, string> = {
   in_progress: 'bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300',
   waiting: 'bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-300',
   completed: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/50 dark:text-emerald-300',
-  cancelled: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300'
+  cancelled: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300',
+  new: 'bg-violet-100 text-violet-700 dark:bg-violet-900/50 dark:text-violet-300',
+  acknowledged: 'bg-teal-100 text-teal-700 dark:bg-teal-900/50 dark:text-teal-300',
+  needs_revision: 'bg-rose-100 text-rose-700 dark:bg-rose-900/50 dark:text-rose-300'
+};
+
+/** Small colored dot per task status (for compact column view) */
+export const TASK_STATUS_DOTS: Record<TaskStatus, string> = {
+  not_started: '#94a3b8',
+  in_progress: '#0ea5e9',
+  waiting: '#f59e0b',
+  completed: '#10b981',
+  cancelled: '#ef4444',
+  new: '#8b5cf6',
+  acknowledged: '#14b8a6',
+  needs_revision: '#f43f5e'
 };
 
 export const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 export const EVENT_STATUSES: EventStatus[] = ['draft', 'scheduled', 'active', 'completed', 'archived'];
 export const TASK_STATUSES: TaskStatus[] = ['not_started', 'in_progress', 'waiting', 'completed', 'cancelled'];
+/** Statuses used by General Department Requests */
+export const REQUEST_STATUSES: TaskStatus[] = ['new', 'acknowledged', 'needs_revision', 'in_progress', 'completed', 'cancelled'];
+/** Statuses a department may set from the public display board */
+export const PUBLIC_REQUEST_STATUSES: TaskStatus[] = ['acknowledged', 'needs_revision', 'in_progress', 'completed'];
 
 export const EVENT_CATEGORIES = [
   'general',

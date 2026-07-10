@@ -12,7 +12,7 @@ import { Input, Select } from '../components/ui/Input';
 import { PriorityBadge, TaskStatusBadge } from '../components/ui/Badge';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
-import { PRIORITIES, TASK_STATUSES, departmentIcon } from '../lib/constants';
+import { PRIORITIES, REQUEST_STATUSES, departmentIcon } from '../lib/constants';
 import { formatDate } from '../lib/utils';
 
 export function RequestsPage() {
@@ -49,7 +49,7 @@ export function RequestsPage() {
     <div className="animate-fade-in space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-navy-800 dark:text-white">{t('requests.title')}</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-navy-800 dark:text-white lg:text-3xl">{t('requests.title')}</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('requests.subtitle')}</p>
         </div>
         {isEventsTeam && (
@@ -83,7 +83,7 @@ export function RequestsPage() {
             </Select>
             <Select label={t('common.status')} value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">{t('common.all')}</option>
-              {TASK_STATUSES.map((s) => <option key={s} value={s}>{t(`taskStatus.${s}`)}</option>)}
+              {REQUEST_STATUSES.map((s) => <option key={s} value={s}>{t(`taskStatus.${s}`)}</option>)}
             </Select>
             <Select label={t('common.priority')} value={priority} onChange={(e) => setPriority(e.target.value)}>
               <option value="">{t('common.all')}</option>

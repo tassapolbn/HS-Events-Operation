@@ -43,8 +43,11 @@ insert into departments (code, name_en, name_th, color, icon, emails, sort_order
 on conflict (code) do nothing;
 
 -- ============================================================
--- AFTER YOUR FIRST LOGIN, make yourself the administrator by
--- running this (replace with your real email):
---
--- update profiles set role = 'admin' where email = 'your.email@headstartphuket.com';
+-- Administrator account (Boss / Events Team owner).
+-- This only takes effect after the user has been created in
+-- Authentication -> Users. Safe to run again at any time.
 -- ============================================================
+
+update profiles
+set role = 'admin', full_name = 'Boss'
+where email = 'events.city@headstartphuket.com';

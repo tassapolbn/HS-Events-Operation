@@ -11,7 +11,7 @@ import { useEvents } from '../hooks/useEvents';
 import { useLanguage } from '../i18n';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
-import { EventStatusBadge, PriorityBadge } from '../components/ui/Badge';
+import { EventStatusBadge } from '../components/ui/Badge';
 import { cn, formatTime } from '../lib/utils';
 import type { EventWithTasks } from '../types';
 
@@ -86,7 +86,7 @@ export function CalendarPage() {
   return (
     <div className="animate-fade-in space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-navy-800 dark:text-white">{t('calendar.title')}</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-navy-800 dark:text-white lg:text-3xl">{t('calendar.title')}</h1>
         <div className="flex items-center gap-2">
           <div className="flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900">
             {(['month', 'week', 'day'] as ViewMode[]).map((mode) => (
@@ -221,7 +221,6 @@ export function CalendarPage() {
                     <p className="font-semibold text-slate-800 dark:text-slate-100">{event.name}</p>
                     {event.location && <p className="text-xs text-slate-400">{event.location}</p>}
                   </div>
-                  <PriorityBadge priority={event.priority} />
                   <EventStatusBadge status={event.status} />
                 </li>
               ))}

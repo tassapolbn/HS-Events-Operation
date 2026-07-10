@@ -9,7 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../i18n';
 import { Button } from '../components/ui/Button';
 import { Card, CardBody, CardHeader, CardTitle } from '../components/ui/Card';
-import { EventStatusBadge, PriorityBadge } from '../components/ui/Badge';
+import { EventStatusBadge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
 import { departmentIcon } from '../lib/constants';
 import { formatDate, formatDateTime, formatTime } from '../lib/utils';
@@ -61,7 +61,6 @@ export function DashboardPage() {
           )}
         </p>
       </div>
-      <PriorityBadge priority={event.priority} />
       <EventStatusBadge status={event.status} />
     </li>
   );
@@ -70,7 +69,7 @@ export function DashboardPage() {
     <div className="animate-fade-in space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-navy-800 dark:text-white">
+          <h1 className="text-2xl font-extrabold tracking-tight text-navy-800 dark:text-white lg:text-3xl">
             {t('dashboard.title')}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">

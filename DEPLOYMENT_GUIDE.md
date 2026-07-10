@@ -13,10 +13,12 @@ Follow these steps in order. Total time is roughly 30 to 45 minutes.
    - Database password: choose a strong password and store it safely.
    - Region: **Southeast Asia (Singapore)** (closest to Phuket).
 3. Wait for the project to finish provisioning.
-4. Open **SQL Editor** (left menu) and run the three migration files **in this exact order**. For each one: open the file from `supabase/migrations/`, paste the full contents, press **Run**.
+4. Open **SQL Editor** (left menu) and run the migration files **in this exact order**. For each one: open the file from `supabase/migrations/`, copy only the SQL (never the ``` lines from documentation), paste, press **Run**, and wait for Success.
    1. `001_schema.sql` (tables, triggers, audit log)
    2. `002_security.sql` (Row Level Security and storage bucket)
-   3. `003_seed.sql` (the four departments with their notification emails)
+   3. `003_seed.sql` (departments, notification emails, admin account)
+   4. `004_request_statuses.sql` (run this file alone)
+   5. `005_display_mode.sql` (public display boards)
 5. Get your API keys: **Project Settings -> API**. Copy:
    - **Project URL** (looks like `https://xxxx.supabase.co`)
    - **anon public** key
@@ -26,16 +28,17 @@ Follow these steps in order. Total time is roughly 30 to 45 minutes.
 ## Part 2: Create user accounts (5 minutes)
 
 1. Go to **Authentication -> Users -> Add user -> Create new user**.
-2. Create your own account first (email + password). Tick **Auto Confirm User**.
+2. Create your own account first: `events.city@headstartphuket.com` plus a password. Tick **Auto Confirm User**.
 3. Make yourself administrator. In **SQL Editor**, run:
 
 ```sql
-update profiles set role = 'admin' where email = 'your.email@headstartphuket.com';
+update profiles
+set role = 'admin', full_name = 'Boss'
+where email = 'events.city@headstartphuket.com';
 ```
 
 4. Create accounts for the other Events Team members who will use the app
-   (same way: Add user, tick Auto Confirm User), then give them access.
-   Copy only the SQL (not the ``` lines) into the SQL Editor and run it:
+   (same way: Add user, tick Auto Confirm User), then give them access:
 
 ```sql
 update profiles set role = 'events_team'
@@ -45,13 +48,13 @@ where email in ('events.member1@headstartphuket.com', 'events.member2@headstartp
 **Note about the department emails**: the seven notification addresses
 (maintenance.city@, maintenance@, housekeeping.city@, housekeeping@,
 security.city@, executivechef@, headchef.city@) do **not** need accounts.
-They were already loaded into the database by `003_seed.sql` in Part 1 and
-will receive notification emails automatically. Login accounts are only for
-people who open the app.
+They were already loaded into the database by `003_seed.sql` and will
+receive notification emails automatically. Login accounts are only for
+people who open the app. Departments use the public display boards instead
+(see Part 6).
 
-**Optional, for the future**: if one day you want a department to log in and
-update its own task status inside the app, create the account and link it to
-its department, for example:
+**Optional, for the future**: if one day you want a department to log in,
+create the account and link it to its department:
 
 ```sql
 update profiles
@@ -74,8 +77,8 @@ school Google account. No domain verification, no DNS records, no IT.
 1. Go to https://script.google.com signed in with your school Google account.
 2. Click **New project**, delete the sample code, and paste the full contents of
    `supabase/functions/send-notification/apps-script/Code.gs`.
-3. In the pasted code, change `SECRET` to your own long random text
-   (for example 30+ random letters and numbers). Keep it, you will need it in Step C.
+3. In the pasted code, check the `SECRET` value (you will enter the same value
+   in Supabase in Step C).
 4. Click **Deploy -> New deployment -> gear icon -> Web app** and set:
    - Execute as: **Me**
    - Who has access: **Anyone**
@@ -99,9 +102,9 @@ In **Edge Functions -> Secrets**, add:
 
 | Secret | Value |
 |---|---|
-| `APPS_SCRIPT_URL` | the Web app URL from Step A |
-| `APPS_SCRIPT_SECRET` | the same SECRET text you put in the script |
-| `APP_URL` | your Netlify URL, e.g. `https://headstart-events.netlify.app` (you can set this after Part 4) |
+| `APPS_SCRIPT_URL` | the Web app URL from Step A (starts with https://script.google.com/macros/s/ and ends with /exec) |
+| `APPS_SCRIPT_SECRET` | the same SECRET text as in the script |
+| `APP_URL` | your Netlify URL, e.g. `https://headstart-events.netlify.app` |
 
 Sending limits: Google Workspace accounts can send about 1,500 emails per day
 (free Gmail: 100 per day). Both are far beyond what this system needs.
@@ -118,12 +121,16 @@ No code changes are needed; Apps Script is used whenever `APPS_SCRIPT_URL` is se
 
 ## Part 4: Deploy to Netlify from GitHub (10 minutes)
 
-1. Create a new GitHub repository and push this project folder to it
-   (do not commit `.env`; the included `.gitignore` already excludes it).
+1. Push this project to a **private** GitHub repository. The reliable way is
+   GitHub Desktop: clone the repository, copy the project contents into the
+   cloned folder, Commit to main, Push origin. Keep the clone outside OneDrive.
+   Do not commit `.env` (the included `.gitignore` already excludes it).
 2. Go to https://app.netlify.com -> **Add new site -> Import an existing project** -> choose the GitHub repository.
 3. Netlify reads `netlify.toml` automatically:
    - Build command: `npm run build`
    - Publish directory: `dist`
+   (`package.json` must be at the top level of the repository. If the project
+   sits in a subfolder, set the Base directory accordingly.)
 4. Before the first deploy, add the environment variables
    (**Site configuration -> Environment variables**):
 
@@ -133,7 +140,7 @@ No code changes are needed; Apps Script is used whenever `APPS_SCRIPT_URL` is se
 | `VITE_SUPABASE_ANON_KEY` | your Supabase anon public key |
 
 5. Click **Deploy**. When it finishes, copy the site URL and put it into the
-   `APP_URL` secret in Part 3 step 5.
+   `APP_URL` secret in Part 3, Step C.
 6. Optional: set a nicer site name under **Site configuration -> Change site name**.
 
 ---
@@ -141,19 +148,38 @@ No code changes are needed; Apps Script is used whenever `APPS_SCRIPT_URL` is se
 ## Part 5: Verify everything works (5 minutes)
 
 1. Open the site, sign in with your admin account.
-2. Create a test event, add one task for each department.
+2. Create a test event, type quick tasks into each department column.
 3. Upload a floor plan (PDF or image) and preview it inside the app.
 4. Press **Send Notification**, select a department, send. Check:
    - The bell icon shows the in-app notification.
    - The department email arrives (sent from your school Gmail account).
    - Tip for a safe first test: temporarily point a department to your own
      email with SQL, then put the real ones back:
-     `update departments set emails = array['your.email@headstartphuket.com'] where code = 'maintenance';`
-5. (Only if you created department logins) Sign in as a department account:
-   you should see the event read-only, be able to update the task status,
-   tick checklist items, and add notes.
-6. Save the event as a template, then create a new event from that template.
-7. Switch language (EN/ไทย) and theme (light/dark) from the top bar.
+     `update departments set emails = array['events.city@headstartphuket.com'] where code = 'maintenance';`
+5. Save the event as a template, then create a new event from that template.
+6. Switch language (EN/ไทย) and theme (light/dark) from the top bar.
+
+---
+
+## Part 6: The public display boards (no login)
+
+Two pages are public and need no sign in. They are made for TVs, tablets and
+shared computers, and they refresh automatically every 30 seconds:
+
+- **Events board**: `https://YOUR-SITE.netlify.app/display/events`
+  Shows upcoming events with each department's tasks in large type.
+  Anyone can tick a task as completed.
+- **Requests board**: `https://YOUR-SITE.netlify.app/display/requests`
+  Shows open department requests. Anyone can tap a status:
+  Acknowledged, Needs Revision, In Progress, Completed.
+
+Both links are also in the app's sidebar under the live board section, and
+both support a department filter and English/Thai.
+
+Security note: the boards intentionally show event and task details to anyone
+with the link, but never Internal Notes, user accounts, or any editing rights
+beyond the tick box and the status buttons. Share the links only within the
+school.
 
 ---
 

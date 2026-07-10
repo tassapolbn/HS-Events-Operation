@@ -9,10 +9,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Select, Input } from '../components/ui/Input';
-import { EventStatusBadge, PriorityBadge } from '../components/ui/Badge';
+import { EventStatusBadge } from '../components/ui/Badge';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
-import { EVENT_STATUSES, PRIORITIES, departmentIcon } from '../lib/constants';
+import { EVENT_STATUSES, departmentIcon } from '../lib/constants';
 import { cn, formatDate } from '../lib/utils';
 
 export function EventsPage() {
@@ -24,7 +24,6 @@ export function EventsPage() {
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [status, setStatus] = useState('');
-  const [priority, setPriority] = useState('');
   const [departmentId, setDepartmentId] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -37,26 +36,25 @@ export function EventsPage() {
     () => ({
       search: debouncedSearch || undefined,
       status: status || undefined,
-      priority: priority || undefined,
       departmentId: departmentId || undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
       staff: debouncedStaff || undefined
     }),
-    [debouncedSearch, status, priority, departmentId, dateFrom, dateTo, debouncedStaff]
+    [debouncedSearch, status, departmentId, dateFrom, dateTo, debouncedStaff]
   );
 
   const { data: events, isLoading } = useEvents(filters);
-  const hasFilters = !!(status || priority || departmentId || dateFrom || dateTo || staff);
+  const hasFilters = !!(status || departmentId || dateFrom || dateTo || staff);
 
   const clearFilters = () => {
-    setStatus(''); setPriority(''); setDepartmentId(''); setDateFrom(''); setDateTo(''); setStaff('');
+    setStatus(''); setDepartmentId(''); setDateFrom(''); setDateTo(''); setStaff('');
   };
 
   return (
     <div className="animate-fade-in space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-navy-800 dark:text-white">{t('events.title')}</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight text-navy-800 dark:text-white lg:text-3xl">{t('events.title')}</h1>
         {isEventsTeam && (
           <Link to="/events/new">
             <Button variant="gold"><Plus className="h-4 w-4" /> {t('events.newEvent')}</Button>
@@ -86,10 +84,6 @@ export function EventsPage() {
             <Select label={t('common.status')} value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">{t('common.all')}</option>
               {EVENT_STATUSES.map((s) => <option key={s} value={s}>{t(`eventStatus.${s}`)}</option>)}
-            </Select>
-            <Select label={t('common.priority')} value={priority} onChange={(e) => setPriority(e.target.value)}>
-              <option value="">{t('common.all')}</option>
-              {PRIORITIES.map((p) => <option key={p} value={p}>{t(`priority.${p}`)}</option>)}
             </Select>
             <Select label={t('common.department')} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
               <option value="">{t('common.all')}</option>
@@ -127,7 +121,7 @@ export function EventsPage() {
               return { dept, total: tasks.length, done: tasks.filter((task) => task.status === 'completed').length };
             }).filter((x) => x.total > 0);
             return (
-              <Card key={event.id} onClick={() => navigate(`/events/${event.id}`)} className="p-4 sm:p-5">
+              <Card key={event.id} onClick={() => navigate(`/events/${event.id}`)} className="p-4 sm:p-5" style={{ borderLeft: `5px solid ${event.header_color || '#1a3c5e'}` }}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">{event.name}</h3>
@@ -144,7 +138,6 @@ export function EventsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <PriorityBadge priority={event.priority} />
                     <EventStatusBadge status={event.status} />
                   </div>
                 </div>
