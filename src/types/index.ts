@@ -60,10 +60,22 @@ export interface EventRow {
   deleted_at: string | null;
 }
 
+export interface EventSession {
+  id: string;
+  event_id: string;
+  title: string;
+  session_date: string;
+  location: string;
+  start_time: string | null;
+  end_time: string | null;
+  sort_order: number;
+}
+
 export interface EventTask {
   id: string;
   event_id: string;
   department_id: string;
+  session_id: string | null;
   title: string;
   description: string;
   instructions: string;
@@ -193,6 +205,7 @@ export interface AuditEntry {
 
 export interface EventWithTasks extends EventRow {
   event_tasks: EventTask[];
+  event_sessions: EventSession[];
 }
 
 // ---------- Public display board types (returned by RPC functions) ----------
@@ -204,9 +217,20 @@ export interface DisplayAttachment {
   mime_type: string;
 }
 
+export interface DisplaySession {
+  id: string;
+  title: string;
+  session_date: string;
+  location: string;
+  start_time: string | null;
+  end_time: string | null;
+  sort_order: number;
+}
+
 export interface DisplayTask {
   id: string;
   department_id: string;
+  session_id: string | null;
   title: string;
   description: string;
   work_location: string;
@@ -236,6 +260,7 @@ export interface DisplayEvent {
   status: EventStatus;
   header_color: string;
   header_text_color: string;
+  sessions: DisplaySession[];
   attachments: DisplayAttachment[];
   tasks: DisplayTask[];
 }

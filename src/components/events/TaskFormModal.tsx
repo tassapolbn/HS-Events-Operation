@@ -10,11 +10,13 @@ import { useToast } from '../ui/Toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { PRIORITIES, TASK_STATUSES } from '../../lib/constants';
 import { combineDateTime, extractTime } from '../../lib/utils';
-import type { Department, EventTask, Priority, TaskStatus } from '../../types';
+import type { Department, EventSession, EventTask, Priority, TaskStatus } from '../../types';
+import { formatDate } from '../../lib/utils';
 
 interface TaskFormValues {
   title: string;
   department_id: string;
+  session_id: string;
   description: string;
   instructions: string;
   work_location: string;
@@ -32,20 +34,22 @@ interface TaskFormModalProps {
   eventId: string;
   eventDate: string;
   departments: Department[];
+  sessions: EventSession[];
   /** Preselected department when adding from a section */
   defaultDepartmentId?: string;
+  defaultSessionId?: string | null;
   /** When set, the modal edits this task */
   task?: EventTask | null;
 }
 
-export function TaskFormModal({ open, onClose, eventId, eventDate, departments, defaultDepartmentId, task }: TaskFormModalProps) {
-  const { t, deptName } = useLanguage();
+export function TaskFormModal({ open, onClose, eventId, eventDate, departments, sessions, defaultDepartmentId, defaultSessionId, task }: TaskFormModalProps) {
+  const { t, deptName, lang } = useLanguage();
   const { toast } = useToast();
   const { profile } = useAuth();
   const { createTask, updateTask } = useTaskMutations(eventId);
 
   const { register, handleSubmit, control, reset, formState } = useForm<TaskFormValues>({
-    defaultValues: emptyValues(defaultDepartmentId)
+    defaultValues: emptyValues(defaultDepartmentId, defaultSessionId)
   });
 
   useEffect(() => {
@@ -54,6 +58,7 @@ export function TaskFormModal({ open, onClose, eventId, eventDate, departments, 
       reset({
         title: task.title,
         department_id: task.department_id,
+        session_id: task.session_id ?? '',
         description: task.description,
         instructions: task.instructions,
         work_location: task.work_location,
@@ -65,14 +70,15 @@ export function TaskFormModal({ open, onClose, eventId, eventDate, departments, 
         status: task.status
       });
     } else {
-      reset(emptyValues(defaultDepartmentId));
+      reset(emptyValues(defaultDepartmentId, defaultSessionId));
     }
-  }, [open, task, defaultDepartmentId, reset]);
+  }, [open, task, defaultDepartmentId, defaultSessionId, reset]);
 
   const onSubmit = async (values: TaskFormValues) => {
     const payload = {
       title: values.title.trim(),
       department_id: values.department_id,
+      session_id: values.session_id || null,
       description: values.description,
       instructions: values.instructions,
       work_location: values.work_location.trim(),
@@ -125,6 +131,18 @@ export function TaskFormModal({ open, onClose, eventId, eventDate, departments, 
               <option key={d.id} value={d.id}>{deptName(d)}</option>
             ))}
           </Select>
+          {sessions.length > 0 && (
+            <Select label={t('sessions.title')} {...register('session_id')}>
+              <option value="">{t('sessions.whole')}</option>
+              {sessions.map((session) => (
+                <option key={session.id} value={session.id}>
+                  {formatDate(session.session_date, lang, 'd MMM')}
+                  {session.location ? ` - ${session.location}` : ''}
+                  {session.title ? ` (${session.title})` : ''}
+                </option>
+              ))}
+            </Select>
+          )}
           <Input label={t('tasks.assignedStaff')} {...register('assigned_staff')} />
           <Input label={t('tasks.workLocation')} {...register('work_location')} />
           <Input label={t('tasks.setupLocation')} {...register('setup_location')} />
@@ -170,10 +188,11 @@ export function TaskFormModal({ open, onClose, eventId, eventDate, departments, 
   );
 }
 
-function emptyValues(defaultDepartmentId?: string): TaskFormValues {
+function emptyValues(defaultDepartmentId?: string, defaultSessionId?: string | null): TaskFormValues {
   return {
     title: '',
     department_id: defaultDepartmentId ?? '',
+    session_id: defaultSessionId ?? '',
     description: '',
     instructions: '',
     work_location: '',

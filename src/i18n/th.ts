@@ -198,7 +198,19 @@ export const th: Dict = {
     notesHint: 'หมายเหตุจากทีมของแผนก',
     progress: 'ความคืบหน้า'
   },
+  sessions: {
+    title: 'ช่วงงาน (Session)',
+    addSession: 'เพิ่ม Session',
+    editSession: 'แก้ไข Session',
+    deleteSession: 'ลบ Session',
+    deleteConfirm: 'ต้องการลบ Session นี้หรือไม่? งานในช่วงนี้จะถูกย้ายไปอยู่ในกลุ่มงานรวมของกิจกรรม',
+    sessionTitle: 'ชื่อ Session (ไม่บังคับ)',
+    hint: 'Session คือช่วงหนึ่งของกิจกรรม เช่น วัน สถานที่ หรือช่วงเวลาที่ต่างกัน',
+    generalTasks: 'งานรวมของทั้งกิจกรรม',
+    whole: 'ทั้งกิจกรรม'
+  },
   display: {
+    boardTitle: 'บอร์ดแสดงผล',
     eventsTitle: 'บอร์ดแสดงงานกิจกรรม',
     requestsTitle: 'บอร์ดแจ้งงานแผนก',
     liveBoard: 'อัปเดตอัตโนมัติแบบเรียลไทม์',

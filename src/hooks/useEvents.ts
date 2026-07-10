@@ -58,7 +58,7 @@ export function useEvent(id: string | undefined) {
     queryFn: async (): Promise<EventWithTasks | null> => {
       const { data, error } = await supabase
         .from('events')
-        .select('*, event_tasks(*)')
+        .select('*, event_tasks(*), event_sessions(*)')
         .eq('id', id!)
         .is('deleted_at', null)
         .single();
@@ -67,6 +67,9 @@ export function useEvent(id: string | undefined) {
       event.event_tasks = (event.event_tasks ?? [])
         .filter((task) => !task.deleted_at)
         .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+      event.event_sessions = (event.event_sessions ?? []).sort(
+        (a, b) => a.session_date.localeCompare(b.session_date) || a.sort_order - b.sort_order
+      );
       return event;
     }
   });

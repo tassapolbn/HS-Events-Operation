@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Bell, CalendarDays, Clock, LayoutTemplate, MapPin, Pencil, Trash2, Eye, LayoutGrid
+  ArrowLeft, Bell, CalendarDays, Clock, LayoutTemplate, Layers, MapPin, Pencil, Plus, Trash2, Eye, LayoutGrid
 } from 'lucide-react';
 import { useEvent, useEventMutations } from '../hooks/useEvents';
 import { useDepartments } from '../hooks/useDepartments';
 import { useAttachments } from '../hooks/useAttachments';
 import { useTaskMutations } from '../hooks/useTasks';
+import { useSessionMutations } from '../hooks/useSessions';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../i18n';
 import { useToast } from '../components/ui/Toast';
@@ -22,10 +23,11 @@ import { TaskFormModal } from '../components/events/TaskFormModal';
 import { TaskDetailModal } from '../components/events/TaskDetailModal';
 import { NotifyModal } from '../components/events/NotifyModal';
 import { SaveTemplateModal } from '../components/events/SaveTemplateModal';
+import { SessionFormModal } from '../components/events/SessionFormModal';
 import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
 import { cn, formatDate, formatTime, isRichTextEmpty } from '../lib/utils';
-import type { EventTask } from '../types';
+import type { EventSession, EventTask } from '../types';
 
 export function EventDetailPage() {
   const { id } = useParams();
@@ -39,16 +41,21 @@ export function EventDetailPage() {
   const { data: attachments } = useAttachments('event', id);
   const { deleteEvent } = useEventMutations();
   const { createTask } = useTaskMutations(id);
+  const { deleteSession } = useSessionMutations(id ?? '');
 
   const [viewMode, setViewMode] = useState<'overview' | 'department'>('overview');
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
   const [taskFormOpen, setTaskFormOpen] = useState(false);
   const [taskFormDeptId, setTaskFormDeptId] = useState<string | undefined>();
+  const [taskFormSessionId, setTaskFormSessionId] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<EventTask | null>(null);
   const [viewingTask, setViewingTask] = useState<EventTask | null>(null);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [sessionFormOpen, setSessionFormOpen] = useState(false);
+  const [editingSession, setEditingSession] = useState<EventSession | null>(null);
+  const [deletingSession, setDeletingSession] = useState<EventSession | null>(null);
 
   const sortedDepartments = departments ?? [];
 
@@ -70,13 +77,17 @@ export function EventDetailPage() {
     );
   }
 
+  const sessions = event.event_sessions;
+  const sessionIds = new Set(sessions.map((s) => s.id));
+  const generalTasks = event.event_tasks.filter((task) => !task.session_id || !sessionIds.has(task.session_id));
   const departmentsWithTasks = sortedDepartments.filter((d) =>
     event.event_tasks.some((task) => task.department_id === d.id)
   );
 
-  const openAddTask = (departmentId: string) => {
+  const openAddTask = (departmentId: string, sessionId: string | null) => {
     setEditingTask(null);
     setTaskFormDeptId(departmentId);
+    setTaskFormSessionId(sessionId);
     setTaskFormOpen(true);
   };
 
@@ -84,6 +95,7 @@ export function EventDetailPage() {
     setViewingTask(null);
     setEditingTask(task);
     setTaskFormDeptId(task.department_id);
+    setTaskFormSessionId(task.session_id);
     setTaskFormOpen(true);
   };
 
@@ -91,6 +103,84 @@ export function EventDetailPage() {
     await deleteEvent.mutateAsync(event.id);
     toast(t('common.deletedSuccess'));
     navigate('/events');
+  };
+
+  const renderDepartmentGrid = (tasks: EventTask[], sessionId: string | null) => (
+    <div
+      className={cn(
+        'gap-4',
+        viewMode === 'overview' ? 'grid items-start md:grid-cols-2 xl:grid-cols-4' : 'grid grid-cols-1'
+      )}
+    >
+      {visibleDepartments.map((dept) => (
+        <DepartmentSection
+          key={`${sessionId ?? 'general'}-${dept.id}`}
+          department={dept}
+          tasks={tasks.filter((task) => task.department_id === dept.id)}
+          canEdit={isEventsTeam}
+          onAddTask={(departmentId) => openAddTask(departmentId, sessionId)}
+          onOpenTask={(task) => setViewingTask(task)}
+          onQuickAdd={async (departmentId, title) => {
+            await createTask.mutateAsync({
+              event_id: event.id,
+              department_id: departmentId,
+              session_id: sessionId,
+              title,
+              sort_order: tasks.filter((task) => task.department_id === departmentId).length,
+              created_by: profile?.id ?? null
+            });
+          }}
+        />
+      ))}
+    </div>
+  );
+
+  const sessionHeader = (session: EventSession) => {
+    const sessionTasks = event.event_tasks.filter((task) => task.session_id === session.id);
+    const done = sessionTasks.filter((task) => task.status === 'completed').length;
+    return (
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl bg-gradient-to-r from-navy-800 to-navy-600 px-4 py-3 text-white shadow-sm dark:from-navy-900 dark:to-navy-700">
+        <Layers className="h-4 w-4 text-gold-400" />
+        <span className="text-sm font-extrabold">
+          {session.title || formatDate(session.session_date, lang, 'EEEE d MMMM')}
+        </span>
+        <span className="flex items-center gap-1.5 text-xs text-white/80">
+          <CalendarDays className="h-3.5 w-3.5" /> {formatDate(session.session_date, lang)}
+        </span>
+        {session.location && (
+          <span className="flex items-center gap-1.5 text-xs text-white/80">
+            <MapPin className="h-3.5 w-3.5" /> {session.location}
+          </span>
+        )}
+        {session.start_time && (
+          <span className="flex items-center gap-1.5 text-xs text-white/80">
+            <Clock className="h-3.5 w-3.5" /> {formatTime(session.start_time, lang)}
+            {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
+          </span>
+        )}
+        <span className="ml-auto rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-bold">
+          {done}/{sessionTasks.length}
+        </span>
+        {isEventsTeam && (
+          <span className="flex items-center gap-0.5">
+            <button
+              onClick={() => { setEditingSession(session); setSessionFormOpen(true); }}
+              className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+              title={t('sessions.editSession')}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => setDeletingSession(session)}
+              className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-red-500/40 hover:text-white"
+              title={t('sessions.deleteSession')}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </span>
+        )}
+      </div>
+    );
   };
 
   return (
@@ -198,9 +288,14 @@ export function EventDetailPage() {
         </CardBody>
       </Card>
 
-      {/* View mode toggle */}
+      {/* Department tasks header: view mode + add session */}
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="mr-auto text-lg font-bold text-navy-800 dark:text-white">{t('events.departmentTasks')}</h2>
+        {isEventsTeam && (
+          <Button variant="outline" size="sm" onClick={() => { setEditingSession(null); setSessionFormOpen(true); }}>
+            <Plus className="h-4 w-4" /> {t('sessions.addSession')}
+          </Button>
+        )}
         <div className="flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900">
           <button
             onClick={() => setViewMode('overview')}
@@ -234,33 +329,28 @@ export function EventDetailPage() {
         )}
       </div>
 
-      {/* Department sections: side-by-side columns, like the original job request sheet */}
-      <div
-        className={cn(
-          'gap-4',
-          viewMode === 'overview' ? 'grid items-start md:grid-cols-2 xl:grid-cols-4' : 'grid grid-cols-1'
-        )}
-      >
-        {visibleDepartments.map((dept) => (
-          <DepartmentSection
-            key={dept.id}
-            department={dept}
-            tasks={event.event_tasks.filter((task) => task.department_id === dept.id)}
-            canEdit={isEventsTeam}
-            onAddTask={openAddTask}
-            onOpenTask={(task) => setViewingTask(task)}
-            onQuickAdd={async (departmentId, title) => {
-              await createTask.mutateAsync({
-                event_id: event.id,
-                department_id: departmentId,
-                title,
-                sort_order: event.event_tasks.filter((task) => task.department_id === departmentId).length,
-                created_by: profile?.id ?? null
-              });
-            }}
-          />
-        ))}
-      </div>
+      {/* Task groups: sessions (day / venue / time slot) or whole event */}
+      {sessions.length === 0 ? (
+        renderDepartmentGrid(event.event_tasks, null)
+      ) : (
+        <div className="space-y-6">
+          {generalTasks.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 rounded-2xl bg-slate-200/70 px-4 py-2.5 dark:bg-slate-800">
+                <Layers className="h-4 w-4 text-slate-500" />
+                <span className="text-sm font-extrabold text-slate-600 dark:text-slate-300">{t('sessions.generalTasks')}</span>
+              </div>
+              {renderDepartmentGrid(generalTasks, null)}
+            </div>
+          )}
+          {sessions.map((session) => (
+            <div key={session.id} className="space-y-3">
+              {sessionHeader(session)}
+              {renderDepartmentGrid(event.event_tasks.filter((task) => task.session_id === session.id), session.id)}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Audit history */}
       {isEventsTeam && <AuditHistory recordId={event.id} />}
@@ -272,7 +362,9 @@ export function EventDetailPage() {
         eventId={event.id}
         eventDate={event.event_date}
         departments={sortedDepartments}
+        sessions={sessions}
         defaultDepartmentId={taskFormDeptId}
+        defaultSessionId={taskFormSessionId}
         task={editingTask}
       />
       <TaskDetailModal
@@ -283,6 +375,16 @@ export function EventDetailPage() {
         eventId={event.id}
         onEdit={openEditTask}
       />
+      {sessionFormOpen && (
+        <SessionFormModal
+          open={sessionFormOpen}
+          onClose={() => { setSessionFormOpen(false); setEditingSession(null); }}
+          eventId={event.id}
+          eventDate={event.event_date}
+          session={editingSession}
+          nextSortOrder={sessions.length}
+        />
+      )}
       {notifyOpen && (
         <NotifyModal
           open={notifyOpen}
@@ -309,6 +411,19 @@ export function EventDetailPage() {
         title={t('events.deleteConfirm')}
         message={t('events.deleteConfirmText')}
         loading={deleteEvent.isPending}
+      />
+      <ConfirmDialog
+        open={!!deletingSession}
+        onClose={() => setDeletingSession(null)}
+        onConfirm={async () => {
+          if (deletingSession) {
+            await deleteSession.mutateAsync(deletingSession.id);
+            setDeletingSession(null);
+            toast(t('common.deletedSuccess'));
+          }
+        }}
+        title={t('sessions.deleteConfirm')}
+        loading={deleteSession.isPending}
       />
     </div>
   );

@@ -101,3 +101,14 @@ export const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 export function randomId(): string {
   return crypto.randomUUID();
 }
+
+/** Darken a hex color by a factor (0..1). Used for gradient headers. */
+export function darkenColor(hex: string, factor = 0.72): string {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return hex;
+  const parts = [0, 2, 4].map((i) => {
+    const channel = Math.round(parseInt(clean.slice(i, i + 2), 16) * factor);
+    return Math.max(0, Math.min(255, channel)).toString(16).padStart(2, '0');
+  });
+  return `#${parts.join('')}`;
+}

@@ -17,7 +17,9 @@ export default defineConfig({
             '@tiptap/extension-underline',
             '@tiptap/extension-link',
             '@tiptap/extension-text-align',
-            '@tiptap/extension-placeholder'
+            '@tiptap/extension-placeholder',
+            '@tiptap/extension-text-style',
+            '@tiptap/extension-color'
           ]
         }
       }

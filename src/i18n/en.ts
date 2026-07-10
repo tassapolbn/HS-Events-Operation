@@ -196,7 +196,19 @@ export const en = {
     notesHint: 'Notes from the department team',
     progress: 'Progress'
   },
+  sessions: {
+    title: 'Sessions',
+    addSession: 'Add Session',
+    editSession: 'Edit Session',
+    deleteSession: 'Delete session',
+    deleteConfirm: 'Delete this session? Its tasks are kept and moved to the whole-event group.',
+    sessionTitle: 'Session Name (optional)',
+    hint: 'A session is one part of the event: a specific day, venue or time slot',
+    generalTasks: 'Whole event tasks',
+    whole: 'Whole event'
+  },
   display: {
+    boardTitle: 'Display Board',
     eventsTitle: 'Events Display',
     requestsTitle: 'Department Requests Display',
     liveBoard: 'Live board, updates automatically',

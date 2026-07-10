@@ -195,3 +195,18 @@ school.
 - Event times are entered as times of the event day. If breakdown finishes after midnight, enter the deadline as 23:59 and note the real time in the task instructions.
 - Office files (DOCX/XLSX) preview uses the Microsoft Office online viewer and requires the file link to be reachable; PDF and images preview natively.
 - The database is already prepared for future modules (push notifications, QR checklists, equipment inventory, vehicle booking and more) thanks to UUID keys, soft deletes and the audit trail.
+
+---
+
+## Update 2: Sessions, note colors, combined display board (July 2026)
+
+1. Run `supabase/migrations/006_sessions.sql` in the SQL Editor (one run).
+2. Commit and push from GitHub Desktop; Netlify redeploys.
+
+What is new: events can be split into **Sessions** (different days, venues or
+time slots) with department tasks grouped per session; the rich text editor
+has a **text color** tool (preset swatches or any color code); the display
+board is now **one page with tabs** (`/display`) for Events and Department
+Requests (the old two links still work); the board got a refreshed design
+with gradients, hover animations, and events that **collapse or expand**
+when their header is clicked, sorted by date.

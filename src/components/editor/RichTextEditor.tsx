@@ -5,9 +5,12 @@ import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import TextAlign from '@tiptap/extension-text-align';
 import Placeholder from '@tiptap/extension-placeholder';
+import TextStyle from '@tiptap/extension-text-style';
+import Color from '@tiptap/extension-color';
+import { useState } from 'react';
 import {
   Bold, Italic, Underline as UnderlineIcon, List, ListOrdered,
-  AlignLeft, AlignCenter, AlignRight, Link2, Link2Off
+  AlignLeft, AlignCenter, AlignRight, Link2, Link2Off, Palette, X
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -44,14 +47,21 @@ function ToolButton({ onClick, active, children, label }: ToolButtonProps) {
   );
 }
 
+const PRESET_COLORS = [
+  '#F0B323', '#ffffff', '#dc2626', '#ea580c', '#16a34a', '#0ea5e9', '#8b5cf6', '#ec4899', '#0f172a'
+];
+
 export function RichTextEditor({ value, onChange, placeholder, className }: RichTextEditorProps) {
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: false, codeBlock: false, blockquote: false, horizontalRule: false }),
       Underline,
       Link.configure({ openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener', target: '_blank' } }),
       TextAlign.configure({ types: ['paragraph'] }),
-      Placeholder.configure({ placeholder: placeholder ?? '' })
+      Placeholder.configure({ placeholder: placeholder ?? '' }),
+      TextStyle,
+      Color.configure({ types: ['textStyle'] })
     ],
     content: value || '',
     onUpdate: ({ editor: e }) => {
@@ -124,6 +134,63 @@ export function RichTextEditor({ value, onChange, placeholder, className }: Rich
         <ToolButton label="Remove link" onClick={() => editor.chain().focus().unsetLink().run()}>
           <Link2Off className="h-4 w-4" />
         </ToolButton>
+        <span className="mx-1 h-5 w-px bg-slate-200 dark:bg-slate-700" />
+        {/* Text color */}
+        <div className="relative">
+          <ToolButton label="Text color" active={!!editor.getAttributes('textStyle').color} onClick={() => setPaletteOpen((v) => !v)}>
+            <span className="flex flex-col items-center">
+              <Palette className="h-4 w-4" />
+              <span
+                className="mt-0.5 block h-1 w-4 rounded-full"
+                style={{ backgroundColor: (editor.getAttributes('textStyle').color as string) || '#94a3b8' }}
+              />
+            </span>
+          </ToolButton>
+          {paletteOpen && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setPaletteOpen(false)} />
+              <div className="absolute left-0 z-40 mt-1 w-52 animate-scale-in rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                <div className="grid grid-cols-5 gap-1.5">
+                  {PRESET_COLORS.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        editor.chain().focus().setColor(color).run();
+                        setPaletteOpen(false);
+                      }}
+                      className="h-7 w-7 rounded-lg border border-slate-200 transition-transform hover:scale-110 dark:border-slate-600"
+                      style={{ backgroundColor: color }}
+                      aria-label={color}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      editor.chain().focus().unsetColor().run();
+                      setPaletteOpen(false);
+                    }}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-red-500 dark:border-slate-600"
+                    title="Reset color"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <label className="mt-2.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <input
+                    type="color"
+                    defaultValue={(editor.getAttributes('textStyle').color as string) || '#F0B323'}
+                    onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
+                    className="h-7 w-10 cursor-pointer rounded border border-slate-200 dark:border-slate-600"
+                  />
+                  Color code
+                </label>
+              </div>
+            </>
+          )}
+        </div>
       </div>
       <EditorContent editor={editor} className="rich-text" />
     </div>
