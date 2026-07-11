@@ -131,7 +131,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
           return (
             <div
               key={dept.id}
-              className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
+              className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_6px_18px_-8px_rgba(15,23,42,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-600 dark:bg-slate-900"
             >
               <div className="h-1.5" style={{ backgroundColor: dept.color }} />
               <div
@@ -233,42 +233,44 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
   const sessionHeader = (session: DisplaySession, tasks: DisplayTask[]): ReactNode => {
     const done = tasks.filter((task) => task.status === 'completed').length;
     return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-      {/* Calendar tile */}
-      <span className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900">
-        <span className="text-lg font-extrabold leading-none">{formatDate(session.session_date, lang, 'd')}</span>
-        <span className="text-[0.6rem] font-bold uppercase leading-tight opacity-80">
-          {formatDate(session.session_date, lang, 'MMM')}
-        </span>
-      </span>
-      <div className="min-w-0">
-        <p className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
-          {session.title || formatDate(session.session_date, lang, 'EEEE d MMMM')}
-        </p>
-        <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-          <span className="inline-flex items-center gap-1">
-            <CalendarDays className="h-3.5 w-3.5 text-gold-500" /> {formatDate(session.session_date, lang)}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-gradient-to-r from-navy-900 via-navy-800 to-navy-600 px-4 py-3.5 text-white shadow-md">
+        {/* Calendar tile */}
+        <span className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-gold-400 text-navy-900 shadow">
+          <span className="text-lg font-extrabold leading-none">{formatDate(session.session_date, lang, 'd')}</span>
+          <span className="text-[0.6rem] font-bold uppercase leading-tight opacity-80">
+            {formatDate(session.session_date, lang, 'MMM')}
           </span>
-          {session.location && (
-            <span className="inline-flex items-center gap-1 text-sm font-bold text-navy-700 dark:text-gold-300">
-              <MapPin className="h-4 w-4" /> {session.location}
+        </span>
+        <div className="min-w-0">
+          <p className="text-lg font-extrabold tracking-tight">
+            {session.title || formatDate(session.session_date, lang, 'EEEE d MMMM')}
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold">
+              <CalendarDays className="h-4 w-4 text-gold-400" /> {formatDate(session.session_date, lang)}
             </span>
+            {session.location && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold">
+                <MapPin className="h-4 w-4 text-gold-400" /> {session.location}
+              </span>
+            )}
+            {session.start_time && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold tabular-nums">
+                <Clock className="h-4 w-4 text-gold-400" /> {formatTime(session.start_time, lang)}
+                {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
+              </span>
+            )}
+          </p>
+        </div>
+        <span
+          className={cn(
+            'ml-auto rounded-full px-3 py-1 text-sm font-extrabold shadow-sm',
+            done === tasks.length && tasks.length > 0 ? 'bg-emerald-500 text-white' : 'bg-gold-400 text-navy-900'
           )}
-          {session.start_time && (
-            <span className="inline-flex items-center gap-1 font-semibold">
-              <Clock className="h-3.5 w-3.5 text-gold-500" /> {formatTime(session.start_time, lang)}
-              {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
-            </span>
-          )}
-        </p>
+        >
+          {done}/{tasks.length}
+        </span>
       </div>
-      <span
-        className="ml-auto rounded-full px-3 py-1 text-sm font-extrabold text-white shadow-sm"
-        style={{ backgroundColor: done === tasks.length && tasks.length > 0 ? '#10b981' : '#1a3c5e' }}
-      >
-        {done}/{tasks.length}
-      </span>
-    </div>
     );
   };
 
@@ -403,10 +405,9 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
             {/* Event header: light, title-first */}
             <header
               onClick={() => toggleCollapsed(event.id)}
-              className="cursor-pointer select-none px-6 py-6 lg:px-7"
+              className="cursor-pointer select-none px-6 py-5 lg:px-7"
               style={{
-                borderLeft: `6px solid ${event.header_color || '#1a3c5e'}`,
-                background: `linear-gradient(100deg, ${event.header_color || '#1a3c5e'}0f 0%, transparent 55%)`
+                background: `linear-gradient(100deg, ${event.header_color || '#1a3c5e'}14 0%, transparent 55%)`
               }}
             >
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -457,11 +458,11 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
 
             {/* Sessions timeline */}
             {!isCollapsed && (
-              <div className="border-t border-slate-100 px-6 py-5 dark:border-slate-800">
+              <div className="border-t border-slate-100 px-6 py-4 dark:border-slate-800">
                 {sessions.length === 0 ? (
                   renderPanels(event.tasks)
                 ) : (
-                  <div className="relative space-y-8 pl-5">
+                  <div className="relative space-y-6 pl-5">
                     <span className="absolute bottom-2 left-[7px] top-2 w-0.5 rounded-full bg-gradient-to-b from-gold-400 via-slate-200 to-slate-200 dark:via-slate-700 dark:to-slate-700" />
                     {generalTasks.length > 0 && (
                       <div className="relative space-y-4 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 p-4 dark:border-slate-700 dark:bg-slate-800/30">
@@ -480,7 +481,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                       return (
                         <div
                           key={session.id}
-                          className="relative space-y-4 rounded-2xl border border-slate-200/90 bg-slate-100/60 p-4 dark:border-slate-700/70 dark:bg-slate-800/30"
+                          className="relative space-y-4 rounded-2xl border border-navy-100 bg-gradient-to-br from-navy-500/[0.07] via-white to-gold-400/15 p-4 shadow-sm dark:border-slate-700 dark:from-navy-900/50 dark:via-slate-900 dark:to-gold-950/30"
                         >
                           <span className="absolute -left-[29px] top-7 h-3 w-3 rounded-full border-2 border-white bg-gold-400 dark:border-slate-900" />
                           {sessionHeader(session, sessionTasks)}
