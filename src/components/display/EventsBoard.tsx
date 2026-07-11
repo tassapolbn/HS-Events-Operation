@@ -133,18 +133,21 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
               key={dept.id}
               className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
             >
-              <div className="h-1" style={{ backgroundColor: dept.color }} />
-              <div className="flex items-center gap-2.5 px-4 py-3">
+              <div className="h-1.5" style={{ backgroundColor: dept.color }} />
+              <div
+                className="flex items-center gap-2.5 border-b px-4 py-3.5"
+                style={{ backgroundColor: `${dept.color}0d`, borderBottomColor: `${dept.color}30` }}
+              >
                 <span
                   className="flex h-9 w-9 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: `${dept.color}1a`, color: dept.color }}
+                  style={{ backgroundColor: `${dept.color}1f`, color: dept.color }}
                 >
                   <Icon className="h-5 w-5" />
                 </span>
-                <h3 className="flex-1 truncate text-sm font-bold text-slate-800 dark:text-slate-100">{deptName(dept)}</h3>
+                <h3 className="flex-1 truncate text-[0.95rem] font-extrabold text-slate-800 dark:text-slate-100">{deptName(dept)}</h3>
                 <span
-                  className="rounded-full px-2.5 py-0.5 text-xs font-bold"
-                  style={{ backgroundColor: `${dept.color}1a`, color: dept.color }}
+                  className="rounded-full px-2.5 py-1 text-xs font-extrabold text-white shadow-sm"
+                  style={{ backgroundColor: done === deptTasks.length && deptTasks.length > 0 ? '#10b981' : dept.color }}
                 >
                   {done}/{deptTasks.length}
                 </span>
@@ -156,8 +159,10 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                     <li
                       key={task.id}
                       className={cn(
-                        'flex items-start gap-3 px-4 py-3 transition-colors',
-                        completed ? 'bg-emerald-50/70 dark:bg-emerald-950/25' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                        'flex items-start gap-3 px-4 py-3.5 transition-colors',
+                        completed
+                          ? 'border-l-[3px] border-emerald-400 bg-emerald-50/80 dark:bg-emerald-950/25'
+                          : 'border-l-[3px] border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'
                       )}
                     >
                       <button
@@ -176,11 +181,11 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                       <div className="min-w-0 flex-1">
                         <p
                           className={cn(
-                            'text-[0.95rem] font-semibold leading-snug text-slate-800 dark:text-slate-100',
+                            'break-words text-[0.95rem] font-semibold leading-relaxed text-slate-800 dark:text-slate-100',
                             completed && 'text-slate-400 line-through dark:text-slate-500'
                           )}
                         >
-                          <span className="mr-1.5 font-bold text-slate-300 dark:text-slate-600">{index + 1}.</span>
+                          <span className="mr-1.5 text-sm font-bold text-slate-300 dark:text-slate-600">{index + 1}.</span>
                           {task.title}
                         </p>
                         {!isRichTextEmpty(task.description) && !completed && (
@@ -225,8 +230,10 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     );
   };
 
-  const sessionHeader = (session: DisplaySession): ReactNode => (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+  const sessionHeader = (session: DisplaySession, tasks: DisplayTask[]): ReactNode => {
+    const done = tasks.filter((task) => task.status === 'completed').length;
+    return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm dark:border-slate-700 dark:bg-slate-900">
       {/* Calendar tile */}
       <span className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900">
         <span className="text-lg font-extrabold leading-none">{formatDate(session.session_date, lang, 'd')}</span>
@@ -235,7 +242,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
         </span>
       </span>
       <div className="min-w-0">
-        <p className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
+        <p className="text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
           {session.title || formatDate(session.session_date, lang, 'EEEE d MMMM')}
         </p>
         <p className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -255,8 +262,15 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
           )}
         </p>
       </div>
+      <span
+        className="ml-auto rounded-full px-3 py-1 text-sm font-extrabold text-white shadow-sm"
+        style={{ backgroundColor: done === tasks.length && tasks.length > 0 ? '#10b981' : '#1a3c5e' }}
+      >
+        {done}/{tasks.length}
+      </span>
     </div>
-  );
+    );
+  };
 
   // Upcoming tasks across ALL events, sorted by start time, so staff never
   // miss work from another event happening the same day.
@@ -284,7 +298,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Upcoming tasks rail */}
       {upcoming.length > 0 && (
         <section className="animate-slide-up rounded-3xl border border-gold-200 bg-gradient-to-r from-gold-50 via-white to-white p-4 shadow-sm dark:border-gold-900 dark:from-gold-950/30 dark:via-slate-900 dark:to-slate-900">
@@ -377,19 +391,23 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
             key={event.id}
             id={`event-${event.id}`}
             className={cn(
-              'animate-slide-up scroll-mt-4 overflow-hidden rounded-3xl border bg-white transition-all duration-300 shadow-[0_10px_30px_-12px_var(--event-glow)] hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-12px_var(--event-glow)] dark:bg-slate-900',
+              'animate-slide-up scroll-mt-4 overflow-hidden rounded-3xl border-2 bg-white transition-all duration-300 shadow-[0_10px_30px_-12px_var(--event-glow)] hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-12px_var(--event-glow)] dark:bg-slate-900',
               highlighted === event.id && 'ring-4 ring-gold-400/80'
             )}
             style={{
               '--event-glow': `${event.header_color || '#1a3c5e'}59`,
-              borderColor: `${event.header_color || '#1a3c5e'}40`
+              borderColor: `${event.header_color || '#1a3c5e'}4d`
             } as React.CSSProperties}
           >
+            <div className="h-1.5" style={{ backgroundColor: event.header_color || '#1a3c5e' }} />
             {/* Event header: light, title-first */}
             <header
               onClick={() => toggleCollapsed(event.id)}
-              className="cursor-pointer select-none px-6 py-5"
-              style={{ borderLeft: `6px solid ${event.header_color || '#1a3c5e'}` }}
+              className="cursor-pointer select-none px-6 py-6 lg:px-7"
+              style={{
+                borderLeft: `6px solid ${event.header_color || '#1a3c5e'}`,
+                background: `linear-gradient(100deg, ${event.header_color || '#1a3c5e'}0f 0%, transparent 55%)`
+              }}
             >
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: event.header_color || '#1a3c5e' }} />
@@ -405,11 +423,14 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                   </span>
                 )}
                 <span className="ml-auto flex items-center gap-3">
-                  <span className="hidden w-28 sm:block">
-                    <span className="mb-1 block text-right text-xs font-bold text-slate-400">
+                  <span className="hidden w-32 sm:block">
+                    <span className={cn(
+                      'mb-1 block text-right text-sm font-extrabold',
+                      progress === 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-300'
+                    )}>
                       {doneTasks}/{totalTasks}
                     </span>
-                    <span className="block h-1.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                    <span className="block h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
                       <span className="block h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
                     </span>
                   </span>
@@ -440,13 +461,13 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                 {sessions.length === 0 ? (
                   renderPanels(event.tasks)
                 ) : (
-                  <div className="relative space-y-6 pl-5">
+                  <div className="relative space-y-8 pl-5">
                     <span className="absolute bottom-2 left-[7px] top-2 w-0.5 rounded-full bg-gradient-to-b from-gold-400 via-slate-200 to-slate-200 dark:via-slate-700 dark:to-slate-700" />
                     {generalTasks.length > 0 && (
-                      <div className="relative space-y-3">
-                        <span className="absolute -left-5 top-4 h-3 w-3 rounded-full border-2 border-white bg-slate-300 dark:border-slate-900 dark:bg-slate-600" />
-                        <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800/50">
-                          <span className="text-sm font-bold text-slate-500 dark:text-slate-300">{t('sessions.generalTasks')}</span>
+                      <div className="relative space-y-4 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 p-4 dark:border-slate-700 dark:bg-slate-800/30">
+                        <span className="absolute -left-[29px] top-6 h-3 w-3 rounded-full border-2 border-white bg-slate-300 dark:border-slate-900 dark:bg-slate-600" />
+                        <div className="px-1">
+                          <span className="text-lg font-extrabold tracking-tight text-slate-500 dark:text-slate-300">{t('sessions.generalTasks')}</span>
                         </div>
                         {renderPanels(generalTasks)}
                       </div>
@@ -457,9 +478,12 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                       const panels = renderPanels(sessionTasks);
                       if (!panels) return null;
                       return (
-                        <div key={session.id} className="relative space-y-3">
-                          <span className="absolute -left-5 top-5 h-3 w-3 rounded-full border-2 border-white bg-gold-400 dark:border-slate-900" />
-                          {sessionHeader(session)}
+                        <div
+                          key={session.id}
+                          className="relative space-y-4 rounded-2xl border border-slate-200/90 bg-slate-100/60 p-4 dark:border-slate-700/70 dark:bg-slate-800/30"
+                        >
+                          <span className="absolute -left-[29px] top-7 h-3 w-3 rounded-full border-2 border-white bg-gold-400 dark:border-slate-900" />
+                          {sessionHeader(session, sessionTasks)}
                           {panels}
                         </div>
                       );
