@@ -405,7 +405,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
             {/* Event header: light, title-first */}
             <header
               onClick={() => toggleCollapsed(event.id)}
-              className="cursor-pointer select-none px-6 py-5 lg:px-7"
+              className="cursor-pointer select-none px-6 pb-3.5 pt-5 lg:px-7"
               style={{
                 background: `linear-gradient(100deg, ${event.header_color || '#1a3c5e'}14 0%, transparent 55%)`
               }}
@@ -458,7 +458,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
 
             {/* Sessions timeline */}
             {!isCollapsed && (
-              <div className="border-t border-slate-100 px-6 py-4 dark:border-slate-800">
+              <div className="border-t border-slate-100 px-6 pb-5 pt-3 dark:border-slate-800">
                 {sessions.length === 0 ? (
                   renderPanels(event.tasks)
                 ) : (
