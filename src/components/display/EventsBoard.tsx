@@ -1,14 +1,15 @@
 import { useState, type ReactNode } from 'react';
 import {
-  AlarmClock, CalendarDays, Check, ChevronDown, Clock, MapPin, Paperclip, StickyNote, User
+  AlarmClock, CalendarDays, Check, ChevronDown, Clock, DoorOpen, Flag, Hammer, ListChecks,
+  MapPin, PackageCheck, PackageOpen, Paperclip, PlayCircle, StickyNote, User
 } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { getSignedUrl } from '../../hooks/useAttachments';
 import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
 import { Spinner } from '../ui/Spinner';
-import { departmentIcon } from '../../lib/constants';
-import { cn, extractDate, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
+import { categoryIcon, departmentIcon } from '../../lib/constants';
+import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
 import type { DisplayAttachment, DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
 
 function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
@@ -82,28 +83,30 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
 
   const milestonePills = (event: DisplayEvent): ReactNode => {
     const items = [
-      { label: t('timeline.setupBegins'), value: event.setup_start, key: true },
-      { label: t('timeline.venueReady'), value: event.venue_ready, key: true },
-      { label: t('timeline.eventStarts'), value: event.event_start, key: false },
-      { label: t('timeline.eventEnds'), value: event.event_finish, key: false },
-      { label: t('timeline.breakdownBegins'), value: event.breakdown_start, key: false },
-      { label: t('timeline.breakdownComplete'), value: event.breakdown_deadline, key: false }
+      { label: t('timeline.setupBegins'), value: event.setup_start, key: true, icon: Hammer },
+      { label: t('timeline.venueReady'), value: event.venue_ready, key: true, icon: DoorOpen },
+      { label: t('timeline.eventStarts'), value: event.event_start, key: false, icon: PlayCircle },
+      { label: t('timeline.eventEnds'), value: event.event_finish, key: false, icon: Flag },
+      { label: t('timeline.breakdownBegins'), value: event.breakdown_start, key: false, icon: PackageOpen },
+      { label: t('timeline.breakdownComplete'), value: event.breakdown_deadline, key: false, icon: PackageCheck }
     ].filter((m) => m.value);
     if (items.length === 0) return null;
     return (
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
         {items.map((m) => {
           const sameDay = extractDate(m.value) === event.event_date;
+          const Icon = m.icon;
           return (
             <span
               key={m.label}
               className={cn(
-                'inline-flex items-baseline gap-1.5 rounded-xl border px-3 py-1.5 transition-transform hover:scale-[1.03]',
+                'inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 transition-transform hover:scale-[1.03]',
                 m.key
                   ? 'border-gold-300 bg-gold-50 dark:border-gold-800 dark:bg-gold-950/40'
                   : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60'
               )}
             >
+              <Icon className={cn('h-3.5 w-3.5 shrink-0', m.key ? 'text-gold-600 dark:text-gold-400' : 'text-slate-400')} />
               <span className={cn('text-xs font-semibold', m.key ? 'text-gold-700 dark:text-gold-400' : 'text-slate-400')}>
                 {m.label}
               </span>
@@ -122,8 +125,17 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
       (dept) => (!selectedDept || dept.id === selectedDept) && tasks.some((task) => task.department_id === dept.id)
     );
     if (visibleDepts.length === 0) return null;
+    // Cap the column count at the number of departments so we never leave
+    // empty columns (a common source of blank white space on wide screens).
+    const colClass = selectedDept || visibleDepts.length === 1
+      ? 'grid-cols-1'
+      : visibleDepts.length === 2
+      ? 'grid-cols-1 sm:grid-cols-2'
+      : visibleDepts.length === 3
+      ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+      : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
     return (
-      <div className={cn('grid gap-4', selectedDept ? 'grid-cols-1' : 'md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4')}>
+      <div className={cn('grid items-start gap-4', colClass)}>
         {visibleDepts.map((dept) => {
           const Icon = departmentIcon(dept.icon);
           const deptTasks = tasks.filter((task) => task.department_id === dept.id);
@@ -131,7 +143,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
           return (
             <div
               key={dept.id}
-              className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_6px_18px_-8px_rgba(15,23,42,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-600 dark:bg-slate-900"
+              className="flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-[0_6px_18px_-8px_rgba(15,23,42,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-600 dark:bg-slate-900"
             >
               <div className="h-1.5" style={{ backgroundColor: dept.color }} />
               <div
@@ -300,7 +312,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       {/* Upcoming tasks rail */}
       {upcoming.length > 0 && (
         <section className="animate-slide-up rounded-3xl border border-gold-200 bg-gradient-to-r from-gold-50 via-white to-white p-4 shadow-sm dark:border-gold-900 dark:from-gold-950/30 dark:via-slate-900 dark:to-slate-900">
@@ -385,6 +397,15 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
         const totalTasks = event.tasks.length;
         const doneTasks = event.tasks.filter((task) => task.status === 'completed').length;
         const progress = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
+        const headerColor = event.header_color || '#1a3c5e';
+        const headerText = event.header_text_color || '#ffffff';
+        const CategoryIcon = categoryIcon(event.category);
+        const hasMilestones = [
+          event.setup_start, event.venue_ready, event.event_start,
+          event.event_finish, event.breakdown_start, event.breakdown_deadline
+        ].some(Boolean);
+        const hasMeta = hasMilestones || !isRichTextEmpty(event.description) ||
+          !isRichTextEmpty(event.additional_notes) || event.attachments.length > 0;
         const sessions = event.sessions ?? [];
         const sessionIds = new Set(sessions.map((s) => s.id));
         const generalTasks = event.tasks.filter((task) => !task.session_id || !sessionIds.has(task.session_id));
@@ -393,81 +414,98 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
             key={event.id}
             id={`event-${event.id}`}
             className={cn(
-              'animate-slide-up scroll-mt-4 overflow-hidden rounded-3xl border-2 bg-white transition-all duration-300 shadow-[0_10px_30px_-12px_var(--event-glow)] hover:-translate-y-0.5 hover:shadow-[0_18px_44px_-12px_var(--event-glow)] dark:bg-slate-900',
+              'animate-slide-up scroll-mt-4 overflow-hidden rounded-3xl border-2 bg-white transition-all duration-300 shadow-[0_12px_34px_-14px_var(--event-glow)] hover:-translate-y-0.5 hover:shadow-[0_20px_48px_-14px_var(--event-glow)] dark:bg-slate-900',
               highlighted === event.id && 'ring-4 ring-gold-400/80'
             )}
             style={{
-              '--event-glow': `${event.header_color || '#1a3c5e'}59`,
-              borderColor: `${event.header_color || '#1a3c5e'}4d`
+              '--event-glow': `${headerColor}66`,
+              borderColor: `${headerColor}80`
             } as React.CSSProperties}
           >
-            <div className="h-1.5" style={{ backgroundColor: event.header_color || '#1a3c5e' }} />
-            {/* Event header: light, title-first */}
+            <div className="h-2" style={{ backgroundColor: headerColor }} />
+            {/* Event header band: bold and colored so the event name stands out */}
             <header
               onClick={() => toggleCollapsed(event.id)}
-              className="cursor-pointer select-none px-6 pb-2 pt-5 lg:px-7"
+              className="flex cursor-pointer select-none flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 lg:px-7"
               style={{
-                background: `linear-gradient(100deg, ${event.header_color || '#1a3c5e'}14 0%, transparent 55%)`
+                background: `linear-gradient(120deg, ${headerColor} 0%, ${darkenColor(headerColor, 0.82)} 58%, ${darkenColor(headerColor, 0.6)} 100%)`,
+                color: headerText
               }}
             >
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-                <span className="h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: event.header_color || '#1a3c5e' }} />
-                <h2 className="text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white 2xl:text-3xl">
+              <span
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-inner"
+                style={{ backgroundColor: `${headerText}26` }}
+              >
+                <CategoryIcon className="h-6 w-6" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 className="truncate text-2xl font-black tracking-tight 2xl:text-3xl" style={{ color: headerText }}>
                   {event.name}
                 </h2>
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                  <CalendarDays className="h-4 w-4" /> {formatDate(event.event_date, lang, 'EEE d MMM yyyy')}
-                </span>
-                {event.location && (
-                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-sm font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                    <MapPin className="h-4 w-4" /> {event.location}
+                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-bold"
+                    style={{ backgroundColor: `${headerText}26` }}
+                  >
+                    <CalendarDays className="h-4 w-4" /> {formatDate(event.event_date, lang, 'EEE d MMM yyyy')}
                   </span>
-                )}
-                <span className="ml-auto flex items-center gap-3">
-                  <span className="hidden w-32 sm:block">
-                    <span className={cn(
-                      'mb-1 block text-right text-sm font-extrabold',
-                      progress === 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-300'
-                    )}>
-                      {doneTasks}/{totalTasks}
+                  {event.location && (
+                    <span
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-bold"
+                      style={{ backgroundColor: `${headerText}26` }}
+                    >
+                      <MapPin className="h-4 w-4" /> {event.location}
                     </span>
-                    <span className="block h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-                      <span className="block h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress}%` }} />
-                    </span>
-                  </span>
-                  <ChevronDown className={cn('h-6 w-6 text-slate-300 transition-transform duration-300', isCollapsed && '-rotate-90')} />
-                </span>
+                  )}
+                </div>
               </div>
-
-              {!isCollapsed && (
-                <>
-                  {milestonePills(event)}
-                  {!isRichTextEmpty(event.description) && (
-                    <RichTextViewer html={event.description} className="mt-4 max-w-4xl text-slate-600 dark:text-slate-300" />
-                  )}
-                  {!isRichTextEmpty(event.additional_notes) && (
-                    <div className="mt-4 flex max-w-4xl items-start gap-2.5 rounded-r-xl border-l-4 border-amber-400 bg-amber-50 px-4 py-3 dark:border-amber-500 dark:bg-amber-950/30">
-                      <StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                      <RichTextViewer html={event.additional_notes} className="!text-amber-900 dark:!text-amber-200" />
-                    </div>
-                  )}
-                  <AttachmentChips files={event.attachments} />
-                </>
-              )}
+              <div className="ml-auto flex items-center gap-3">
+                <span className="hidden text-right sm:block">
+                  <span className="block text-sm font-black tabular-nums" style={{ color: headerText }}>
+                    {doneTasks}/{totalTasks}
+                  </span>
+                  <span
+                    className="mt-1 block h-2 w-28 overflow-hidden rounded-full"
+                    style={{ backgroundColor: `${headerText}33` }}
+                  >
+                    <span
+                      className="block h-full rounded-full transition-all"
+                      style={{ width: `${progress}%`, backgroundColor: progress === 100 ? '#34d399' : headerText }}
+                    />
+                  </span>
+                </span>
+                <ChevronDown
+                  className={cn('h-6 w-6 transition-transform duration-300', isCollapsed && '-rotate-90')}
+                  style={{ color: `${headerText}cc` }}
+                />
+              </div>
             </header>
 
-            {/* Sessions timeline */}
+            {/* Body: event details + department work */}
             {!isCollapsed && (
-              <div className="px-6 pb-5 pt-0">
-                {sessions.length === 0 ? (
-                  renderPanels(event.tasks)
-                ) : (
-                  <div className="relative space-y-6 pl-5">
+              <div className="px-5 pb-5 pt-4 lg:px-7">
+                {milestonePills(event)}
+                {!isRichTextEmpty(event.description) && (
+                  <RichTextViewer html={event.description} className="mt-4 max-w-4xl text-slate-600 dark:text-slate-300" />
+                )}
+                {!isRichTextEmpty(event.additional_notes) && (
+                  <div className="mt-4 flex max-w-4xl items-start gap-2.5 rounded-r-xl border-l-4 border-amber-400 bg-amber-50 px-4 py-3 dark:border-amber-500 dark:bg-amber-950/30">
+                    <StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                    <RichTextViewer html={event.additional_notes} className="!text-amber-900 dark:!text-amber-200" />
+                  </div>
+                )}
+                <AttachmentChips files={event.attachments} />
+                <div className={cn(hasMeta && 'mt-5')}>
+                  {sessions.length === 0 ? (
+                    renderPanels(event.tasks)
+                  ) : (
+                    <div className="relative space-y-5 pl-5">
                     <span className="absolute bottom-2 left-[7px] top-2 w-0.5 rounded-full bg-gradient-to-b from-gold-400 via-slate-200 to-slate-200 dark:via-slate-700 dark:to-slate-700" />
                     {generalTasks.length > 0 && (
                       <div className="relative space-y-4 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 p-4 dark:border-slate-700 dark:bg-slate-800/30">
                         <span className="absolute -left-[29px] top-6 h-3 w-3 rounded-full border-2 border-white bg-slate-300 dark:border-slate-900 dark:bg-slate-600" />
-                        <div className="px-1">
+                        <div className="flex items-center gap-2 px-1">
+                          <ListChecks className="h-5 w-5 text-slate-400" />
                           <span className="text-lg font-extrabold tracking-tight text-slate-500 dark:text-slate-300">{t('sessions.generalTasks')}</span>
                         </div>
                         {renderPanels(generalTasks)}
@@ -491,6 +529,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                     })}
                   </div>
                 )}
+                </div>
               </div>
             )}
           </section>

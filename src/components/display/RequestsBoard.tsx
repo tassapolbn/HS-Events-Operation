@@ -36,7 +36,7 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading }
   }
 
   return (
-    <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3 2xl:gap-4">
+    <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3 2xl:gap-4">
       {visible.map((request) => {
         const dept = departments.find((d) => d.id === request.department_id);
         const Icon = departmentIcon(dept?.icon ?? 'users');
@@ -45,7 +45,7 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading }
           <article
             key={request.id}
             className={cn(
-              'animate-slide-up overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900',
+              'animate-slide-up overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-700 dark:bg-slate-900',
               completed && 'opacity-70'
             )}
             style={{ borderLeft: `6px solid ${dept?.color ?? '#1a3c5e'}` }}

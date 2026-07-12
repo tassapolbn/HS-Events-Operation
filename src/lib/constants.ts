@@ -1,5 +1,7 @@
 import {
-  Wrench, Sparkles, Shield, ChefHat, Users, type LucideIcon
+  Wrench, Sparkles, Shield, ChefHat, Users,
+  CalendarDays, GraduationCap, Trophy, Award, PartyPopper, Presentation, Music, Camera, Bus,
+  type LucideIcon
 } from 'lucide-react';
 import type { EventStatus, Priority, TaskStatus } from '../types';
 
@@ -14,6 +16,24 @@ export const DEPARTMENT_ICONS: Record<string, LucideIcon> = {
 
 export function departmentIcon(name: string): LucideIcon {
   return DEPARTMENT_ICONS[name] ?? Users;
+}
+
+/** Icon per event category, shown on the display board event header */
+export const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  general: CalendarDays,
+  academic: GraduationCap,
+  sports: Trophy,
+  ceremony: Award,
+  celebration: PartyPopper,
+  meeting: Presentation,
+  performance: Music,
+  photoshoot: Camera,
+  trip: Bus,
+  other: Sparkles
+};
+
+export function categoryIcon(name: string): LucideIcon {
+  return CATEGORY_ICONS[name] ?? CalendarDays;
 }
 
 /** Tailwind-safe classes per priority */

@@ -155,7 +155,7 @@ export function DisplayShell({
         <div className="h-1 bg-gradient-to-r from-gold-400 via-gold-300/70 to-transparent" />
       </header>
 
-      <main className="mx-auto max-w-[1800px] px-5 py-6 lg:px-8">{children}</main>
+      <main className="mx-auto max-w-[1800px] px-5 py-5 lg:px-8">{children}</main>
     </div>
   );
 }
