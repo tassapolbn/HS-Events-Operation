@@ -16,6 +16,21 @@ export function useDisplayDepartments() {
   });
 }
 
+/** Today's date as yyyy-MM-dd in the viewer's local timezone. */
+function localToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** The last day an event is active: its own date or the latest session date. */
+function eventLastDate(event: DisplayEvent): string {
+  let last = event.event_date;
+  for (const session of event.sessions ?? []) {
+    if (session.session_date && session.session_date > last) last = session.session_date;
+  }
+  return last;
+}
+
 export function useDisplayEvents() {
   return useQuery({
     queryKey: ['display', 'events'],
@@ -24,7 +39,11 @@ export function useDisplayEvents() {
     queryFn: async (): Promise<DisplayEvent[]> => {
       const { data, error } = await supabase.rpc('public_display_events');
       if (error) throw error;
-      return (data ?? []) as DisplayEvent[];
+      const events = (data ?? []) as DisplayEvent[];
+      // Drop events once their last scheduled day has passed, so the board
+      // only shows today's and upcoming events.
+      const today = localToday();
+      return events.filter((event) => eventLastDate(event) >= today);
     }
   });
 }
