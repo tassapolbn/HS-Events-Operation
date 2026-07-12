@@ -78,7 +78,7 @@ export function DisplayShell({
           </div>
 
           <div className="ml-auto hidden text-right sm:block">
-            <p className="text-2xl font-extrabold tabular-nums tracking-tight text-gold-400">{clock}</p>
+            <p className="text-2xl font-extrabold tabular-nums tracking-tight text-white">{clock}</p>
             <p className="text-xs capitalize text-white/70">{dateLine}</p>
           </div>
 

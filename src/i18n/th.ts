@@ -235,6 +235,7 @@ export const th: Dict = {
     tapToComplete: 'แตะเมื่อทำเสร็จ',
     setStatus: 'อัปเดตสถานะ',
     files: 'ไฟล์',
+    reference: 'ไฟล์อ้างอิง / แปลนสถานที่',
     due: 'กำหนดเสร็จ',
     openFull: 'เปิดแอปพลิเคชันเต็ม'
   },

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   AlarmClock, CalendarDays, Check, ChevronDown, Clock, DoorOpen, Flag, Hammer, ListChecks,
-  MapPin, PackageCheck, PackageOpen, Paperclip, PlayCircle, StickyNote, User
+  Map as MapIcon, MapPin, PackageCheck, PackageOpen, Paperclip, PlayCircle, StickyNote, User
 } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { getSignedUrl } from '../../hooks/useAttachments';
@@ -246,11 +246,13 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     const done = tasks.filter((task) => task.status === 'completed').length;
     return (
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-gradient-to-r from-navy-900 via-navy-800 to-navy-600 px-4 py-3.5 text-white shadow-md">
-        {/* Calendar tile */}
-        <span className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-gold-400 text-navy-900 shadow">
-          <span className="text-lg font-extrabold leading-none">{formatDate(session.session_date, lang, 'd')}</span>
-          <span className="text-[0.6rem] font-bold uppercase leading-tight opacity-80">
+        {/* Calendar-icon tile that still shows the session date */}
+        <span className="flex h-12 w-12 shrink-0 flex-col overflow-hidden rounded-lg bg-white shadow ring-1 ring-black/10">
+          <span className="flex h-[1.1rem] items-center justify-center bg-gold-400 text-[0.55rem] font-extrabold uppercase tracking-wide text-navy-900">
             {formatDate(session.session_date, lang, 'MMM')}
+          </span>
+          <span className="flex flex-1 items-center justify-center text-xl font-extrabold leading-none text-navy-900">
+            {formatDate(session.session_date, lang, 'd')}
           </span>
         </span>
         <div className="min-w-0">
@@ -483,7 +485,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
 
             {/* Body: event details + department work */}
             {!isCollapsed && (
-              <div className="px-5 pb-5 pt-4 lg:px-7">
+              <div className={cn('px-5 pb-5 lg:px-7', hasMeta ? 'pt-4' : 'pt-0')}>
                 {milestonePills(event)}
                 {!isRichTextEmpty(event.description) && (
                   <RichTextViewer html={event.description} className="mt-4 max-w-4xl text-slate-600 dark:text-slate-300" />
@@ -494,7 +496,17 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                     <RichTextViewer html={event.additional_notes} className="!text-amber-900 dark:!text-amber-200" />
                   </div>
                 )}
-                <AttachmentChips files={event.attachments} />
+                {event.attachments.length > 0 && (
+                  <div className={cn(
+                    'rounded-xl border border-gold-300 bg-gold-50 px-3.5 py-2.5 dark:border-gold-800 dark:bg-gold-950/30',
+                    (hasMilestones || !isRichTextEmpty(event.description) || !isRichTextEmpty(event.additional_notes)) && 'mt-4'
+                  )}>
+                    <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-gold-700 dark:text-gold-300">
+                      <MapIcon className="h-4 w-4" /> {t('display.reference')}
+                    </span>
+                    <AttachmentChips files={event.attachments} />
+                  </div>
+                )}
                 <div className={cn(hasMeta && 'mt-5')}>
                   {sessions.length === 0 ? (
                     renderPanels(event.tasks)
@@ -502,7 +514,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                     <div className="relative space-y-5 pl-5">
                     <span className="absolute bottom-2 left-[7px] top-2 w-0.5 rounded-full bg-gradient-to-b from-gold-400 via-slate-200 to-slate-200 dark:via-slate-700 dark:to-slate-700" />
                     {generalTasks.length > 0 && (
-                      <div className="relative space-y-4 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 p-4 dark:border-slate-700 dark:bg-slate-800/30">
+                      <div className="relative space-y-4 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 p-3 dark:border-slate-700 dark:bg-slate-800/30">
                         <span className="absolute -left-[29px] top-6 h-3 w-3 rounded-full border-2 border-white bg-slate-300 dark:border-slate-900 dark:bg-slate-600" />
                         <div className="flex items-center gap-2 px-1">
                           <ListChecks className="h-5 w-5 text-slate-400" />
@@ -519,7 +531,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                       return (
                         <div
                           key={session.id}
-                          className="relative space-y-4 rounded-2xl border border-navy-100 bg-gradient-to-br from-navy-500/[0.07] via-white to-gold-400/15 p-4 shadow-sm dark:border-slate-700 dark:from-navy-900/50 dark:via-slate-900 dark:to-gold-950/30"
+                          className="relative space-y-4 rounded-2xl border border-navy-100 bg-slate-50 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40"
                         >
                           <span className="absolute -left-[29px] top-7 h-3 w-3 rounded-full border-2 border-white bg-gold-400 dark:border-slate-900" />
                           {sessionHeader(session, sessionTasks)}

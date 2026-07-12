@@ -233,6 +233,7 @@ export const en = {
     tapToComplete: 'Tap when done',
     setStatus: 'Update status',
     files: 'Files',
+    reference: 'Reference / Floor plan',
     due: 'Due',
     openFull: 'Open the full application'
   },
