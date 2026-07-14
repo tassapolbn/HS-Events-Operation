@@ -112,3 +112,12 @@ export function darkenColor(hex: string, factor = 0.72): string {
   });
   return `#${parts.join('')}`;
 }
+
+/** Pick dark-navy or white text for good contrast on a solid hex background. */
+export function readableTextColor(hex: string): string {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return '#ffffff';
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(clean.slice(i, i + 2), 16));
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#0e1f31' : '#ffffff';
+}

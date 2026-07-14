@@ -9,7 +9,7 @@ import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
 import { Spinner } from '../ui/Spinner';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
-import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
+import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty, readableTextColor } from '../../lib/utils';
 import type { DisplayAttachment, DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
 
 function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
@@ -140,26 +140,33 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
           const Icon = departmentIcon(dept.icon);
           const deptTasks = tasks.filter((task) => task.department_id === dept.id);
           const done = deptTasks.filter((task) => task.status === 'completed').length;
+          const deptText = readableTextColor(dept.color);
           return (
             <div
               key={dept.id}
               className="flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-[0_6px_18px_-8px_rgba(15,23,42,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-600 dark:bg-slate-900"
             >
-              <div className="h-1.5" style={{ backgroundColor: dept.color }} />
               <div
-                className="flex items-center gap-2.5 border-b px-4 py-3.5"
-                style={{ backgroundColor: `${dept.color}0d`, borderBottomColor: `${dept.color}30` }}
+                className="flex items-center gap-2.5 px-4 py-3"
+                style={{
+                  background: `linear-gradient(120deg, ${dept.color} 0%, ${darkenColor(dept.color, 0.72)} 100%)`,
+                  color: deptText
+                }}
               >
                 <span
                   className="flex h-9 w-9 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: `${dept.color}1f`, color: dept.color }}
+                  style={{ backgroundColor: `${deptText}2b` }}
                 >
                   <Icon className="h-5 w-5" />
                 </span>
-                <h3 className="flex-1 truncate text-[0.95rem] font-extrabold text-slate-800 dark:text-slate-100">{deptName(dept)}</h3>
+                <h3 className="flex-1 truncate text-[0.95rem] font-extrabold" style={{ color: deptText }}>{deptName(dept)}</h3>
                 <span
-                  className="rounded-full px-2.5 py-1 text-xs font-extrabold text-white shadow-sm"
-                  style={{ backgroundColor: done === deptTasks.length && deptTasks.length > 0 ? '#10b981' : dept.color }}
+                  className="rounded-full px-2.5 py-1 text-xs font-extrabold shadow-sm"
+                  style={
+                    done === deptTasks.length && deptTasks.length > 0
+                      ? { backgroundColor: '#10b981', color: '#ffffff' }
+                      : { backgroundColor: `${deptText}2b`, color: deptText }
+                  }
                 >
                   {done}/{deptTasks.length}
                 </span>
@@ -511,11 +518,9 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                   {sessions.length === 0 ? (
                     renderPanels(event.tasks)
                   ) : (
-                    <div className="relative space-y-5 pl-5">
-                    <span className="absolute bottom-2 left-[7px] top-2 w-0.5 rounded-full bg-gradient-to-b from-gold-400 via-slate-200 to-slate-200 dark:via-slate-700 dark:to-slate-700" />
+                    <div className="space-y-5">
                     {generalTasks.length > 0 && (
-                      <div className="relative space-y-4 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 p-3 dark:border-slate-700 dark:bg-slate-800/30">
-                        <span className="absolute -left-[29px] top-6 h-3 w-3 rounded-full border-2 border-white bg-slate-300 dark:border-slate-900 dark:bg-slate-600" />
+                      <div className="space-y-4 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 p-3 dark:border-slate-700 dark:bg-slate-800/30">
                         <div className="flex items-center gap-2 px-1">
                           <ListChecks className="h-5 w-5 text-slate-400" />
                           <span className="text-lg font-extrabold tracking-tight text-slate-500 dark:text-slate-300">{t('sessions.generalTasks')}</span>
@@ -531,9 +536,8 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                       return (
                         <div
                           key={session.id}
-                          className="relative space-y-4 rounded-2xl border border-navy-100 bg-slate-50 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40"
+                          className="space-y-4 rounded-2xl border border-navy-100 bg-slate-50 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40"
                         >
-                          <span className="absolute -left-[29px] top-7 h-3 w-3 rounded-full border-2 border-white bg-gold-400 dark:border-slate-900" />
                           {sessionHeader(session, sessionTasks)}
                           {panels}
                         </div>
