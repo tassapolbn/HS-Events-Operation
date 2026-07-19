@@ -3,8 +3,9 @@ import { AlarmClock, CalendarDays, Check, ChevronDown, Clock, ListChecks, MapPin
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
-import { Spinner } from '../ui/Spinner';
+import { EmptyState } from '../ui/EmptyState';
 import { AttachmentChips, EventBriefing, EventClosingBar, StatusBadge, boardStatus } from './EventBriefing';
+import { BoardSkeleton } from './BoardSkeleton';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
 import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty, readableTextColor } from '../../lib/utils';
 import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
@@ -45,9 +46,13 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     });
   };
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <BoardSkeleton />;
   if (!events || events.length === 0) {
-    return <p className="py-24 text-center text-xl text-slate-400">{t('display.noEvents')}</p>;
+    return (
+      <div className="mx-auto max-w-xl py-16">
+        <EmptyState icon={CalendarDays} message={t('display.noEvents')} />
+      </div>
+    );
   }
 
   /**
@@ -286,10 +291,19 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
               return (
                 <div
                   key={task.id}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => goToEvent(event.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      goToEvent(event.id);
+                    }
+                  }}
                   title={t('display.tapToView')}
+                  aria-label={`${task.title} - ${t('display.tapToView')}`}
                   className={cn(
-                    'flex w-64 shrink-0 cursor-pointer flex-col gap-1.5 rounded-2xl border bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-900',
+                    'flex w-64 shrink-0 cursor-pointer flex-col gap-1.5 rounded-2xl border bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 dark:bg-slate-900',
                     soon ? 'border-gold-300 ring-1 ring-gold-300/60 dark:border-gold-700' : 'border-slate-200 dark:border-slate-700'
                   )}
                   style={{ borderLeft: `5px solid ${event.header_color || '#1a3c5e'}` }}
@@ -356,8 +370,17 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
 
             {/* Event identity: name, live status and progress */}
             <header
+              role="button"
+              tabIndex={0}
+              aria-expanded={!isCollapsed}
               onClick={() => toggleCollapsed(event.id)}
-              className="flex cursor-pointer select-none flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 lg:px-7"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  toggleCollapsed(event.id);
+                }
+              }}
+              className="flex cursor-pointer select-none flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-gold-400/80 lg:px-7"
               style={{
                 background: `linear-gradient(120deg, ${headerColor} 0%, ${darkenColor(headerColor, 0.82)} 58%, ${darkenColor(headerColor, 0.6)} 100%)`,
                 color: headerText

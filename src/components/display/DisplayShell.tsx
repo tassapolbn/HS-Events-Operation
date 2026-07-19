@@ -110,8 +110,9 @@ export function DisplayShell({
             </button>
             <button
               onClick={onRefresh}
-              className="rounded-xl bg-white/10 px-3 py-2 text-white transition-all hover:scale-105 hover:bg-white/20"
+              className="rounded-xl bg-white/10 px-3 py-2 text-white transition-all hover:scale-105 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
               title={t('display.refresh')}
+              aria-label={t('display.refresh')}
             >
               <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
             </button>

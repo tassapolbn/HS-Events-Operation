@@ -1,9 +1,10 @@
-import { CalendarDays, Check, MapPin, Paperclip } from 'lucide-react';
+import { CalendarDays, Check, Inbox, MapPin, Paperclip } from 'lucide-react';
 import { useSetDisplayRequestStatus } from '../../hooks/usePublicDisplay';
 import { getSignedUrl } from '../../hooks/useAttachments';
 import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
-import { Spinner } from '../ui/Spinner';
+import { EmptyState } from '../ui/EmptyState';
+import { BoardSkeleton } from './BoardSkeleton';
 import { PriorityBadge, TaskStatusBadge } from '../ui/Badge';
 import { departmentIcon, PUBLIC_REQUEST_STATUSES, TASK_STATUS_DOTS } from '../../lib/constants';
 import { cn, darkenColor, formatDate, isRichTextEmpty } from '../../lib/utils';
@@ -29,10 +30,14 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading }
     }
   };
 
-  if (isLoading) return <Spinner />;
+  if (isLoading) return <BoardSkeleton cards={2} />;
   const visible = (requests ?? []).filter((request) => !selectedDept || request.department_id === selectedDept);
   if (visible.length === 0) {
-    return <p className="py-24 text-center text-xl text-slate-400">{t('display.noRequests')}</p>;
+    return (
+      <div className="mx-auto max-w-xl py-16">
+        <EmptyState icon={Inbox} message={t('display.noRequests')} />
+      </div>
+    );
   }
 
   return (
