@@ -1,99 +1,13 @@
 import { useState, type ReactNode } from 'react';
-import {
-  AlarmClock, CalendarDays, Check, ChevronDown, Clock, DoorOpen, Flag, Hammer, ListChecks,
-  Map as MapIcon, MapPin, PackageCheck, PackageOpen, Paperclip, PlayCircle, StickyNote, User,
-  type LucideIcon
-} from 'lucide-react';
+import { AlarmClock, CalendarDays, Check, ChevronDown, Clock, ListChecks, MapPin, User } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
-import { getSignedUrl } from '../../hooks/useAttachments';
 import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
 import { Spinner } from '../ui/Spinner';
+import { AttachmentChips, EventBriefing, StatusBadge, boardStatus } from './EventBriefing';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
 import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty, readableTextColor } from '../../lib/utils';
-import type { DisplayAttachment, DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
-
-function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
-  const open = async (file: DisplayAttachment) => {
-    try {
-      const url = await getSignedUrl(file.storage_path);
-      window.open(url, '_blank', 'noopener');
-    } catch {
-      /* read-only board */
-    }
-  };
-  if (files.length === 0) return null;
-  return (
-    <span className="mt-2 flex flex-wrap gap-1.5">
-      {files.map((file) => (
-        <button
-          key={file.id}
-          onClick={(e) => {
-            e.stopPropagation();
-            open(file);
-          }}
-          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-all hover:-translate-y-0.5 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
-        >
-          <Paperclip className="h-3 w-3" /> {file.file_name}
-        </button>
-      ))}
-    </span>
-  );
-}
-
-/**
- * One clearly labelled fact (Date, Time, Location, Staff).
- * Label above value, so a department head reads what it is before what it says.
- */
-function FactBlock({
-  icon: Icon,
-  label,
-  value,
-  highlight
-}: {
-  icon: LucideIcon;
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        'flex items-center gap-2.5 rounded-xl border px-3 py-2',
-        highlight
-          ? 'border-gold-300 bg-gold-50 dark:border-gold-800 dark:bg-gold-950/30'
-          : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50'
-      )}
-    >
-      <Icon className={cn('h-4 w-4 shrink-0', highlight ? 'text-gold-600 dark:text-gold-400' : 'text-slate-400')} />
-      <div className="min-w-0">
-        <p
-          className={cn(
-            'text-[0.6rem] font-extrabold uppercase tracking-wider',
-            highlight ? 'text-gold-700 dark:text-gold-400' : 'text-slate-400'
-          )}
-        >
-          {label}
-        </p>
-        <p
-          className={cn(
-            'truncate text-[0.9rem] font-extrabold leading-tight',
-            highlight ? 'text-gold-900 dark:text-gold-200' : 'text-slate-800 dark:text-slate-100'
-          )}
-        >
-          {value}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-/** Fallback date, location and time inherited from the session or the event. */
-interface PanelContext {
-  date: string;
-  location: string;
-  time: string | null;
-}
+import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
 
 interface EventsBoardProps {
   events: DisplayEvent[] | undefined;
@@ -136,59 +50,25 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     return <p className="py-24 text-center text-xl text-slate-400">{t('display.noEvents')}</p>;
   }
 
-  const milestonePills = (event: DisplayEvent): ReactNode => {
-    const items = [
-      { label: t('timeline.setupBegins'), value: event.setup_start, key: true, icon: Hammer },
-      { label: t('timeline.venueReady'), value: event.venue_ready, key: true, icon: DoorOpen },
-      { label: t('timeline.eventStarts'), value: event.event_start, key: false, icon: PlayCircle },
-      { label: t('timeline.eventEnds'), value: event.event_finish, key: false, icon: Flag },
-      { label: t('timeline.breakdownBegins'), value: event.breakdown_start, key: false, icon: PackageOpen },
-      { label: t('timeline.breakdownComplete'), value: event.breakdown_deadline, key: false, icon: PackageCheck }
-    ].filter((m) => m.value);
-    if (items.length === 0) return null;
-    return (
-      <div className="flex flex-wrap gap-2">
-        {items.map((m) => {
-          const sameDay = extractDate(m.value) === event.event_date;
-          const Icon = m.icon;
-          return (
-            <span
-              key={m.label}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 transition-transform hover:scale-[1.03]',
-                m.key
-                  ? 'border-gold-300 bg-gold-50 dark:border-gold-800 dark:bg-gold-950/40'
-                  : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60'
-              )}
-            >
-              <Icon className={cn('h-3.5 w-3.5 shrink-0', m.key ? 'text-gold-600 dark:text-gold-400' : 'text-slate-400')} />
-              <span className={cn('text-xs font-semibold', m.key ? 'text-gold-700 dark:text-gold-400' : 'text-slate-400')}>
-                {m.label}
-              </span>
-              <span className={cn('text-sm font-extrabold tabular-nums', m.key ? 'text-gold-800 dark:text-gold-300' : 'text-slate-700 dark:text-slate-200')}>
-                {sameDay ? '' : `${formatDate(m.value, lang, 'd MMM')} `}{formatTime(m.value, lang)}
-              </span>
-            </span>
-          );
-        })}
-      </div>
-    );
-  };
-
-  const renderPanels = (tasks: DisplayTask[], ctx: PanelContext): ReactNode => {
+  /**
+   * Department panels. Tasks are deliberately lightweight: the date, time and
+   * venue belong to the event, so they are stated once in the briefing above
+   * and never repeated per task.
+   */
+  const renderPanels = (tasks: DisplayTask[]): ReactNode => {
     const visibleDepts = departments.filter(
       (dept) => (!selectedDept || dept.id === selectedDept) && tasks.some((task) => task.department_id === dept.id)
     );
     if (visibleDepts.length === 0) return null;
-    // Cap the column count at the number of departments so we never leave
-    // empty columns (a common source of blank white space on wide screens).
-    const colClass = selectedDept || visibleDepts.length === 1
-      ? 'grid-cols-1'
-      : visibleDepts.length === 2
-      ? 'grid-cols-1 sm:grid-cols-2'
-      : visibleDepts.length === 3
-      ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-      : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+    const colClass =
+      selectedDept || visibleDepts.length === 1
+        ? 'grid-cols-1'
+        : visibleDepts.length === 2
+        ? 'grid-cols-1 sm:grid-cols-2'
+        : visibleDepts.length === 3
+        ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
+        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+
     return (
       <div className={cn('grid items-start gap-4', colClass)}>
         {visibleDepts.map((dept) => {
@@ -196,6 +76,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
           const deptTasks = tasks.filter((task) => task.department_id === dept.id);
           const done = deptTasks.filter((task) => task.status === 'completed').length;
           const deptText = readableTextColor(dept.color);
+          const allDone = done === deptTasks.length && deptTasks.length > 0;
           return (
             <div
               key={dept.id}
@@ -208,17 +89,16 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                   color: deptText
                 }}
               >
-                <span
-                  className="flex h-9 w-9 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: `${deptText}2b` }}
-                >
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: `${deptText}2b` }}>
                   <Icon className="h-5 w-5" />
                 </span>
-                <h3 className="flex-1 truncate text-[0.95rem] font-extrabold" style={{ color: deptText }}>{deptName(dept)}</h3>
+                <h3 className="flex-1 truncate text-[0.95rem] font-extrabold" style={{ color: deptText }}>
+                  {deptName(dept)}
+                </h3>
                 <span
                   className="rounded-full px-2.5 py-1 text-xs font-extrabold shadow-sm"
                   style={
-                    done === deptTasks.length && deptTasks.length > 0
+                    allDone
                       ? { backgroundColor: '#10b981', color: '#ffffff' }
                       : { backgroundColor: `${deptText}2b`, color: deptText }
                   }
@@ -226,21 +106,18 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                   {done}/{deptTasks.length}
                 </span>
               </div>
+
               <ul className="flex-1 divide-y divide-slate-100 dark:divide-slate-800">
                 {deptTasks.map((task, index) => {
                   const completed = task.status === 'completed';
-                  const dateText = formatDate(extractDate(task.start_time) ?? ctx.date, lang, 'EEE d MMM yyyy');
-                  const timeText = task.start_time
-                    ? `${formatTime(task.start_time, lang)}${task.completion_time ? ` - ${formatTime(task.completion_time, lang)}` : ''}`
-                    : ctx.time ?? '-';
-                  const locationText = task.work_location || task.setup_location || ctx.location || '-';
+                  const hasMeta = Boolean(task.assigned_staff) || task.attachments.length > 0 || completed;
                   return (
                     <li
                       key={task.id}
                       className={cn(
-                        'px-4 py-3.5 transition-colors',
+                        'px-4 py-2.5 transition-colors',
                         completed
-                          ? 'border-l-[3px] border-emerald-400 bg-emerald-50/80 dark:bg-emerald-950/25'
+                          ? 'border-l-[3px] border-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/25'
                           : 'border-l-[3px] border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'
                       )}
                     >
@@ -248,64 +125,54 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                         <button
                           onClick={() => toggleTask.mutate({ taskId: task.id, done: !completed })}
                           className={cn(
-                            'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 hover:scale-110 active:scale-90',
+                            // the after: ring expands the tap area to 44px for WCAG without shifting layout
+                            "relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 after:absolute after:-inset-2 after:content-[''] hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-90",
                             completed
                               ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
                               : 'border-slate-300 bg-white hover:border-emerald-400 dark:border-slate-600 dark:bg-slate-900'
                           )}
                           title={t('display.tapToComplete')}
                           aria-label={t('display.tapToComplete')}
+                          aria-pressed={completed}
                         >
                           {completed && <Check className="h-4 w-4" strokeWidth={3} />}
                         </button>
+
                         <div className="min-w-0 flex-1">
-                          {/* What to do */}
                           <p
                             className={cn(
-                              'break-words text-[1rem] font-bold leading-snug text-slate-900 dark:text-slate-100',
+                              'flex items-start gap-2 break-words text-[0.95rem] font-semibold leading-snug text-slate-800 dark:text-slate-100',
                               completed && 'text-slate-400 line-through dark:text-slate-500'
                             )}
                           >
-                            <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-xs font-extrabold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                            <span className="mt-px inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[0.7rem] font-extrabold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                               {index + 1}
                             </span>
-                            {task.title}
+                            <span className="min-w-0 flex-1">{task.title}</span>
                           </p>
+
                           {!isRichTextEmpty(task.description) && !completed && (
-                            <RichTextViewer html={task.description} className="mt-1.5 text-sm text-slate-600 dark:text-slate-300" />
+                            <RichTextViewer html={task.description} className="mt-1 pl-7 text-sm text-slate-500 dark:text-slate-400" />
                           )}
 
-                          {!completed && (
-                            <>
-                              {/* When and where, each clearly labelled */}
-                              <div className="mt-2.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-                                <FactBlock icon={CalendarDays} label={t('common.date')} value={dateText} />
-                                <FactBlock icon={Clock} label={t('common.time')} value={timeText} highlight />
-                                <FactBlock icon={MapPin} label={t('common.location')} value={locationText} />
-                              </div>
-                              {task.assigned_staff && (
-                                <div className="mt-2">
-                                  <FactBlock icon={User} label={t('tasks.assignedStaff')} value={task.assigned_staff} />
-                                </div>
+                          {hasMeta && (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-7">
+                              {task.assigned_staff && !completed && (
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                                  <User className="h-3.5 w-3.5" /> {task.assigned_staff}
+                                </span>
                               )}
-                              {task.attachments.length > 0 && (
-                                <div className="mt-2.5 rounded-xl border border-gold-300 bg-gold-50 px-3 py-2.5 dark:border-gold-800 dark:bg-gold-950/30">
-                                  <span className="inline-flex items-center gap-1.5 text-[0.6rem] font-extrabold uppercase tracking-wider text-gold-700 dark:text-gold-300">
-                                    <MapIcon className="h-3.5 w-3.5" /> {t('display.reference')}
-                                  </span>
-                                  <AttachmentChips files={task.attachments} />
-                                </div>
+                              {!completed && <AttachmentChips files={task.attachments} />}
+                              {completed && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
+                                  <Check className="h-3 w-3" /> {t('display.completedLabel')}
+                                </span>
                               )}
-                            </>
+                            </div>
                           )}
 
-                          {!isRichTextEmpty(task.notes) && (
-                            <RichTextViewer html={task.notes} className="mt-2 text-sm italic text-slate-500 dark:text-slate-400" />
-                          )}
-                          {completed && (
-                            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
-                              <Check className="h-3 w-3" /> {t('display.completedLabel')}
-                            </span>
+                          {!isRichTextEmpty(task.notes) && !completed && (
+                            <RichTextViewer html={task.notes} className="mt-1 pl-7 text-sm italic text-slate-400" />
                           )}
                         </div>
                       </div>
@@ -320,11 +187,11 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     );
   };
 
+  /** A session states its own date, place and time once, above its panels. */
   const sessionHeader = (session: DisplaySession, tasks: DisplayTask[]): ReactNode => {
     const done = tasks.filter((task) => task.status === 'completed').length;
     return (
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-gradient-to-r from-navy-900 via-navy-800 to-navy-600 px-4 py-3.5 text-white shadow-md">
-        {/* Calendar-icon tile that still shows the session date */}
         <span className="flex h-12 w-12 shrink-0 flex-col overflow-hidden rounded-lg bg-white shadow ring-1 ring-black/10">
           <span className="flex h-[1.1rem] items-center justify-center bg-gold-400 text-[0.55rem] font-extrabold uppercase tracking-wide text-navy-900">
             {formatDate(session.session_date, lang, 'MMM')}
@@ -366,8 +233,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     );
   };
 
-  // Upcoming tasks across ALL events, sorted by start time, so staff never
-  // miss work from another event happening the same day.
+  // Timed work starting soon, across every event, so nothing is missed.
   const nowMs = Date.now();
   const horizonMs = nowMs + 48 * 3600 * 1000;
   const upcoming = events
@@ -393,7 +259,6 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
 
   return (
     <div className="space-y-6">
-      {/* Upcoming tasks rail */}
       {upcoming.length > 0 && (
         <section className="animate-slide-up rounded-3xl border border-gold-200 bg-gradient-to-r from-gold-50 via-white to-white p-4 shadow-sm dark:border-gold-900 dark:from-gold-950/30 dark:via-slate-900 dark:to-slate-900">
           <div className="mb-3 flex items-center gap-2">
@@ -432,16 +297,6 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                         {soon}
                       </span>
                     )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleTask.mutate({ taskId: task.id, done: true });
-                      }}
-                      title={t('display.tapToComplete')}
-                      className="group ml-auto flex h-6 w-6 items-center justify-center rounded-lg border-2 border-slate-300 bg-white transition-all hover:scale-110 hover:border-emerald-400 dark:border-slate-600 dark:bg-slate-800"
-                    >
-                      <Check className="h-3.5 w-3.5 text-transparent transition-colors group-hover:text-emerald-500" />
-                    </button>
                   </div>
                   <p className="line-clamp-2 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">{task.title}</p>
                   <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
@@ -455,11 +310,6 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                         style={{ backgroundColor: `${dept.color}1a`, color: dept.color }}
                       >
                         <DeptIcon className="h-3 w-3" /> {deptName(dept)}
-                      </span>
-                    )}
-                    {(task.work_location || task.setup_location) && (
-                      <span className="inline-flex items-center gap-1 text-slate-400">
-                        <MapPin className="h-3 w-3" /> {task.work_location || task.setup_location}
                       </span>
                     )}
                   </div>
@@ -480,37 +330,24 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
         const headerColor = event.header_color || '#1a3c5e';
         const headerText = event.header_text_color || '#ffffff';
         const CategoryIcon = categoryIcon(event.category);
-        const hasMilestones = [
-          event.setup_start, event.venue_ready, event.event_start,
-          event.event_finish, event.breakdown_start, event.breakdown_deadline
-        ].some(Boolean);
-        const hasMeta = hasMilestones || !isRichTextEmpty(event.description) ||
-          !isRichTextEmpty(event.additional_notes) || event.attachments.length > 0;
-        const eventCtx: PanelContext = {
-          date: event.event_date,
-          location: event.location,
-          time: event.event_start
-            ? `${formatTime(event.event_start, lang)}${event.event_finish ? ` - ${formatTime(event.event_finish, lang)}` : ''}`
-            : null
-        };
+        const status = boardStatus(event, nowMs);
         const sessions = event.sessions ?? [];
         const sessionIds = new Set(sessions.map((s) => s.id));
         const generalTasks = event.tasks.filter((task) => !task.session_id || !sessionIds.has(task.session_id));
+
         return (
           <section
             key={event.id}
             id={`event-${event.id}`}
             className={cn(
-              'animate-slide-up scroll-mt-4 overflow-hidden rounded-3xl border-2 bg-white transition-all duration-300 shadow-[0_12px_34px_-14px_var(--event-glow)] hover:-translate-y-0.5 hover:shadow-[0_20px_48px_-14px_var(--event-glow)] dark:bg-slate-900',
+              'animate-slide-up scroll-mt-4 overflow-hidden rounded-3xl border-2 bg-white transition-all duration-300 shadow-[0_12px_34px_-14px_var(--event-glow)] hover:shadow-[0_20px_48px_-14px_var(--event-glow)] dark:bg-slate-900',
               highlighted === event.id && 'ring-4 ring-gold-400/80'
             )}
-            style={{
-              '--event-glow': `${headerColor}66`,
-              borderColor: `${headerColor}80`
-            } as React.CSSProperties}
+            style={{ '--event-glow': `${headerColor}66`, borderColor: `${headerColor}80` } as React.CSSProperties}
           >
             <div className="h-2" style={{ backgroundColor: headerColor }} />
-            {/* Event header band: bold and colored so the event name stands out */}
+
+            {/* Event identity: name, live status and progress */}
             <header
               onClick={() => toggleCollapsed(event.id)}
               className="flex cursor-pointer select-none flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 lg:px-7"
@@ -519,31 +356,21 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                 color: headerText
               }}
             >
-              <span
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-inner"
-                style={{ backgroundColor: `${headerText}26` }}
-              >
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl shadow-inner" style={{ backgroundColor: `${headerText}26` }}>
                 <CategoryIcon className="h-6 w-6" />
               </span>
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-2xl font-black tracking-tight 2xl:text-3xl" style={{ color: headerText }}>
                   {event.name}
                 </h2>
-                <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <StatusBadge status={status} />
                   <span
                     className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-bold"
                     style={{ backgroundColor: `${headerText}26` }}
                   >
                     <CalendarDays className="h-4 w-4" /> {formatDate(event.event_date, lang, 'EEE d MMM yyyy')}
                   </span>
-                  {event.location && (
-                    <span
-                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-bold"
-                      style={{ backgroundColor: `${headerText}26` }}
-                    >
-                      <MapPin className="h-4 w-4" /> {event.location}
-                    </span>
-                  )}
                 </div>
               </div>
               <div className="ml-auto flex items-center gap-3">
@@ -551,10 +378,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                   <span className="block text-sm font-black tabular-nums" style={{ color: headerText }}>
                     {doneTasks}/{totalTasks}
                   </span>
-                  <span
-                    className="mt-1 block h-2 w-28 overflow-hidden rounded-full"
-                    style={{ backgroundColor: `${headerText}33` }}
-                  >
+                  <span className="mt-1 block h-2 w-28 overflow-hidden rounded-full" style={{ backgroundColor: `${headerText}33` }}>
                     <span
                       className="block h-full rounded-full transition-all"
                       style={{ width: `${progress}%`, backgroundColor: progress === 100 ? '#34d399' : headerText }}
@@ -568,68 +392,44 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
               </div>
             </header>
 
-            {/* Body: event details + department work */}
             {!isCollapsed && (
-              <div className={cn('px-5 pb-5 lg:px-7', hasMeta ? 'pt-4' : 'pt-0')}>
-                {milestonePills(event)}
-                {!isRichTextEmpty(event.description) && (
-                  <RichTextViewer html={event.description} className="mt-4 max-w-4xl text-slate-600 dark:text-slate-300" />
-                )}
-                {!isRichTextEmpty(event.additional_notes) && (
-                  <div className="mt-4 flex max-w-4xl items-start gap-2.5 rounded-r-xl border-l-4 border-amber-400 bg-amber-50 px-4 py-3 dark:border-amber-500 dark:bg-amber-950/30">
-                    <StickyNote className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-                    <RichTextViewer html={event.additional_notes} className="!text-amber-900 dark:!text-amber-200" />
-                  </div>
-                )}
-                {event.attachments.length > 0 && (
-                  <div className={cn(
-                    'rounded-xl border border-gold-300 bg-gold-50 px-3.5 py-2.5 dark:border-gold-800 dark:bg-gold-950/30',
-                    (hasMilestones || !isRichTextEmpty(event.description) || !isRichTextEmpty(event.additional_notes)) && 'mt-4'
-                  )}>
-                    <span className="inline-flex items-center gap-1.5 text-xs font-extrabold uppercase tracking-wide text-gold-700 dark:text-gold-300">
-                      <MapIcon className="h-4 w-4" /> {t('display.reference')}
-                    </span>
-                    <AttachmentChips files={event.attachments} />
-                  </div>
-                )}
-                <div className={cn(hasMeta && 'mt-5')}>
+              <div className="px-5 pb-5 pt-4 lg:px-7">
+                {/* Everything the whole event needs, stated once */}
+                <EventBriefing event={event} />
+
+                <div className="mt-5">
                   {sessions.length === 0 ? (
-                    renderPanels(event.tasks, eventCtx)
+                    renderPanels(event.tasks)
                   ) : (
                     <div className="space-y-5">
-                    {generalTasks.length > 0 && (
-                      <div className="space-y-4 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 p-3 dark:border-slate-700 dark:bg-slate-800/30">
-                        <div className="flex items-center gap-2 px-1">
-                          <ListChecks className="h-5 w-5 text-slate-400" />
-                          <span className="text-lg font-extrabold tracking-tight text-slate-500 dark:text-slate-300">{t('sessions.generalTasks')}</span>
+                      {generalTasks.length > 0 && (
+                        <div className="space-y-4 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 p-3 dark:border-slate-700 dark:bg-slate-800/30">
+                          <div className="flex items-center gap-2 px-1">
+                            <ListChecks className="h-5 w-5 text-slate-400" />
+                            <span className="text-lg font-extrabold tracking-tight text-slate-500 dark:text-slate-300">
+                              {t('sessions.generalTasks')}
+                            </span>
+                          </div>
+                          {renderPanels(generalTasks)}
                         </div>
-                        {renderPanels(generalTasks, eventCtx)}
-                      </div>
-                    )}
-                    {sessions.map((session) => {
-                      const sessionTasks = event.tasks.filter((task) => task.session_id === session.id);
-                      if (sessionTasks.length === 0) return null;
-                      const sessionCtx: PanelContext = {
-                        date: session.session_date,
-                        location: session.location || event.location,
-                        time: session.start_time
-                          ? `${formatTime(session.start_time, lang)}${session.end_time ? ` - ${formatTime(session.end_time, lang)}` : ''}`
-                          : null
-                      };
-                      const panels = renderPanels(sessionTasks, sessionCtx);
-                      if (!panels) return null;
-                      return (
-                        <div
-                          key={session.id}
-                          className="space-y-4 rounded-2xl border border-navy-100 bg-slate-50 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40"
-                        >
-                          {sessionHeader(session, sessionTasks)}
-                          {panels}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      )}
+                      {sessions.map((session) => {
+                        const sessionTasks = event.tasks.filter((task) => task.session_id === session.id);
+                        if (sessionTasks.length === 0) return null;
+                        const panels = renderPanels(sessionTasks);
+                        if (!panels) return null;
+                        return (
+                          <div
+                            key={session.id}
+                            className="space-y-4 rounded-2xl border border-navy-100 bg-slate-50 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40"
+                          >
+                            {sessionHeader(session, sessionTasks)}
+                            {panels}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

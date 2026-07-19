@@ -236,9 +236,18 @@ export const en = {
     tapToComplete: 'Tap when done',
     setStatus: 'Update status',
     files: 'Files',
-    reference: 'Reference / Floor plan',
+    reference: 'Reference',
+    floorPlan: 'Floor plan',
+    viewFloorPlan: 'View floor plan',
     due: 'Due',
     openFull: 'Open the full application'
+  },
+  boardStatus: {
+    upcoming: 'Upcoming',
+    preparing: 'Preparing',
+    live: 'Live',
+    breakdown: 'Breakdown',
+    completed: 'Completed'
   },
   requests: {
     title: 'Department Requests',

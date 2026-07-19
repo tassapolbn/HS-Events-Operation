@@ -238,9 +238,18 @@ export const th: Dict = {
     tapToComplete: 'แตะเมื่อทำเสร็จ',
     setStatus: 'อัปเดตสถานะ',
     files: 'ไฟล์',
-    reference: 'ไฟล์อ้างอิง / แปลนสถานที่',
+    reference: 'เอกสารอ้างอิง',
+    floorPlan: 'แปลนสถานที่',
+    viewFloorPlan: 'ดูแปลนสถานที่',
     due: 'กำหนดเสร็จ',
     openFull: 'เปิดแอปพลิเคชันเต็ม'
+  },
+  boardStatus: {
+    upcoming: 'กำลังจะถึง',
+    preparing: 'กำลังเตรียมงาน',
+    live: 'กำลังจัดงาน',
+    breakdown: 'กำลังเก็บงาน',
+    completed: 'เสร็จสิ้น'
   },
   requests: {
     title: 'แจ้งงานแผนก',

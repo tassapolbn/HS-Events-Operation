@@ -1,0 +1,246 @@
+import {
+  ChevronRight, Clock, DoorOpen, FileText, Flag, Hammer, Map as MapIcon, MapPin,
+  PackageCheck, PackageOpen, Paperclip, PlayCircle, StickyNote, type LucideIcon
+} from 'lucide-react';
+import { getSignedUrl } from '../../hooks/useAttachments';
+import { useLanguage } from '../../i18n';
+import { RichTextViewer } from '../editor/RichTextViewer';
+import { cn, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
+import type { DisplayAttachment, DisplayEvent } from '../../types';
+
+export type BoardStatus = 'upcoming' | 'preparing' | 'live' | 'breakdown' | 'completed';
+
+const at = (value: string | null) => (value ? new Date(value).getTime() : null);
+
+/** Live operational status, derived from the event's own milestones. */
+export function boardStatus(event: DisplayEvent, now: number = Date.now()): BoardStatus {
+  const setup = at(event.setup_start);
+  const start = at(event.event_start);
+  const finish = at(event.event_finish);
+  const breakdownStart = at(event.breakdown_start);
+  const breakdownEnd = at(event.breakdown_deadline);
+
+  if (breakdownEnd && now >= breakdownEnd) return 'completed';
+  if (breakdownStart && now >= breakdownStart) return 'breakdown';
+  if (finish && now >= finish) return breakdownStart || breakdownEnd ? 'breakdown' : 'completed';
+  if (start && now >= start) return 'live';
+  if (setup && now >= setup) return 'preparing';
+  if (setup || start) return 'upcoming';
+
+  const dayStart = new Date(`${event.event_date}T00:00:00`).getTime();
+  if (Number.isNaN(dayStart)) return 'upcoming';
+  if (now >= dayStart + 86_400_000) return 'completed';
+  if (now >= dayStart) return 'live';
+  return 'upcoming';
+}
+
+const STATUS_TEXT: Record<BoardStatus, string> = {
+  upcoming: 'text-slate-600',
+  preparing: 'text-gold-700',
+  live: 'text-emerald-700',
+  breakdown: 'text-orange-700',
+  completed: 'text-slate-500'
+};
+
+const STATUS_DOT: Record<BoardStatus, string> = {
+  upcoming: 'bg-slate-400',
+  preparing: 'bg-gold-500',
+  live: 'bg-emerald-500',
+  breakdown: 'bg-orange-500',
+  completed: 'bg-slate-400'
+};
+
+/** Solid light chip so it stays readable on any event header colour. */
+export function StatusBadge({ status }: { status: BoardStatus }) {
+  const { t } = useLanguage();
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center gap-2 rounded-full bg-white px-3.5 py-1.5 text-sm font-extrabold shadow-sm',
+        STATUS_TEXT[status]
+      )}
+    >
+      <span className={cn('h-2.5 w-2.5 rounded-full', STATUS_DOT[status], status === 'live' && 'animate-pulse')} />
+      {t(`boardStatus.${status}`)}
+    </span>
+  );
+}
+
+export async function openAttachment(file: DisplayAttachment) {
+  try {
+    const url = await getSignedUrl(file.storage_path);
+    window.open(url, '_blank', 'noopener');
+  } catch {
+    /* read only board */
+  }
+}
+
+export function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
+  if (files.length === 0) return null;
+  return (
+    <span className="mt-1.5 flex flex-wrap gap-1.5">
+      {files.map((file) => (
+        <button
+          key={file.id}
+          onClick={(e) => {
+            e.stopPropagation();
+            openAttachment(file);
+          }}
+          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-all hover:-translate-y-0.5 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+        >
+          <Paperclip className="h-3 w-3" /> {file.file_name}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+function SectionLabel({ icon: Icon, children }: { icon: LucideIcon; children: string }) {
+  return (
+    <p className="mb-2 flex items-center gap-1.5 text-[0.7rem] font-extrabold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+      <Icon className="h-3.5 w-3.5" /> {children}
+    </p>
+  );
+}
+
+const CARD = 'rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900';
+const TILE = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl';
+const LABEL = 'text-[0.7rem] font-extrabold uppercase tracking-[0.12em]';
+
+/**
+ * The single place an event states its facts: status, timeline, venue,
+ * floor plan, reference and notes. Everything below this is only tasks.
+ */
+export function EventBriefing({ event }: { event: DisplayEvent }) {
+  const { t, lang } = useLanguage();
+  const now = Date.now();
+
+  const milestones = (
+    [
+      { label: t('timeline.setupBegins'), value: event.setup_start, icon: Hammer },
+      { label: t('timeline.venueReady'), value: event.venue_ready, icon: DoorOpen },
+      { label: t('timeline.eventStarts'), value: event.event_start, icon: PlayCircle },
+      { label: t('timeline.eventEnds'), value: event.event_finish, icon: Flag },
+      { label: t('timeline.breakdownBegins'), value: event.breakdown_start, icon: PackageOpen },
+      { label: t('timeline.breakdownComplete'), value: event.breakdown_deadline, icon: PackageCheck }
+    ] as { label: string; value: string | null; icon: LucideIcon }[]
+  ).filter((m) => Boolean(m.value));
+
+  const nextIndex = milestones.findIndex((m) => new Date(m.value as string).getTime() > now);
+  const plans = event.attachments.filter((f) => f.mime_type.startsWith('image/'));
+  const docs = event.attachments.filter((f) => !f.mime_type.startsWith('image/'));
+
+  return (
+    <div className="space-y-4">
+      {!isRichTextEmpty(event.description) && (
+        <RichTextViewer html={event.description} className="max-w-4xl text-[0.95rem] text-slate-600 dark:text-slate-300" />
+      )}
+
+      {/* Timeline: read like a departure board, one row per milestone */}
+      {milestones.length > 0 && (
+        <section>
+          <SectionLabel icon={Clock}>{t('events.timeline')}</SectionLabel>
+          <ol className={cn('overflow-hidden', CARD)}>
+            {milestones.map((m, i) => {
+              const Icon = m.icon;
+              const isNext = i === nextIndex;
+              const isPast = new Date(m.value as string).getTime() <= now;
+              return (
+                <li
+                  key={m.label}
+                  className={cn(
+                    'flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 px-4 py-3 first:border-t-0 dark:border-slate-800',
+                    isNext && 'bg-gold-50 dark:bg-gold-950/30',
+                    !isNext && isPast && 'bg-slate-50/70 dark:bg-slate-800/40'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl',
+                      isNext ? 'bg-gold-400 text-navy-900' : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span
+                    className={cn(
+                      'min-w-[8rem] flex-1 truncate text-[0.75rem] font-extrabold uppercase tracking-[0.1em]',
+                      isNext ? 'text-gold-800 dark:text-gold-300' : 'text-slate-600 dark:text-slate-300'
+                    )}
+                  >
+                    {m.label}
+                  </span>
+                  {/* Date and time stay together, wrapping as one unit on narrow screens */}
+                  <span className="ml-auto flex shrink-0 items-center gap-3">
+                    <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
+                      {formatDate(m.value, lang, 'd MMM')}
+                    </span>
+                    <span
+                      className={cn(
+                        'w-[4.75rem] text-right text-xl font-black tabular-nums',
+                        isNext ? 'text-gold-900 dark:text-gold-200' : 'text-slate-900 dark:text-slate-100'
+                      )}
+                    >
+                      {formatTime(m.value, lang)}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      )}
+
+      {/* Venue, floor plan and reference: stated once for the whole event */}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <div className={cn('flex items-center gap-3 px-4 py-3.5', CARD)}>
+          <span className={cn(TILE, 'bg-navy-50 text-navy-700 dark:bg-navy-900/60 dark:text-navy-200')}>
+            <MapPin className="h-5 w-5" />
+          </span>
+          <div className="min-w-0">
+            <p className={cn(LABEL, 'text-slate-400')}>{t('common.location')}</p>
+            <p className="truncate text-lg font-extrabold text-slate-900 dark:text-slate-100">{event.location || '-'}</p>
+          </div>
+        </div>
+
+        {plans.length > 0 && (
+          <button
+            onClick={() => openAttachment(plans[0])}
+            className="group flex items-center gap-3 rounded-2xl border-2 border-gold-400 bg-gold-50 px-4 py-3.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:bg-gold-100 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 dark:border-gold-600 dark:bg-gold-950/40"
+          >
+            <span className={cn(TILE, 'bg-gold-400 text-navy-900')}>
+              <MapIcon className="h-5 w-5" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className={cn(LABEL, 'text-gold-700 dark:text-gold-400')}>{t('display.floorPlan')}</p>
+              <p className="truncate text-lg font-extrabold text-gold-900 dark:text-gold-200">{t('display.viewFloorPlan')}</p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-gold-600 transition-transform duration-200 group-hover:translate-x-1" />
+          </button>
+        )}
+
+        {docs.length > 0 && (
+          <div className={cn('px-4 py-3.5', CARD)}>
+            <p className={cn(LABEL, 'flex items-center gap-1.5 text-slate-400')}>
+              <FileText className="h-3.5 w-3.5" /> {t('display.reference')}
+            </p>
+            <AttachmentChips files={docs} />
+          </div>
+        )}
+      </div>
+
+      {!isRichTextEmpty(event.additional_notes) && (
+        <div className="flex items-start gap-3 rounded-2xl border-l-4 border-amber-400 bg-amber-50 px-4 py-3.5 dark:border-amber-500 dark:bg-amber-950/30">
+          <StickyNote className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+          <div className="min-w-0">
+            <p className={cn(LABEL, 'text-amber-700 dark:text-amber-400')}>{t('events.additionalNotes')}</p>
+            <RichTextViewer
+              html={event.additional_notes}
+              className="mt-1 text-[0.95rem] !text-amber-900 dark:!text-amber-200"
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
