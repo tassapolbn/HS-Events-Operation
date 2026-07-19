@@ -108,6 +108,7 @@ export const en = {
     eventDate: 'Event Date',
     eventLocation: 'Event Location',
     scheduleDateHint: 'Each step can be on a different day. If you leave a date empty, the event date is used.',
+    timingNote: 'Or type a timing, e.g. after school',
     headerColor: 'Header Background Color',
     headerTextColor: 'Header Text Color',
     headerColorsHint: 'Used on the event header and the public display board',

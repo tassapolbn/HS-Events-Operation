@@ -47,6 +47,13 @@ export interface EventRow {
   event_finish: string | null;
   breakdown_start: string | null;
   breakdown_deadline: string | null;
+  /** Optional free text timing, e.g. "after school time". Shown beside the clock time. */
+  setup_start_note: string;
+  venue_ready_note: string;
+  event_start_note: string;
+  event_finish_note: string;
+  breakdown_start_note: string;
+  breakdown_deadline_note: string;
   description: string;
   additional_notes: string;
   internal_notes: string;
@@ -255,6 +262,13 @@ export interface DisplayEvent {
   event_finish: string | null;
   breakdown_start: string | null;
   breakdown_deadline: string | null;
+  /** Optional free text timing, e.g. "after school time". Shown beside the clock time. */
+  setup_start_note: string;
+  venue_ready_note: string;
+  event_start_note: string;
+  event_finish_note: string;
+  breakdown_start_note: string;
+  breakdown_deadline_note: string;
   description: string;
   additional_notes: string;
   status: EventStatus;

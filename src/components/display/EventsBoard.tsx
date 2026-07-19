@@ -4,7 +4,7 @@ import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
 import { Spinner } from '../ui/Spinner';
-import { AttachmentChips, EventBriefing, StatusBadge, boardStatus } from './EventBriefing';
+import { AttachmentChips, EventBriefing, EventClosingBar, StatusBadge, boardStatus } from './EventBriefing';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
 import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty, readableTextColor } from '../../lib/utils';
 import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
@@ -431,6 +431,9 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                     </div>
                   )}
                 </div>
+
+                {/* The last line staff read before they leave */}
+                <EventClosingBar event={event} />
               </div>
             )}
           </section>

@@ -103,6 +103,14 @@ function SectionLabel({ icon: Icon, children }: { icon: LucideIcon; children: st
   );
 }
 
+/** A milestone carries a clock time, a free text timing note, or both. */
+interface Milestone {
+  label: string;
+  value: string | null;
+  note: string;
+  icon: LucideIcon;
+}
+
 const CARD = 'rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900';
 const TILE = 'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl';
 const LABEL = 'text-[0.7rem] font-extrabold uppercase tracking-[0.12em]';
@@ -115,18 +123,17 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
   const { t, lang } = useLanguage();
   const now = Date.now();
 
+  // Lead up only. The closing milestones live at the very bottom of the card,
+  // so the last thing staff read is when the event ends and pack down starts.
   const milestones = (
     [
-      { label: t('timeline.setupBegins'), value: event.setup_start, icon: Hammer },
-      { label: t('timeline.venueReady'), value: event.venue_ready, icon: DoorOpen },
-      { label: t('timeline.eventStarts'), value: event.event_start, icon: PlayCircle },
-      { label: t('timeline.eventEnds'), value: event.event_finish, icon: Flag },
-      { label: t('timeline.breakdownBegins'), value: event.breakdown_start, icon: PackageOpen },
-      { label: t('timeline.breakdownComplete'), value: event.breakdown_deadline, icon: PackageCheck }
-    ] as { label: string; value: string | null; icon: LucideIcon }[]
-  ).filter((m) => Boolean(m.value));
+      { label: t('timeline.setupBegins'), value: event.setup_start, note: event.setup_start_note, icon: Hammer },
+      { label: t('timeline.venueReady'), value: event.venue_ready, note: event.venue_ready_note, icon: DoorOpen },
+      { label: t('timeline.eventStarts'), value: event.event_start, note: event.event_start_note, icon: PlayCircle }
+    ] as Milestone[]
+  ).filter((m) => Boolean(m.value) || Boolean(m.note));
 
-  const nextIndex = milestones.findIndex((m) => new Date(m.value as string).getTime() > now);
+  const nextIndex = milestones.findIndex((m) => m.value && new Date(m.value).getTime() > now);
   const plans = event.attachments.filter((f) => f.mime_type.startsWith('image/'));
   const docs = event.attachments.filter((f) => !f.mime_type.startsWith('image/'));
 
@@ -144,7 +151,7 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
             {milestones.map((m, i) => {
               const Icon = m.icon;
               const isNext = i === nextIndex;
-              const isPast = new Date(m.value as string).getTime() <= now;
+              const isPast = Boolean(m.value) && new Date(m.value as string).getTime() <= now;
               return (
                 <li
                   key={m.label}
@@ -162,28 +169,38 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
                   >
                     <Icon className="h-4 w-4" />
                   </span>
-                  <span
-                    className={cn(
-                      'min-w-[8rem] flex-1 truncate text-[0.75rem] font-extrabold uppercase tracking-[0.1em]',
-                      isNext ? 'text-gold-800 dark:text-gold-300' : 'text-slate-600 dark:text-slate-300'
-                    )}
-                  >
-                    {m.label}
-                  </span>
-                  {/* Date and time stay together, wrapping as one unit on narrow screens */}
-                  <span className="ml-auto flex shrink-0 items-center gap-3">
-                    <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
-                      {formatDate(m.value, lang, 'd MMM')}
-                    </span>
+                  <span className="min-w-[8rem] flex-1">
                     <span
                       className={cn(
-                        'w-[4.75rem] text-right text-xl font-black tabular-nums',
-                        isNext ? 'text-gold-900 dark:text-gold-200' : 'text-slate-900 dark:text-slate-100'
+                        'block truncate text-[0.75rem] font-extrabold uppercase tracking-[0.1em]',
+                        isNext ? 'text-gold-800 dark:text-gold-300' : 'text-slate-600 dark:text-slate-300'
                       )}
                     >
-                      {formatTime(m.value, lang)}
+                      {m.label}
                     </span>
+                    {/* Free text timing, e.g. "after school time" */}
+                    {m.note && (
+                      <span className="mt-0.5 block text-sm font-semibold text-slate-600 dark:text-slate-300">
+                        {m.note}
+                      </span>
+                    )}
                   </span>
+                  {/* Date and time stay together, wrapping as one unit on narrow screens */}
+                  {m.value && (
+                    <span className="ml-auto flex shrink-0 items-center gap-3">
+                      <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
+                        {formatDate(m.value, lang, 'd MMM')}
+                      </span>
+                      <span
+                        className={cn(
+                          'w-[4.75rem] text-right text-xl font-black tabular-nums',
+                          isNext ? 'text-gold-900 dark:text-gold-200' : 'text-slate-900 dark:text-slate-100'
+                        )}
+                      >
+                        {formatTime(m.value, lang)}
+                      </span>
+                    </span>
+                  )}
                 </li>
               );
             })}
@@ -241,6 +258,70 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The closing milestones, pinned to the bottom of the event card on one line.
+ * This is the last thing staff read: when the event finishes and when pack
+ * down starts and must be complete.
+ */
+export function EventClosingBar({ event }: { event: DisplayEvent }) {
+  const { t, lang } = useLanguage();
+
+  const items = (
+    [
+      { label: t('timeline.eventEnds'), value: event.event_finish, note: event.event_finish_note, icon: Flag },
+      { label: t('timeline.breakdownBegins'), value: event.breakdown_start, note: event.breakdown_start_note, icon: PackageOpen },
+      {
+        label: t('timeline.breakdownComplete'),
+        value: event.breakdown_deadline,
+        note: event.breakdown_deadline_note,
+        icon: PackageCheck
+      }
+    ] as Milestone[]
+  ).filter((m) => Boolean(m.value) || Boolean(m.note));
+
+  if (items.length === 0) return null;
+
+  return (
+    <div
+      className={cn(
+        'mt-5 grid gap-2 rounded-2xl border-2 border-navy-200 bg-navy-50 p-2.5 dark:border-slate-700 dark:bg-slate-800/60',
+        items.length === 1 ? 'sm:grid-cols-1' : items.length === 2 ? 'sm:grid-cols-2' : 'sm:grid-cols-3'
+      )}
+    >
+      {items.map((m) => {
+        const Icon = m.icon;
+        return (
+          <div
+            key={m.label}
+            className="flex items-center gap-2.5 rounded-xl bg-white px-3 py-2.5 shadow-sm dark:bg-slate-900"
+          >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-navy-100 text-navy-700 dark:bg-slate-800 dark:text-slate-300">
+              <Icon className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[0.7rem] font-extrabold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
+                {m.label}
+              </p>
+              {m.value && (
+                <p className="flex items-baseline gap-1.5 text-slate-900 dark:text-slate-100">
+                  <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
+                    {formatDate(m.value, lang, 'd MMM')}
+                  </span>
+                  <span className="text-lg font-black tabular-nums">{formatTime(m.value, lang)}</span>
+                </p>
+              )}
+              {/* Free text timing, e.g. "anytime on that day" */}
+              {m.note && (
+                <p className="truncate text-sm font-semibold text-slate-600 dark:text-slate-300">{m.note}</p>
+              )}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

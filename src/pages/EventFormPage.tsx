@@ -30,6 +30,8 @@ type ScheduleFieldName = (typeof SCHEDULE_FIELDS)[number]['name'];
 interface ScheduleSlot {
   date: string;
   time: string;
+  /** Optional free text timing, e.g. "after school time" or "anytime that day" */
+  note: string;
 }
 
 interface EventFormValues {
@@ -47,12 +49,12 @@ interface EventFormValues {
 }
 
 const emptySchedule = (): Record<ScheduleFieldName, ScheduleSlot> => ({
-  setup_start: { date: '', time: '' },
-  venue_ready: { date: '', time: '' },
-  event_start: { date: '', time: '' },
-  event_finish: { date: '', time: '' },
-  breakdown_start: { date: '', time: '' },
-  breakdown_deadline: { date: '', time: '' }
+  setup_start: { date: '', time: '', note: '' },
+  venue_ready: { date: '', time: '', note: '' },
+  event_start: { date: '', time: '', note: '' },
+  event_finish: { date: '', time: '', note: '' },
+  breakdown_start: { date: '', time: '', note: '' },
+  breakdown_deadline: { date: '', time: '', note: '' }
 });
 
 export function EventFormPage() {
@@ -88,7 +90,8 @@ export function EventFormPage() {
         const iso = existing[field.name];
         schedule[field.name] = {
           date: extractDate(iso) ?? '',
-          time: extractTime(iso) ?? ''
+          time: extractTime(iso) ?? '',
+          note: existing[`${field.name}_note`] ?? ''
         };
         // When the milestone falls on the event date itself, leave the
         // date box empty so the form stays clean and simple.
@@ -129,6 +132,12 @@ export function EventFormPage() {
       event_finish: milestone('event_finish'),
       breakdown_start: milestone('breakdown_start'),
       breakdown_deadline: milestone('breakdown_deadline'),
+      setup_start_note: values.schedule.setup_start.note.trim(),
+      venue_ready_note: values.schedule.venue_ready.note.trim(),
+      event_start_note: values.schedule.event_start.note.trim(),
+      event_finish_note: values.schedule.event_finish.note.trim(),
+      breakdown_start_note: values.schedule.breakdown_start.note.trim(),
+      breakdown_deadline_note: values.schedule.breakdown_deadline.note.trim(),
       description: values.description,
       additional_notes: values.additional_notes,
       internal_notes: values.internal_notes,
@@ -260,6 +269,14 @@ export function EventFormPage() {
                       aria-label={`${t(field.label)} ${t('events.times')}`}
                     />
                   </div>
+                  {/* Free text timing for anything a clock cannot express */}
+                  <input
+                    type="text"
+                    {...register(`schedule.${field.name}.note` as Path<EventFormValues>)}
+                    placeholder={t('events.timingNote')}
+                    className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm placeholder:text-slate-400 focus:border-navy-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
+                    aria-label={`${t(field.label)} ${t('events.timingNote')}`}
+                  />
                 </div>
               ))}
             </div>
