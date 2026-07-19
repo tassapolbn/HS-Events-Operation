@@ -73,7 +73,9 @@ export const en = {
     signIn: 'Sign in',
     signingIn: 'Signing in...',
     invalidCredentials: 'Incorrect email or password. Please try again.',
-    noAccount: 'Accounts are created by the school administrator.'
+    noAccount: 'Accounts are created by the school administrator.',
+    openBoard: 'View the display board',
+    openBoardHint: 'No sign in needed. For all department teams.'
   },
   dashboard: {
     title: 'Dashboard',

@@ -68,3 +68,29 @@ html[lang='th'] body {
     display: none !important;
   }
 }
+
+/* Ambient drift: gentle spatial depth behind the sign in screen */
+@keyframes orb-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -18px, 0) scale(1.06);
+  }
+}
+.orb-drift {
+  animation: orb-drift 16s ease-in-out infinite;
+}
+
+/* Universal design: always respect the reader's motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
