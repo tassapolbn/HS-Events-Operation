@@ -40,6 +40,7 @@ export const th: Dict = {
     priority: 'ความสำคัญ',
     department: 'แผนก',
     date: 'วันที่',
+    time: 'เวลา',
     location: 'สถานที่',
     description: 'รายละเอียด',
     notes: 'หมายเหตุ',

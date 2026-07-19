@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import {
   AlarmClock, CalendarDays, Check, ChevronDown, Clock, DoorOpen, Flag, Hammer, ListChecks,
-  Map as MapIcon, MapPin, PackageCheck, PackageOpen, Paperclip, PlayCircle, StickyNote, User
+  Map as MapIcon, MapPin, PackageCheck, PackageOpen, Paperclip, PlayCircle, StickyNote, User,
+  type LucideIcon
 } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { getSignedUrl } from '../../hooks/useAttachments';
@@ -38,6 +39,60 @@ function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
       ))}
     </span>
   );
+}
+
+/**
+ * One clearly labelled fact (Date, Time, Location, Staff).
+ * Label above value, so a department head reads what it is before what it says.
+ */
+function FactBlock({
+  icon: Icon,
+  label,
+  value,
+  highlight
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-center gap-2.5 rounded-xl border px-3 py-2',
+        highlight
+          ? 'border-gold-300 bg-gold-50 dark:border-gold-800 dark:bg-gold-950/30'
+          : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/50'
+      )}
+    >
+      <Icon className={cn('h-4 w-4 shrink-0', highlight ? 'text-gold-600 dark:text-gold-400' : 'text-slate-400')} />
+      <div className="min-w-0">
+        <p
+          className={cn(
+            'text-[0.6rem] font-extrabold uppercase tracking-wider',
+            highlight ? 'text-gold-700 dark:text-gold-400' : 'text-slate-400'
+          )}
+        >
+          {label}
+        </p>
+        <p
+          className={cn(
+            'truncate text-[0.9rem] font-extrabold leading-tight',
+            highlight ? 'text-gold-900 dark:text-gold-200' : 'text-slate-800 dark:text-slate-100'
+          )}
+        >
+          {value}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Fallback date, location and time inherited from the session or the event. */
+interface PanelContext {
+  date: string;
+  location: string;
+  time: string | null;
 }
 
 interface EventsBoardProps {
@@ -120,7 +175,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     );
   };
 
-  const renderPanels = (tasks: DisplayTask[]): ReactNode => {
+  const renderPanels = (tasks: DisplayTask[], ctx: PanelContext): ReactNode => {
     const visibleDepts = departments.filter(
       (dept) => (!selectedDept || dept.id === selectedDept) && tasks.some((task) => task.department_id === dept.id)
     );
@@ -174,69 +229,85 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
               <ul className="flex-1 divide-y divide-slate-100 dark:divide-slate-800">
                 {deptTasks.map((task, index) => {
                   const completed = task.status === 'completed';
+                  const dateText = formatDate(extractDate(task.start_time) ?? ctx.date, lang, 'EEE d MMM yyyy');
+                  const timeText = task.start_time
+                    ? `${formatTime(task.start_time, lang)}${task.completion_time ? ` - ${formatTime(task.completion_time, lang)}` : ''}`
+                    : ctx.time ?? '-';
+                  const locationText = task.work_location || task.setup_location || ctx.location || '-';
                   return (
                     <li
                       key={task.id}
                       className={cn(
-                        'flex items-start gap-3 px-4 py-3.5 transition-colors',
+                        'px-4 py-3.5 transition-colors',
                         completed
                           ? 'border-l-[3px] border-emerald-400 bg-emerald-50/80 dark:bg-emerald-950/25'
                           : 'border-l-[3px] border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'
                       )}
                     >
-                      <button
-                        onClick={() => toggleTask.mutate({ taskId: task.id, done: !completed })}
-                        className={cn(
-                          'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 hover:scale-110 active:scale-90',
-                          completed
-                            ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
-                            : 'border-slate-300 bg-white hover:border-emerald-400 dark:border-slate-600 dark:bg-slate-900'
-                        )}
-                        title={t('display.tapToComplete')}
-                        aria-label={t('display.tapToComplete')}
-                      >
-                        {completed && <Check className="h-4 w-4" strokeWidth={3} />}
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <p
+                      <div className="flex items-start gap-3">
+                        <button
+                          onClick={() => toggleTask.mutate({ taskId: task.id, done: !completed })}
                           className={cn(
-                            'break-words text-[0.95rem] font-semibold leading-relaxed text-slate-800 dark:text-slate-100',
-                            completed && 'text-slate-400 line-through dark:text-slate-500'
+                            'mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 hover:scale-110 active:scale-90',
+                            completed
+                              ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
+                              : 'border-slate-300 bg-white hover:border-emerald-400 dark:border-slate-600 dark:bg-slate-900'
                           )}
+                          title={t('display.tapToComplete')}
+                          aria-label={t('display.tapToComplete')}
                         >
-                          <span className="mr-1.5 text-sm font-bold text-slate-300 dark:text-slate-600">{index + 1}.</span>
-                          {task.title}
-                        </p>
-                        {!isRichTextEmpty(task.description) && !completed && (
-                          <RichTextViewer html={task.description} className="mt-1 text-sm text-slate-500" />
-                        )}
-                        <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-400">
-                          {(task.work_location || task.setup_location) && (
-                            <span className="inline-flex items-center gap-1">
-                              <MapPin className="h-3.5 w-3.5" /> {task.work_location || task.setup_location}
+                          {completed && <Check className="h-4 w-4" strokeWidth={3} />}
+                        </button>
+                        <div className="min-w-0 flex-1">
+                          {/* What to do */}
+                          <p
+                            className={cn(
+                              'break-words text-[1rem] font-bold leading-snug text-slate-900 dark:text-slate-100',
+                              completed && 'text-slate-400 line-through dark:text-slate-500'
+                            )}
+                          >
+                            <span className="mr-2 inline-flex h-6 w-6 items-center justify-center rounded-lg bg-slate-100 text-xs font-extrabold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                              {index + 1}
+                            </span>
+                            {task.title}
+                          </p>
+                          {!isRichTextEmpty(task.description) && !completed && (
+                            <RichTextViewer html={task.description} className="mt-1.5 text-sm text-slate-600 dark:text-slate-300" />
+                          )}
+
+                          {!completed && (
+                            <>
+                              {/* When and where, each clearly labelled */}
+                              <div className="mt-2.5 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                                <FactBlock icon={CalendarDays} label={t('common.date')} value={dateText} />
+                                <FactBlock icon={Clock} label={t('common.time')} value={timeText} highlight />
+                                <FactBlock icon={MapPin} label={t('common.location')} value={locationText} />
+                              </div>
+                              {task.assigned_staff && (
+                                <div className="mt-2">
+                                  <FactBlock icon={User} label={t('tasks.assignedStaff')} value={task.assigned_staff} />
+                                </div>
+                              )}
+                              {task.attachments.length > 0 && (
+                                <div className="mt-2.5 rounded-xl border border-gold-300 bg-gold-50 px-3 py-2.5 dark:border-gold-800 dark:bg-gold-950/30">
+                                  <span className="inline-flex items-center gap-1.5 text-[0.6rem] font-extrabold uppercase tracking-wider text-gold-700 dark:text-gold-300">
+                                    <MapIcon className="h-3.5 w-3.5" /> {t('display.reference')}
+                                  </span>
+                                  <AttachmentChips files={task.attachments} />
+                                </div>
+                              )}
+                            </>
+                          )}
+
+                          {!isRichTextEmpty(task.notes) && (
+                            <RichTextViewer html={task.notes} className="mt-2 text-sm italic text-slate-500 dark:text-slate-400" />
+                          )}
+                          {completed && (
+                            <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
+                              <Check className="h-3 w-3" /> {t('display.completedLabel')}
                             </span>
                           )}
-                          {task.start_time && (
-                            <span className="inline-flex items-center gap-1 font-semibold text-slate-500 dark:text-slate-300">
-                              <Clock className="h-3.5 w-3.5" /> {formatTime(task.start_time, lang)}
-                              {task.completion_time && <> - {formatTime(task.completion_time, lang)}</>}
-                            </span>
-                          )}
-                          {task.assigned_staff && (
-                            <span className="inline-flex items-center gap-1">
-                              <User className="h-3.5 w-3.5" /> {task.assigned_staff}
-                            </span>
-                          )}
-                        </p>
-                        {!isRichTextEmpty(task.notes) && (
-                          <RichTextViewer html={task.notes} className="mt-1 text-sm italic text-slate-400" />
-                        )}
-                        <AttachmentChips files={task.attachments} />
-                        {completed && (
-                          <span className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
-                            <Check className="h-3 w-3" /> {t('display.completedLabel')}
-                          </span>
-                        )}
+                        </div>
                       </div>
                     </li>
                   );
@@ -415,6 +486,13 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
         ].some(Boolean);
         const hasMeta = hasMilestones || !isRichTextEmpty(event.description) ||
           !isRichTextEmpty(event.additional_notes) || event.attachments.length > 0;
+        const eventCtx: PanelContext = {
+          date: event.event_date,
+          location: event.location,
+          time: event.event_start
+            ? `${formatTime(event.event_start, lang)}${event.event_finish ? ` - ${formatTime(event.event_finish, lang)}` : ''}`
+            : null
+        };
         const sessions = event.sessions ?? [];
         const sessionIds = new Set(sessions.map((s) => s.id));
         const generalTasks = event.tasks.filter((task) => !task.session_id || !sessionIds.has(task.session_id));
@@ -516,7 +594,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                 )}
                 <div className={cn(hasMeta && 'mt-5')}>
                   {sessions.length === 0 ? (
-                    renderPanels(event.tasks)
+                    renderPanels(event.tasks, eventCtx)
                   ) : (
                     <div className="space-y-5">
                     {generalTasks.length > 0 && (
@@ -525,13 +603,20 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                           <ListChecks className="h-5 w-5 text-slate-400" />
                           <span className="text-lg font-extrabold tracking-tight text-slate-500 dark:text-slate-300">{t('sessions.generalTasks')}</span>
                         </div>
-                        {renderPanels(generalTasks)}
+                        {renderPanels(generalTasks, eventCtx)}
                       </div>
                     )}
                     {sessions.map((session) => {
                       const sessionTasks = event.tasks.filter((task) => task.session_id === session.id);
                       if (sessionTasks.length === 0) return null;
-                      const panels = renderPanels(sessionTasks);
+                      const sessionCtx: PanelContext = {
+                        date: session.session_date,
+                        location: session.location || event.location,
+                        time: session.start_time
+                          ? `${formatTime(session.start_time, lang)}${session.end_time ? ` - ${formatTime(session.end_time, lang)}` : ''}`
+                          : null
+                      };
+                      const panels = renderPanels(sessionTasks, sessionCtx);
                       if (!panels) return null;
                       return (
                         <div

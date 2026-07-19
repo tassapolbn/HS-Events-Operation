@@ -38,6 +38,7 @@ export const en = {
     priority: 'Priority',
     department: 'Department',
     date: 'Date',
+    time: 'Time',
     location: 'Location',
     description: 'Description',
     notes: 'Notes',
