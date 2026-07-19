@@ -5,7 +5,7 @@ import {
 import { getSignedUrl } from '../../hooks/useAttachments';
 import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
-import { cn, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
+import { cn, extractDate, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
 import type { DisplayAttachment, DisplayEvent } from '../../types';
 
 export type BoardStatus = 'upcoming' | 'preparing' | 'live' | 'breakdown' | 'completed';
@@ -91,6 +91,27 @@ export function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
           <Paperclip className="h-3 w-3" /> {file.file_name}
         </button>
       ))}
+    </span>
+  );
+}
+
+/**
+ * A milestone date reads quietly when it falls on the event day, and is
+ * highlighted when it does not, so nobody turns up on the wrong day.
+ */
+function DateChip({ value, eventDate }: { value: string; eventDate: string }) {
+  const { lang } = useLanguage();
+  const otherDay = extractDate(value) !== eventDate;
+  return (
+    <span
+      className={cn(
+        'shrink-0 text-sm font-bold',
+        otherDay
+          ? 'rounded-md bg-orange-100 px-2 py-0.5 text-orange-800 ring-1 ring-orange-300 dark:bg-orange-950/50 dark:text-orange-300 dark:ring-orange-800'
+          : 'text-slate-500 dark:text-slate-400'
+      )}
+    >
+      {formatDate(value, lang, otherDay ? 'EEE d MMM' : 'd MMM')}
     </span>
   );
 }
@@ -188,9 +209,7 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
                   {/* Date and time stay together, wrapping as one unit on narrow screens */}
                   {m.value && (
                     <span className="ml-auto flex shrink-0 items-center gap-3">
-                      <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
-                        {formatDate(m.value, lang, 'd MMM')}
-                      </span>
+                      <DateChip value={m.value} eventDate={event.event_date} />
                       <span
                         className={cn(
                           'w-[4.75rem] text-right text-xl font-black tabular-nums',
@@ -307,10 +326,8 @@ export function EventClosingBar({ event }: { event: DisplayEvent }) {
                 {m.label}
               </p>
               {m.value && (
-                <p className="flex items-baseline gap-1.5 text-slate-900 dark:text-slate-100">
-                  <span className="text-sm font-bold text-slate-500 dark:text-slate-400">
-                    {formatDate(m.value, lang, 'd MMM')}
-                  </span>
+                <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-slate-900 dark:text-slate-100">
+                  <DateChip value={m.value} eventDate={event.event_date} />
                   <span className="text-lg font-black tabular-nums">{formatTime(m.value, lang)}</span>
                 </p>
               )}

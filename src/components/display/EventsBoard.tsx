@@ -213,10 +213,17 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                 <MapPin className="h-4 w-4 text-gold-400" /> {session.location}
               </span>
             )}
-            {session.start_time && (
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold tabular-nums">
-                <Clock className="h-4 w-4 text-gold-400" /> {formatTime(session.start_time, lang)}
-                {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
+            {/* Clock time and free text timing share one chip, e.g. "13:50 - 14:20 after school" */}
+            {(session.start_time || session.time_note) && (
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold">
+                <Clock className="h-4 w-4 shrink-0 text-gold-400" />
+                {session.start_time && (
+                  <span className="tabular-nums">
+                    {formatTime(session.start_time, lang)}
+                    {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
+                  </span>
+                )}
+                {session.time_note && <span>{session.time_note}</span>}
               </span>
             )}
           </p>

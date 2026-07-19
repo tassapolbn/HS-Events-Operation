@@ -15,6 +15,8 @@ interface SessionFormValues {
   location: string;
   start_time: string;
   end_time: string;
+  /** Optional free text timing, e.g. "after school time" */
+  time_note: string;
 }
 
 interface SessionFormModalProps {
@@ -32,7 +34,7 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
   const { createSession, updateSession } = useSessionMutations(eventId);
 
   const { register, handleSubmit, reset, formState } = useForm<SessionFormValues>({
-    defaultValues: { title: '', session_date: eventDate, location: '', start_time: '', end_time: '' }
+    defaultValues: { title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '' }
   });
 
   useEffect(() => {
@@ -43,10 +45,11 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
         session_date: session.session_date,
         location: session.location,
         start_time: extractTime(session.start_time) ?? '',
-        end_time: extractTime(session.end_time) ?? ''
+        end_time: extractTime(session.end_time) ?? '',
+        time_note: session.time_note ?? ''
       });
     } else {
-      reset({ title: '', session_date: eventDate, location: '', start_time: '', end_time: '' });
+      reset({ title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '' });
     }
   }, [open, session, eventDate, reset]);
 
@@ -56,7 +59,8 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
       session_date: values.session_date,
       location: values.location.trim(),
       start_time: combineDateTime(values.session_date, values.start_time || null),
-      end_time: combineDateTime(values.session_date, values.end_time || null)
+      end_time: combineDateTime(values.session_date, values.end_time || null),
+      time_note: values.time_note.trim()
     };
     try {
       if (session) {
@@ -98,6 +102,13 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
         <Input label={t('common.location')} {...register('location')} />
         <Input label={t('tasks.startTime')} type="time" {...register('start_time')} />
         <Input label={t('tasks.completionTime')} type="time" {...register('end_time')} />
+        {/* Free text timing for anything a clock cannot express */}
+        <Input
+          label={t('events.timingNote')}
+          placeholder={t('events.timingNote')}
+          className="sm:col-span-2"
+          {...register('time_note')}
+        />
       </form>
     </Modal>
   );

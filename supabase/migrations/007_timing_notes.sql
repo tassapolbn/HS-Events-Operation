@@ -15,6 +15,10 @@ alter table events
   add column if not exists breakdown_start_note text not null default '',
   add column if not exists breakdown_deadline_note text not null default '';
 
+-- Sessions get the same flexibility for their own time slot
+alter table event_sessions
+  add column if not exists time_note text not null default '';
+
 -- ---------- Return the timing notes from the public display function ----------
 create or replace function public_display_events()
 returns jsonb
@@ -52,7 +56,7 @@ as $$
         select coalesce(jsonb_agg(jsonb_build_object(
           'id', s.id, 'title', s.title, 'session_date', s.session_date,
           'location', s.location, 'start_time', s.start_time, 'end_time', s.end_time,
-          'sort_order', s.sort_order
+          'time_note', s.time_note, 'sort_order', s.sort_order
         ) order by s.session_date, s.sort_order, s.created_at), '[]'::jsonb)
         from event_sessions s where s.event_id = ev.id
       ),
