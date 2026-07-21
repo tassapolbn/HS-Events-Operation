@@ -20,16 +20,14 @@ interface EventsBoardProps {
 export function EventsBoard({ events, departments, selectedDept, isLoading }: EventsBoardProps) {
   const { t, deptName, lang } = useLanguage();
   const toggleTask = useToggleDisplayTask();
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Events open collapsed, so the board reads as a clean overview first and
+  // staff expand only the event they are working on.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [highlighted, setHighlighted] = useState<string | null>(null);
 
   /** Jump from an upcoming task card to its event: expand, scroll, flash */
   const goToEvent = (eventId: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      next.delete(eventId);
-      return next;
-    });
+    setExpanded((prev) => new Set(prev).add(eventId));
     setHighlighted(eventId);
     window.setTimeout(() => {
       document.getElementById(`event-${eventId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -37,8 +35,8 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
     window.setTimeout(() => setHighlighted(null), 2600);
   };
 
-  const toggleCollapsed = (eventId: string) => {
-    setCollapsed((prev) => {
+  const toggleExpanded = (eventId: string) => {
+    setExpanded((prev) => {
       const next = new Set(prev);
       if (next.has(eventId)) next.delete(eventId);
       else next.add(eventId);
@@ -342,7 +340,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
       )}
 
       {events.map((event) => {
-        const isCollapsed = collapsed.has(event.id);
+        const isCollapsed = !expanded.has(event.id);
         const anyVisibleTask = event.tasks.some((task) => !selectedDept || task.department_id === selectedDept);
         if (selectedDept && !anyVisibleTask) return null;
         const totalTasks = event.tasks.length;
@@ -373,11 +371,11 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
               role="button"
               tabIndex={0}
               aria-expanded={!isCollapsed}
-              onClick={() => toggleCollapsed(event.id)}
+              onClick={() => toggleExpanded(event.id)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
-                  toggleCollapsed(event.id);
+                  toggleExpanded(event.id);
                 }
               }}
               className="flex cursor-pointer select-none flex-wrap items-center gap-x-4 gap-y-3 px-5 py-4 focus:outline-none focus-visible:ring-4 focus-visible:ring-inset focus-visible:ring-gold-400/80 lg:px-7"

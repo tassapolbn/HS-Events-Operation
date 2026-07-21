@@ -164,10 +164,15 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
         <RichTextViewer html={event.description} className="max-w-4xl text-[0.95rem] text-slate-600 dark:text-slate-300" />
       )}
 
-      {/* Timeline: read like a departure board, one row per milestone */}
-      {milestones.length > 0 && (
-        <section>
-          <SectionLabel icon={Clock}>{t('events.timeline')}</SectionLabel>
+      {/*
+        Two columns on wide screens. This keeps the timeline from stretching
+        across a TV, which is what pushed each label and its time far apart.
+      */}
+      <div className={cn('grid gap-4', milestones.length > 0 && 'xl:grid-cols-5')}>
+        {/* Timeline: read like a departure board, one row per milestone */}
+        {milestones.length > 0 && (
+          <section className="xl:col-span-3">
+            <SectionLabel icon={Clock}>{t('events.timeline')}</SectionLabel>
           <ol className={cn('overflow-hidden', CARD)}>
             {milestones.map((m, i) => {
               const Icon = m.icon;
@@ -228,7 +233,12 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
       )}
 
       {/* Venue, floor plan and reference: stated once for the whole event */}
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div
+        className={cn(
+          'grid content-start gap-3 sm:grid-cols-2',
+          milestones.length > 0 ? 'xl:col-span-2 xl:grid-cols-1' : 'xl:grid-cols-3'
+        )}
+      >
         <div className={cn('flex items-center gap-3 px-4 py-3.5', CARD)}>
           <span className={cn(TILE, 'bg-navy-50 text-navy-700 dark:bg-navy-900/60 dark:text-navy-200')}>
             <MapPin className="h-5 w-5" />
@@ -263,16 +273,18 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
             <AttachmentChips files={docs} />
           </div>
         )}
+        </div>
       </div>
 
+      {/* Notes sit on a neutral card with a single amber accent, not a full colour wash */}
       {!isRichTextEmpty(event.additional_notes) && (
-        <div className="flex items-start gap-3 rounded-2xl border-l-4 border-amber-400 bg-amber-50 px-4 py-3.5 dark:border-amber-500 dark:bg-amber-950/30">
+        <div className={cn('flex items-start gap-3 px-4 py-3.5', CARD, 'border-l-4 border-l-amber-400')}>
           <StickyNote className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
           <div className="min-w-0">
-            <p className={cn(LABEL, 'text-amber-700 dark:text-amber-400')}>{t('events.additionalNotes')}</p>
+            <p className={cn(LABEL, 'text-slate-500 dark:text-slate-400')}>{t('events.additionalNotes')}</p>
             <RichTextViewer
               html={event.additional_notes}
-              className="mt-1 text-[0.95rem] !text-amber-900 dark:!text-amber-200"
+              className="mt-1 text-[0.95rem] text-slate-700 dark:text-slate-200"
             />
           </div>
         </div>
