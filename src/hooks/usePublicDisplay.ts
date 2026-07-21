@@ -61,6 +61,31 @@ export function useDisplayRequests() {
   });
 }
 
+/**
+ * Ask the events team a question from the board. No sign in required: the
+ * question is stored and the events team is notified in the app.
+ */
+export function useAskDisplayQuestion() {
+  return useMutation({
+    mutationFn: async ({
+      eventId,
+      departmentId,
+      question
+    }: {
+      eventId: string;
+      departmentId: string;
+      question: string;
+    }) => {
+      const { error } = await supabase.rpc('public_ask_question', {
+        p_event_id: eventId,
+        p_department_id: departmentId || null,
+        p_question: question
+      });
+      if (error) throw error;
+    }
+  });
+}
+
 /** Tick or untick a task from the board (optimistic) */
 export function useToggleDisplayTask() {
   const queryClient = useQueryClient();

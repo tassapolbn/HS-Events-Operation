@@ -186,9 +186,22 @@ export interface TemplateData {
   }>;
 }
 
+/** A question asked from the public display board. */
+export interface EventQuestion {
+  id: string;
+  event_id: string;
+  department_id: string | null;
+  question: string;
+  status: 'new' | 'answered';
+  answer: string;
+  answered_by: string | null;
+  answered_at: string | null;
+  created_at: string;
+}
+
 export interface AppNotification {
   id: string;
-  kind: 'event' | 'request' | 'system';
+  kind: 'event' | 'request' | 'system' | 'question';
   title: string;
   body: string;
   event_id: string | null;

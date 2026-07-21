@@ -1,11 +1,15 @@
 import { useState, type ReactNode } from 'react';
-import { AlarmClock, CalendarDays, Check, ChevronDown, Clock, ListChecks, MapPin, User } from 'lucide-react';
+import {
+  AlarmClock, CalendarDays, Check, ChevronDown, Clock, ListChecks, MapPin,
+  MessageCircleQuestion, User
+} from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
 import { EmptyState } from '../ui/EmptyState';
 import { AttachmentChips, EventBriefing, EventClosingBar, StatusBadge, boardStatus } from './EventBriefing';
 import { BoardSkeleton } from './BoardSkeleton';
+import { AskQuestionModal } from './AskQuestionModal';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
 import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty, readableTextColor } from '../../lib/utils';
 import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
@@ -24,6 +28,8 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
   // staff expand only the event they are working on.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [highlighted, setHighlighted] = useState<string | null>(null);
+  /** Which event the "Ask a question" dialog is open for */
+  const [askEvent, setAskEvent] = useState<DisplayEvent | null>(null);
 
   /** Jump from an upcoming task card to its event: expand, scroll, flash */
   const goToEvent = (eventId: string) => {
@@ -402,6 +408,21 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                 </div>
               </div>
               <div className="ml-auto flex items-center gap-3">
+                {/* Available on every event bar, open or collapsed */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAskEvent(event);
+                  }}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                  style={{ backgroundColor: `${headerText}26`, color: headerText }}
+                  title={t('display.askQuestion')}
+                  aria-label={`${t('display.askQuestion')}: ${event.name}`}
+                >
+                  <MessageCircleQuestion className="h-4 w-4" />
+                  <span className="hidden lg:inline">{t('display.askQuestion')}</span>
+                </button>
                 <span className="hidden text-right sm:block">
                   <span className="block text-sm font-black tabular-nums" style={{ color: headerText }}>
                     {doneTasks}/{totalTasks}
@@ -467,6 +488,14 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
           </section>
         );
       })}
+
+      <AskQuestionModal
+        open={askEvent !== null}
+        onClose={() => setAskEvent(null)}
+        eventId={askEvent?.id ?? ''}
+        eventName={askEvent?.name ?? ''}
+        departments={departments}
+      />
     </div>
   );
 }

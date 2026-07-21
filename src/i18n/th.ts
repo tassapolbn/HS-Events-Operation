@@ -243,7 +243,13 @@ export const th: Dict = {
     floorPlan: 'แปลนสถานที่',
     viewFloorPlan: 'ดูแปลนสถานที่',
     due: 'กำหนดเสร็จ',
-    openFull: 'เปิดแอปพลิเคชันเต็ม'
+    openFull: 'เปิดแอปพลิเคชันเต็ม',
+    askQuestion: 'สอบถาม',
+    askQuestionHint: 'เลือกแผนกของคุณ แล้วพิมพ์คำถาม ทีมงานกิจกรรมจะเห็นคำถามเมื่อเข้าสู่ระบบ',
+    yourQuestion: 'คำถามของคุณ',
+    questionPlaceholder: 'ตัวอย่าง: ควรใช้ประตูไหนในการขนโต๊ะเข้าไป',
+    questionSent: 'ส่งคำถามเรียบร้อยแล้ว',
+    questionSentHint: 'ทีมงานกิจกรรมได้รับแจ้งแล้ว และจะติดต่อกลับไปยังแผนกของคุณ'
   },
   boardStatus: {
     upcoming: 'กำลังจะถึง',

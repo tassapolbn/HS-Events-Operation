@@ -241,7 +241,13 @@ export const en = {
     floorPlan: 'Floor plan',
     viewFloorPlan: 'View floor plan',
     due: 'Due',
-    openFull: 'Open the full application'
+    openFull: 'Open the full application',
+    askQuestion: 'Ask a question',
+    askQuestionHint: 'Choose your department and type your question. The events team will see it when they sign in.',
+    yourQuestion: 'Your question',
+    questionPlaceholder: 'For example: which door should we use to bring the tables in?',
+    questionSent: 'Your question has been sent',
+    questionSentHint: 'The events team has been notified and will follow up with your department.'
   },
   boardStatus: {
     upcoming: 'Upcoming',
