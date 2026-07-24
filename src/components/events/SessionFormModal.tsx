@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
-import { Input } from '../ui/Input';
+import { Input, Textarea } from '../ui/Input';
 import { useLanguage } from '../../i18n';
 import { useToast } from '../ui/Toast';
 import { useSessionMutations } from '../../hooks/useSessions';
@@ -17,6 +17,8 @@ interface SessionFormValues {
   end_time: string;
   /** Optional free text timing, e.g. "after school time" */
   time_note: string;
+  /** Optional multi line operational note (OT, reminders, venue notes) */
+  note: string;
 }
 
 interface SessionFormModalProps {
@@ -34,7 +36,7 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
   const { createSession, updateSession } = useSessionMutations(eventId);
 
   const { register, handleSubmit, reset, formState } = useForm<SessionFormValues>({
-    defaultValues: { title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '' }
+    defaultValues: { title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' }
   });
 
   useEffect(() => {
@@ -46,10 +48,11 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
         location: session.location,
         start_time: extractTime(session.start_time) ?? '',
         end_time: extractTime(session.end_time) ?? '',
-        time_note: session.time_note ?? ''
+        time_note: session.time_note ?? '',
+        note: session.note ?? ''
       });
     } else {
-      reset({ title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '' });
+      reset({ title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' });
     }
   }, [open, session, eventDate, reset]);
 
@@ -60,7 +63,8 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
       location: values.location.trim(),
       start_time: combineDateTime(values.session_date, values.start_time || null),
       end_time: combineDateTime(values.session_date, values.end_time || null),
-      time_note: values.time_note.trim()
+      time_note: values.time_note.trim(),
+      note: values.note.trim()
     };
     try {
       if (session) {
@@ -108,6 +112,13 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
           placeholder={t('events.timingNote')}
           className="sm:col-span-2"
           {...register('time_note')}
+        />
+        {/* Operational note shown on the board under this session */}
+        <Textarea
+          label={t('sessions.sessionNote')}
+          hint={t('sessions.sessionNoteHint')}
+          className="sm:col-span-2"
+          {...register('note')}
         />
       </form>
     </Modal>

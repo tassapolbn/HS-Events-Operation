@@ -211,7 +211,9 @@ export const en = {
     sessionTitle: 'Session Name (optional)',
     hint: 'A session is one part of the event: a specific day, venue or time slot',
     generalTasks: 'Whole event tasks',
-    whole: 'Whole event'
+    whole: 'Whole event',
+    sessionNote: 'Session note',
+    sessionNoteHint: 'Optional. Shown on the board under this session, for OT, reminders or venue notes.'
   },
   displaySize: {
     label: 'Display size',
@@ -247,7 +249,14 @@ export const en = {
     yourQuestion: 'Your question',
     questionPlaceholder: 'For example: which door should we use to bring the tables in?',
     questionSent: 'Your question has been sent',
-    questionSentHint: 'The events team has been notified and will follow up with your department.'
+    questionSentHint: 'The events team has been notified and will follow up with your department.',
+    combinedHint: 'Showing everything for this department: event work and requests together.',
+    eventWork: 'Event work',
+    deptRequests: 'Department requests',
+    noDeptEvents: 'No event tasks for this department right now.',
+    noDeptRequests: 'No open requests for this department.',
+    editBoard: 'Edit board',
+    openFullEditor: 'Open full editor'
   },
   boardStatus: {
     upcoming: 'Upcoming',

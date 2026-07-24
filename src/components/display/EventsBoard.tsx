@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   AlarmClock, CalendarDays, Check, ChevronDown, Clock, ListChecks, MapPin,
-  MessageCircleQuestion, User
+  Megaphone, MessageCircleQuestion, Pencil, User
 } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { useLanguage } from '../../i18n';
@@ -19,9 +19,23 @@ interface EventsBoardProps {
   departments: DisplayDepartment[];
   selectedDept: string;
   isLoading: boolean;
+  /** Live editing: pencils appear on events, sessions and tasks when true */
+  editMode?: boolean;
+  onEditEvent?: (event: DisplayEvent) => void;
+  onEditSession?: (event: DisplayEvent, session: DisplaySession) => void;
+  onEditTask?: (event: DisplayEvent, task: DisplayTask) => void;
 }
 
-export function EventsBoard({ events, departments, selectedDept, isLoading }: EventsBoardProps) {
+export function EventsBoard({
+  events,
+  departments,
+  selectedDept,
+  isLoading,
+  editMode,
+  onEditEvent,
+  onEditSession,
+  onEditTask
+}: EventsBoardProps) {
   const { t, deptName, lang } = useLanguage();
   const toggleTask = useToggleDisplayTask();
   // Events open collapsed, so the board reads as a clean overview first and
@@ -64,7 +78,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
    * venue belong to the event, so they are stated once in the briefing above
    * and never repeated per task.
    */
-  const renderPanels = (tasks: DisplayTask[]): ReactNode => {
+  const renderPanels = (tasks: DisplayTask[], evt: DisplayEvent): ReactNode => {
     const visibleDepts = departments.filter(
       (dept) => (!selectedDept || dept.id === selectedDept) && tasks.some((task) => task.department_id === dept.id)
     );
@@ -184,6 +198,16 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                             <RichTextViewer html={task.notes} className="mt-1 pl-7 text-sm italic text-slate-400" />
                           )}
                         </div>
+                        {editMode && (
+                          <button
+                            onClick={() => onEditTask?.(evt, task)}
+                            title={t('tasks.editTask')}
+                            aria-label={t('tasks.editTask')}
+                            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-all hover:bg-slate-200 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 dark:bg-slate-800 dark:text-slate-400"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </li>
                   );
@@ -197,7 +221,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
   };
 
   /** A session states its own date, place and time once, above its panels. */
-  const sessionHeader = (session: DisplaySession, tasks: DisplayTask[]): ReactNode => {
+  const sessionHeader = (session: DisplaySession, tasks: DisplayTask[], evt: DisplayEvent): ReactNode => {
     const done = tasks.filter((task) => task.status === 'completed').length;
     return (
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-gradient-to-r from-navy-900 via-navy-800 to-navy-600 px-4 py-3.5 text-white shadow-md">
@@ -237,14 +261,26 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
             )}
           </p>
         </div>
-        <span
-          className={cn(
-            'ml-auto rounded-full px-3 py-1 text-sm font-extrabold shadow-sm',
-            done === tasks.length && tasks.length > 0 ? 'bg-emerald-500 text-white' : 'bg-gold-400 text-navy-900'
+        <div className="ml-auto flex items-center gap-2">
+          {editMode && (
+            <button
+              onClick={() => onEditSession?.(evt, session)}
+              title={t('sessions.editSession')}
+              aria-label={t('sessions.editSession')}
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white transition-all hover:bg-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
           )}
-        >
-          {done}/{tasks.length}
-        </span>
+          <span
+            className={cn(
+              'rounded-full px-3 py-1 text-sm font-extrabold shadow-sm',
+              done === tasks.length && tasks.length > 0 ? 'bg-emerald-500 text-white' : 'bg-gold-400 text-navy-900'
+            )}
+          >
+            {done}/{tasks.length}
+          </span>
+        </div>
       </div>
     );
   };
@@ -408,6 +444,22 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                 </div>
               </div>
               <div className="ml-auto flex items-center gap-3">
+                {editMode && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEditEvent?.(event);
+                    }}
+                    onKeyDown={(e) => e.stopPropagation()}
+                    className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                    style={{ backgroundColor: `${headerText}26`, color: headerText }}
+                    title={t('events.editEvent')}
+                    aria-label={`${t('events.editEvent')}: ${event.name}`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                    <span className="hidden lg:inline">{t('common.edit')}</span>
+                  </button>
+                )}
                 {/* Available on every event bar, open or collapsed */}
                 <button
                   onClick={(e) => {
@@ -448,7 +500,7 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
 
                 <div className="mt-5">
                   {sessions.length === 0 ? (
-                    renderPanels(event.tasks)
+                    renderPanels(event.tasks, event)
                   ) : (
                     <div className="space-y-5">
                       {generalTasks.length > 0 && (
@@ -459,20 +511,34 @@ export function EventsBoard({ events, departments, selectedDept, isLoading }: Ev
                               {t('sessions.generalTasks')}
                             </span>
                           </div>
-                          {renderPanels(generalTasks)}
+                          {renderPanels(generalTasks, event)}
                         </div>
                       )}
                       {sessions.map((session) => {
                         const sessionTasks = event.tasks.filter((task) => task.session_id === session.id);
                         if (sessionTasks.length === 0) return null;
-                        const panels = renderPanels(sessionTasks);
+                        const panels = renderPanels(sessionTasks, event);
                         if (!panels) return null;
                         return (
                           <div
                             key={session.id}
                             className="space-y-4 rounded-2xl border border-navy-100 bg-slate-50 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40"
                           >
-                            {sessionHeader(session, sessionTasks)}
+                            {sessionHeader(session, sessionTasks, event)}
+                            {/* Operational note for this session: OT, reminders, venue instructions */}
+                            {session.note && (
+                              <div className="flex items-start gap-2.5 rounded-xl border-l-4 border-amber-400 bg-amber-50 px-3.5 py-2.5 dark:border-amber-500 dark:bg-amber-950/40">
+                                <Megaphone className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                                <div className="min-w-0">
+                                  <p className="text-[0.62rem] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                                    {t('sessions.sessionNote')}
+                                  </p>
+                                  <p className="mt-0.5 whitespace-pre-line break-words text-sm font-semibold leading-relaxed text-amber-900 dark:text-amber-100">
+                                    {session.note}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
                             {panels}
                           </div>
                         );

@@ -10,6 +10,7 @@ export function useTaskMutations(eventId?: string) {
     queryClient.invalidateQueries({ queryKey: ['events'] });
     queryClient.invalidateQueries({ queryKey: ['my-tasks'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    queryClient.invalidateQueries({ queryKey: ['display'] });
     if (eventId) queryClient.invalidateQueries({ queryKey: ['events', 'detail', eventId] });
   };
 

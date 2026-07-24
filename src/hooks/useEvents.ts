@@ -82,6 +82,7 @@ export function useEventMutations() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['events'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    queryClient.invalidateQueries({ queryKey: ['display'] });
   };
 
   const createEvent = useMutation({

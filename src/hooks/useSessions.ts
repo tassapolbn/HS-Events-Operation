@@ -9,6 +9,7 @@ export function useSessionMutations(eventId: string) {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['events', 'detail', eventId] });
     queryClient.invalidateQueries({ queryKey: ['events'] });
+    queryClient.invalidateQueries({ queryKey: ['display'] });
   };
 
   const createSession = useMutation({

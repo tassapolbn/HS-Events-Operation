@@ -77,6 +77,8 @@ export interface EventSession {
   end_time: string | null;
   /** Optional free text timing, e.g. "after school time". Shown beside the times. */
   time_note: string;
+  /** Optional multi line operational note shown under the session (OT, reminders). */
+  note: string;
   sort_order: number;
 }
 
@@ -248,6 +250,8 @@ export interface DisplaySession {
   end_time: string | null;
   /** Optional free text timing, e.g. "after school time". Shown beside the times. */
   time_note: string;
+  /** Optional multi line operational note shown under the session (OT, reminders). */
+  note: string;
   sort_order: number;
 }
 

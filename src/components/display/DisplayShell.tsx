@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CalendarDays, Globe, Inbox, RefreshCw, Type } from 'lucide-react';
+import { CalendarDays, Globe, Inbox, Pencil, RefreshCw, Type } from 'lucide-react';
 import { useLanguage } from '../../i18n';
 import { departmentIcon } from '../../lib/constants';
 import { cn } from '../../lib/utils';
@@ -21,13 +21,17 @@ interface DisplayShellProps {
   onRefresh: () => void;
   refreshing?: boolean;
   updatedAt?: Date | null;
+  /** Signed-in events team only: reveal the edit board toggle */
+  canEdit?: boolean;
+  editMode?: boolean;
+  onEditModeChange?: (on: boolean) => void;
   children: ReactNode;
 }
 
 /** Light, modern frame for the public display board: TVs, monitors and tablets */
 export function DisplayShell({
   tab, onTabChange, scale, onScaleChange, departments, selectedDepartmentId,
-  onSelectDepartment, onRefresh, refreshing, updatedAt, children
+  onSelectDepartment, onRefresh, refreshing, updatedAt, canEdit, editMode, onEditModeChange, children
 }: DisplayShellProps) {
   const { t, lang, setLang, deptName } = useLanguage();
   const [now, setNow] = useState(new Date());
@@ -102,6 +106,19 @@ export function DisplayShell({
           </div>
 
           <div className="flex items-center gap-1.5">
+            {canEdit && (
+              <button
+                onClick={() => onEditModeChange?.(!editMode)}
+                aria-pressed={editMode}
+                title={t('display.editBoard')}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition-all hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
+                  editMode ? 'bg-gold-400 text-navy-900 shadow-sm' : 'bg-white/10 text-white hover:bg-white/20'
+                )}
+              >
+                <Pencil className="h-4 w-4" /> <span className="hidden lg:inline">{t('display.editBoard')}</span>
+              </button>
+            )}
             <button
               onClick={() => setLang(lang === 'en' ? 'th' : 'en')}
               className="flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold text-white transition-all hover:scale-105 hover:bg-white/20"

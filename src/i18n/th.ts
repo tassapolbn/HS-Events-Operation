@@ -213,7 +213,9 @@ export const th: Dict = {
     sessionTitle: 'ชื่อ Session (ไม่บังคับ)',
     hint: 'Session คือช่วงหนึ่งของกิจกรรม เช่น วัน สถานที่ หรือช่วงเวลาที่ต่างกัน',
     generalTasks: 'งานรวมของทั้งกิจกรรม',
-    whole: 'ทั้งกิจกรรม'
+    whole: 'ทั้งกิจกรรม',
+    sessionNote: 'หมายเหตุของ Session',
+    sessionNoteHint: 'ไม่บังคับ แสดงบนบอร์ดใต้ Session นี้ สำหรับ OT การแจ้งเตือน หรือหมายเหตุสถานที่'
   },
   displaySize: {
     label: 'ขนาดการแสดงผล',
@@ -249,7 +251,14 @@ export const th: Dict = {
     yourQuestion: 'คำถามของคุณ',
     questionPlaceholder: 'ตัวอย่าง: ควรใช้ประตูไหนในการขนโต๊ะเข้าไป',
     questionSent: 'ส่งคำถามเรียบร้อยแล้ว',
-    questionSentHint: 'ทีมงานกิจกรรมได้รับแจ้งแล้ว และจะติดต่อกลับไปยังแผนกของคุณ'
+    questionSentHint: 'ทีมงานกิจกรรมได้รับแจ้งแล้ว และจะติดต่อกลับไปยังแผนกของคุณ',
+    combinedHint: 'แสดงทุกอย่างของแผนกนี้: งานกิจกรรมและงานที่แจ้งไว้ในหน้าเดียว',
+    eventWork: 'งานกิจกรรม',
+    deptRequests: 'งานที่แจ้งของแผนก',
+    noDeptEvents: 'ยังไม่มีงานกิจกรรมสำหรับแผนกนี้',
+    noDeptRequests: 'ไม่มีงานค้างสำหรับแผนกนี้',
+    editBoard: 'แก้ไขบอร์ด',
+    openFullEditor: 'เปิดหน้าแก้ไขแบบเต็ม'
   },
   boardStatus: {
     upcoming: 'กำลังจะถึง',

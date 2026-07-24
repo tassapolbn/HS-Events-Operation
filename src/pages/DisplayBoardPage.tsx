@@ -1,12 +1,19 @@
-import { useEffect, useState } from 'react';
-import {
-  useDisplayDepartments, useDisplayEvents, useDisplayRequests
-} from '../hooks/usePublicDisplay';
+import { useEffect, useState, type ComponentType } from 'react';
+import { CalendarDays, Inbox } from 'lucide-react';
+import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../hooks/usePublicDisplay';
 import { DisplayShell, type DisplayScale, type DisplayTab } from '../components/display/DisplayShell';
 import { EventsBoard } from '../components/display/EventsBoard';
 import { RequestsBoard } from '../components/display/RequestsBoard';
+import { EventEditModal } from '../components/display/EventEditModal';
+import { TaskEditModal } from '../components/display/TaskEditModal';
+import { SessionFormModal } from '../components/events/SessionFormModal';
+import { EmptyState } from '../components/ui/EmptyState';
+import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../i18n';
+import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask, EventSession } from '../types';
 
 const SCALE_KEY = 'eventops.display.scale';
+const EDIT_KEY = 'eventops.display.editMode';
 const SCALE_FONT: Record<DisplayScale, string> = {
   small: '13px',
   medium: '16px',
@@ -14,14 +21,62 @@ const SCALE_FONT: Record<DisplayScale, string> = {
   xlarge: '21px'
 };
 
+type EditTarget =
+  | { kind: 'event'; event: DisplayEvent }
+  | { kind: 'session'; event: DisplayEvent; session: DisplaySession }
+  | { kind: 'task'; event: DisplayEvent; task: DisplayTask };
+
+/** Heading above each panel in the combined department view. */
+function PanelHeading({
+  icon: Icon,
+  title,
+  department
+}: {
+  icon: ComponentType<{ className?: string }>;
+  title: string;
+  department: DisplayDepartment | null;
+}) {
+  const { deptName } = useLanguage();
+  const color = department?.color ?? '#1a3c5e';
+  return (
+    <div className="mb-3 flex items-center gap-2.5">
+      <span
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+        style={{ backgroundColor: `${color}1a`, color }}
+      >
+        <Icon className="h-5 w-5" />
+      </span>
+      <div className="min-w-0">
+        {department && (
+          <p className="truncate text-[0.65rem] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+            {deptName(department)}
+          </p>
+        )}
+        <h2 className="truncate text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">{title}</h2>
+      </div>
+    </div>
+  );
+}
+
 /** Public display board with Events / Department Requests tabs. No login required. */
 export function DisplayBoardPage({ initialTab = 'events' }: { initialTab?: DisplayTab }) {
+  const { t } = useLanguage();
+  const { isEventsTeam } = useAuth();
   const [tab, setTab] = useState<DisplayTab>(initialTab);
   const [selectedDept, setSelectedDept] = useState('');
   const [scale, setScale] = useState<DisplayScale>(() => {
     const saved = localStorage.getItem(SCALE_KEY);
     return saved === 'small' || saved === 'large' || saved === 'xlarge' ? saved : 'medium';
   });
+
+  // Live editing, only ever active for a signed-in events-team member
+  const [editMode, setEditMode] = useState(() => localStorage.getItem(EDIT_KEY) === '1');
+  const [editing, setEditing] = useState<EditTarget | null>(null);
+  const closeEditor = () => setEditing(null);
+
+  useEffect(() => {
+    localStorage.setItem(EDIT_KEY, editMode ? '1' : '0');
+  }, [editMode]);
 
   // The whole board is sized in rem units, so scaling the root font size
   // scales text, cards, icons, badges and spacing together.
@@ -37,7 +92,28 @@ export function DisplayBoardPage({ initialTab = 'events' }: { initialTab?: Displ
   const eventsQuery = useDisplayEvents();
   const requestsQuery = useDisplayRequests();
 
+  const departmentList = departments ?? [];
   const active = tab === 'events' ? eventsQuery : requestsQuery;
+
+  const canEdit = isEventsTeam;
+  const boardEditMode = canEdit && editMode;
+  const editProps = {
+    editMode: boardEditMode,
+    onEditEvent: (event: DisplayEvent) => setEditing({ kind: 'event', event }),
+    onEditSession: (event: DisplayEvent, session: DisplaySession) => setEditing({ kind: 'session', event, session }),
+    onEditTask: (event: DisplayEvent, task: DisplayTask) => setEditing({ kind: 'task', event, task })
+  };
+
+  // Selecting a department shows its event work and its requests side by side,
+  // so requests that live on a separate tab are no longer overlooked.
+  const combined = Boolean(selectedDept);
+  const selectedDepartment = departmentList.find((d) => d.id === selectedDept) ?? null;
+  const hasDeptEventWork = (eventsQuery.data ?? []).some((ev) =>
+    ev.tasks.some((task) => task.department_id === selectedDept)
+  );
+
+  const sessionForModal: EventSession | null =
+    editing?.kind === 'session' ? { ...editing.session, event_id: editing.event.id } : null;
 
   return (
     <DisplayShell
@@ -45,7 +121,7 @@ export function DisplayBoardPage({ initialTab = 'events' }: { initialTab?: Displ
       onTabChange={setTab}
       scale={scale}
       onScaleChange={setScale}
-      departments={departments ?? []}
+      departments={departmentList}
       selectedDepartmentId={selectedDept}
       onSelectDepartment={setSelectedDept}
       onRefresh={() => {
@@ -54,22 +130,77 @@ export function DisplayBoardPage({ initialTab = 'events' }: { initialTab?: Displ
       }}
       refreshing={active.isFetching}
       updatedAt={active.dataUpdatedAt ? new Date(active.dataUpdatedAt) : null}
+      canEdit={canEdit}
+      editMode={editMode}
+      onEditModeChange={setEditMode}
     >
-      {tab === 'events' ? (
+      {combined ? (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('display.combinedHint')}</p>
+          <div className="grid gap-6 xl:grid-cols-5">
+            <section className="min-w-0 xl:col-span-3">
+              <PanelHeading icon={CalendarDays} title={t('display.eventWork')} department={selectedDepartment} />
+              {eventsQuery.isLoading || hasDeptEventWork ? (
+                <EventsBoard
+                  events={eventsQuery.data}
+                  departments={departmentList}
+                  selectedDept={selectedDept}
+                  isLoading={eventsQuery.isLoading}
+                  {...editProps}
+                />
+              ) : (
+                <EmptyState icon={CalendarDays} message={t('display.noDeptEvents')} />
+              )}
+            </section>
+            <section className="min-w-0 xl:col-span-2">
+              <PanelHeading icon={Inbox} title={t('display.deptRequests')} department={selectedDepartment} />
+              <RequestsBoard
+                requests={requestsQuery.data}
+                departments={departmentList}
+                selectedDept={selectedDept}
+                isLoading={requestsQuery.isLoading}
+              />
+            </section>
+          </div>
+        </div>
+      ) : tab === 'events' ? (
         <EventsBoard
           events={eventsQuery.data}
-          departments={departments ?? []}
+          departments={departmentList}
           selectedDept={selectedDept}
           isLoading={eventsQuery.isLoading}
+          {...editProps}
         />
       ) : (
         <RequestsBoard
           requests={requestsQuery.data}
-          departments={departments ?? []}
+          departments={departmentList}
           selectedDept={selectedDept}
           isLoading={requestsQuery.isLoading}
         />
       )}
+
+      {/* Live editing dialogs, only reachable by a signed-in events-team member */}
+      <EventEditModal
+        open={editing?.kind === 'event'}
+        onClose={closeEditor}
+        event={editing?.kind === 'event' ? editing.event : null}
+      />
+      <SessionFormModal
+        open={editing?.kind === 'session'}
+        onClose={closeEditor}
+        eventId={editing?.event.id ?? ''}
+        eventDate={editing?.event.event_date ?? ''}
+        session={sessionForModal}
+        nextSortOrder={editing?.kind === 'session' ? editing.session.sort_order : 0}
+      />
+      <TaskEditModal
+        open={editing?.kind === 'task'}
+        onClose={closeEditor}
+        event={editing?.kind === 'task' ? editing.event : null}
+        task={editing?.kind === 'task' ? editing.task : null}
+        departments={departmentList}
+      />
     </DisplayShell>
   );
 }
