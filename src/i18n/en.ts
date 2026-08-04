@@ -256,7 +256,9 @@ export const en = {
     noDeptEvents: 'No event tasks for this department right now.',
     noDeptRequests: 'No open requests for this department.',
     editBoard: 'Edit board',
-    openFullEditor: 'Open full editor'
+    openFullEditor: 'Open full editor',
+    pickCampus: 'Choose a campus board',
+    openBoard: 'Open board'
   },
   boardStatus: {
     upcoming: 'Upcoming',

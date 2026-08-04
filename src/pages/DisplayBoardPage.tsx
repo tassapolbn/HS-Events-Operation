@@ -10,7 +10,8 @@ import { SessionFormModal } from '../components/events/SessionFormModal';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../i18n';
-import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask, EventSession } from '../types';
+import { CAMPUS_NAMES } from '../lib/constants';
+import type { Campus, DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask, EventSession } from '../types';
 
 const SCALE_KEY = 'eventops.display.scale';
 const EDIT_KEY = 'eventops.display.editMode';
@@ -59,7 +60,13 @@ function PanelHeading({
 }
 
 /** Public display board with Events / Department Requests tabs. No login required. */
-export function DisplayBoardPage({ initialTab = 'events' }: { initialTab?: DisplayTab }) {
+export function DisplayBoardPage({
+  initialTab = 'events',
+  campus
+}: {
+  initialTab?: DisplayTab;
+  campus?: Campus;
+}) {
   const { t } = useLanguage();
   const { isEventsTeam } = useAuth();
   const [tab, setTab] = useState<DisplayTab>(initialTab);
@@ -89,8 +96,8 @@ export function DisplayBoardPage({ initialTab = 'events' }: { initialTab?: Displ
   }, [scale]);
 
   const { data: departments } = useDisplayDepartments();
-  const eventsQuery = useDisplayEvents();
-  const requestsQuery = useDisplayRequests();
+  const eventsQuery = useDisplayEvents(campus);
+  const requestsQuery = useDisplayRequests(campus);
 
   const departmentList = departments ?? [];
   const active = tab === 'events' ? eventsQuery : requestsQuery;
@@ -133,6 +140,7 @@ export function DisplayBoardPage({ initialTab = 'events' }: { initialTab?: Displ
       canEdit={canEdit}
       editMode={editMode}
       onEditModeChange={setEditMode}
+      campusName={campus ? CAMPUS_NAMES[campus] : undefined}
     >
       {combined ? (
         <div className="space-y-4">

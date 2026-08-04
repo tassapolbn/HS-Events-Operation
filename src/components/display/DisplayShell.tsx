@@ -25,13 +25,15 @@ interface DisplayShellProps {
   canEdit?: boolean;
   editMode?: boolean;
   onEditModeChange?: (on: boolean) => void;
+  /** Campus name shown in the header, so a wall screen states which campus it is */
+  campusName?: string;
   children: ReactNode;
 }
 
 /** Light, modern frame for the public display board: TVs, monitors and tablets */
 export function DisplayShell({
   tab, onTabChange, scale, onScaleChange, departments, selectedDepartmentId,
-  onSelectDepartment, onRefresh, refreshing, updatedAt, canEdit, editMode, onEditModeChange, children
+  onSelectDepartment, onRefresh, refreshing, updatedAt, canEdit, editMode, onEditModeChange, campusName, children
 }: DisplayShellProps) {
   const { t, lang, setLang, deptName } = useLanguage();
   const [now, setNow] = useState(new Date());
@@ -60,7 +62,9 @@ export function DisplayShell({
           <img src="/logo-landscape-dark.png" alt="HeadStart International School" className="h-10 w-auto object-contain" />
           <div className="min-w-0">
             <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-gold-400">{t('app.school')}</p>
-            <h1 className="text-lg font-extrabold tracking-tight text-white">{t('display.boardTitle')}</h1>
+            <h1 className="text-lg font-extrabold tracking-tight text-white">
+              {campusName || t('display.boardTitle')}
+            </h1>
           </div>
 
           {/* Tabs */}

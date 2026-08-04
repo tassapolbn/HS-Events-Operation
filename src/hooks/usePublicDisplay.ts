@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import type { DisplayDepartment, DisplayEvent, DisplayRequest, TaskStatus } from '../types';
+import type { Campus, DisplayDepartment, DisplayEvent, DisplayRequest, TaskStatus } from '../types';
 
 const REFRESH_MS = 30_000;
 
@@ -31,13 +31,13 @@ function eventLastDate(event: DisplayEvent): string {
   return last;
 }
 
-export function useDisplayEvents() {
+export function useDisplayEvents(campus?: Campus) {
   return useQuery({
-    queryKey: ['display', 'events'],
+    queryKey: ['display', 'events', campus ?? 'all'],
     refetchInterval: REFRESH_MS,
     refetchIntervalInBackground: true,
     queryFn: async (): Promise<DisplayEvent[]> => {
-      const { data, error } = await supabase.rpc('public_display_events');
+      const { data, error } = await supabase.rpc('public_display_events', campus ? { p_campus: campus } : {});
       if (error) throw error;
       const events = (data ?? []) as DisplayEvent[];
       // Drop events once their last scheduled day has passed, so the board
@@ -48,13 +48,13 @@ export function useDisplayEvents() {
   });
 }
 
-export function useDisplayRequests() {
+export function useDisplayRequests(campus?: Campus) {
   return useQuery({
-    queryKey: ['display', 'requests'],
+    queryKey: ['display', 'requests', campus ?? 'all'],
     refetchInterval: REFRESH_MS,
     refetchIntervalInBackground: true,
     queryFn: async (): Promise<DisplayRequest[]> => {
-      const { data, error } = await supabase.rpc('public_display_requests');
+      const { data, error } = await supabase.rpc('public_display_requests', campus ? { p_campus: campus } : {});
       if (error) throw error;
       return (data ?? []) as DisplayRequest[];
     }
@@ -90,25 +90,43 @@ export function useAskDisplayQuestion() {
 export function useToggleDisplayTask() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ taskId, done }: { taskId: string; done: boolean }) => {
-      const { error } = await supabase.rpc('public_toggle_task', { p_task_id: taskId, p_done: done });
+    mutationFn: async ({ taskId, done, name }: { taskId: string; done: boolean; name?: string }) => {
+      const { error } = await supabase.rpc('public_toggle_task', {
+        p_task_id: taskId,
+        p_done: done,
+        p_name: name ?? ''
+      });
       if (error) throw error;
     },
-    onMutate: async ({ taskId, done }) => {
+    onMutate: async ({ taskId, done, name }) => {
       await queryClient.cancelQueries({ queryKey: ['display', 'events'] });
-      const previous = queryClient.getQueryData<DisplayEvent[]>(['display', 'events']);
-      queryClient.setQueryData<DisplayEvent[]>(['display', 'events'], (old) =>
+      const previous = queryClient.getQueriesData<DisplayEvent[]>({ queryKey: ['display', 'events'] });
+      queryClient.setQueriesData<DisplayEvent[]>({ queryKey: ['display', 'events'] }, (old) =>
         (old ?? []).map((event) => ({
           ...event,
           tasks: event.tasks.map((task) =>
-            task.id === taskId ? { ...task, status: done ? 'completed' : 'not_started' } : task
+            task.id === taskId
+              ? { ...task, status: done ? 'completed' : 'not_started', completed_by: done ? name ?? '' : '' }
+              : task
           )
         }))
       );
       return { previous };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(['display', 'events'], context.previous);
+      context?.previous?.forEach(([key, data]) => queryClient.setQueryData(key, data));
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['display', 'events'] })
+  });
+}
+
+/** Acknowledge a task from the board with the reader's name (no login). */
+export function useAcknowledgeDisplayTask() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ taskId, name }: { taskId: string; name: string }) => {
+      const { error } = await supabase.rpc('public_acknowledge_task', { p_task_id: taskId, p_name: name });
+      if (error) throw error;
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['display', 'events'] })
   });
@@ -118,23 +136,33 @@ export function useToggleDisplayTask() {
 export function useSetDisplayRequestStatus() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async ({ requestId, status }: { requestId: string; status: TaskStatus }) => {
+    mutationFn: async ({ requestId, status, name }: { requestId: string; status: TaskStatus; name?: string }) => {
       const { error } = await supabase.rpc('public_set_request_status', {
         p_request_id: requestId,
-        p_status: status
+        p_status: status,
+        p_name: name ?? ''
       });
       if (error) throw error;
     },
-    onMutate: async ({ requestId, status }) => {
+    onMutate: async ({ requestId, status, name }) => {
       await queryClient.cancelQueries({ queryKey: ['display', 'requests'] });
-      const previous = queryClient.getQueryData<DisplayRequest[]>(['display', 'requests']);
-      queryClient.setQueryData<DisplayRequest[]>(['display', 'requests'], (old) =>
-        (old ?? []).map((request) => (request.id === requestId ? { ...request, status } : request))
+      const previous = queryClient.getQueriesData<DisplayRequest[]>({ queryKey: ['display', 'requests'] });
+      queryClient.setQueriesData<DisplayRequest[]>({ queryKey: ['display', 'requests'] }, (old) =>
+        (old ?? []).map((request) =>
+          request.id === requestId
+            ? {
+                ...request,
+                status,
+                completed_by: status === 'completed' ? name ?? '' : request.completed_by,
+                acknowledged_by: status === 'acknowledged' ? name ?? '' : request.acknowledged_by
+              }
+            : request
+        )
       );
       return { previous };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) queryClient.setQueryData(['display', 'requests'], context.previous);
+      context?.previous?.forEach(([key, data]) => queryClient.setQueryData(key, data));
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ['display', 'requests'] })
   });

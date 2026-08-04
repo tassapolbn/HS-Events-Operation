@@ -35,10 +35,13 @@ export interface Profile {
   is_active: boolean;
 }
 
+export type Campus = 'HSC' | 'HSN';
+
 export interface EventRow {
   id: string;
   name: string;
   category: string;
+  campus: Campus;
   event_date: string;
   location: string;
   setup_start: string | null;
@@ -268,6 +271,9 @@ export interface DisplayTask {
   completion_time: string | null;
   status: TaskStatus;
   notes: string;
+  completed_by: string;
+  acknowledged_by: string;
+  acknowledged_at: string | null;
   attachments: DisplayAttachment[];
 }
 
@@ -275,6 +281,7 @@ export interface DisplayEvent {
   id: string;
   name: string;
   category: string;
+  campus: Campus;
   event_date: string;
   location: string;
   setup_start: string | null;
@@ -303,15 +310,21 @@ export interface DisplayEvent {
 export interface DisplayRequest {
   id: string;
   department_id: string;
+  campus: Campus;
   title: string;
   reference: string;
   location: string;
   request_date: string;
   due_date: string | null;
+  setup_datetime: string | null;
+  teardown_datetime: string | null;
   priority: Priority;
   status: TaskStatus;
   description: string;
   notes: string;
+  completed_by: string;
+  acknowledged_by: string;
+  acknowledged_at: string | null;
   attachments: DisplayAttachment[];
 }
 

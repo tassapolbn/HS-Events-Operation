@@ -258,7 +258,9 @@ export const th: Dict = {
     noDeptEvents: 'ยังไม่มีงานกิจกรรมสำหรับแผนกนี้',
     noDeptRequests: 'ไม่มีงานค้างสำหรับแผนกนี้',
     editBoard: 'แก้ไขบอร์ด',
-    openFullEditor: 'เปิดหน้าแก้ไขแบบเต็ม'
+    openFullEditor: 'เปิดหน้าแก้ไขแบบเต็ม',
+    pickCampus: 'เลือกบอร์ดของวิทยาเขต',
+    openBoard: 'เปิดบอร์ด'
   },
   boardStatus: {
     upcoming: 'กำลังจะถึง',

@@ -19,6 +19,7 @@ import { TemplatesPage } from './pages/TemplatesPage';
 import { MyDepartmentPage } from './pages/MyDepartmentPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { DisplayBoardPage } from './pages/DisplayBoardPage';
+import { DisplayPickerPage } from './pages/DisplayPickerPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,10 +61,13 @@ export default function App() {
               <BrowserRouter>
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
-                  {/* Public display board: no sign in required */}
-                  <Route path="/display" element={<DisplayBoardPage />} />
-                  <Route path="/display/events" element={<DisplayBoardPage initialTab="events" />} />
-                  <Route path="/display/requests" element={<DisplayBoardPage initialTab="requests" />} />
+                  {/* Public display board: no sign in required. One board, per-campus links. */}
+                  <Route path="/display" element={<DisplayPickerPage />} />
+                  <Route path="/display/hsc" element={<DisplayBoardPage campus="HSC" />} />
+                  <Route path="/display/hsn" element={<DisplayBoardPage campus="HSN" />} />
+                  {/* Legacy links keep working */}
+                  <Route path="/display/events" element={<Navigate to="/display" replace />} />
+                  <Route path="/display/requests" element={<Navigate to="/display" replace />} />
                   <Route element={<RequireAuth />}>
                     <Route element={<AppLayout />}>
                       <Route path="/" element={<DashboardPage />} />

@@ -107,3 +107,10 @@ export const TIMELINE_FIELDS = [
 ] as const;
 
 export type TimelineField = (typeof TIMELINE_FIELDS)[number];
+
+/** Campus display names. Interim map; becomes editable in settings (Phase 4). */
+export const CAMPUSES = ['HSC', 'HSN'] as const;
+export const CAMPUS_NAMES: Record<string, string> = {
+  HSC: 'Chaofah City Campus',
+  HSN: 'Cherngtalay North Campus'
+};
