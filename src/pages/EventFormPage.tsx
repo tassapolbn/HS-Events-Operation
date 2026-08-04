@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import { useEvent, useEventMutations } from '../hooks/useEvents';
 import { useAuth } from '../contexts/AuthContext';
+import { useCampus } from '../contexts/CampusContext';
 import { useLanguage } from '../i18n';
 import { useToast } from '../components/ui/Toast';
 import { Button } from '../components/ui/Button';
@@ -11,10 +12,10 @@ import { Card, CardBody, CardHeader, CardTitle } from '../components/ui/Card';
 import { Input, Select } from '../components/ui/Input';
 import { RichTextEditor } from '../components/editor/RichTextEditor';
 import { Spinner } from '../components/ui/Spinner';
-import { EVENT_CATEGORIES, EVENT_STATUSES } from '../lib/constants';
+import { CAMPUSES, CAMPUS_NAMES, EVENT_CATEGORIES, EVENT_STATUSES } from '../lib/constants';
 import { combineDateTime, extractDate, extractTime } from '../lib/utils';
 import { supabase } from '../lib/supabase';
-import type { EventStatus } from '../types';
+import type { Campus, EventStatus } from '../types';
 
 const SCHEDULE_FIELDS = [
   { name: 'setup_start', label: 'events.setupStart' },
@@ -37,6 +38,7 @@ interface ScheduleSlot {
 interface EventFormValues {
   name: string;
   category: string;
+  campus: Campus;
   event_date: string;
   location: string;
   schedule: Record<ScheduleFieldName, ScheduleSlot>;
@@ -64,6 +66,7 @@ export function EventFormPage() {
   const { t } = useLanguage();
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { campusFilter } = useCampus();
   const { data: existing, isLoading } = useEvent(id);
   const { createEvent, updateEvent } = useEventMutations();
 
@@ -71,6 +74,7 @@ export function EventFormPage() {
     defaultValues: {
       name: '',
       category: 'general',
+      campus: campusFilter ?? 'HSC',
       event_date: '',
       location: '',
       schedule: emptySchedule(),
@@ -102,6 +106,7 @@ export function EventFormPage() {
       reset({
         name: existing.name,
         category: existing.category,
+        campus: existing.campus ?? 'HSC',
         event_date: existing.event_date,
         location: existing.location,
         schedule,
@@ -124,6 +129,7 @@ export function EventFormPage() {
     const payload = {
       name: values.name.trim(),
       category: values.category,
+      campus: values.campus,
       event_date: values.event_date,
       location: values.location.trim(),
       setup_start: milestone('setup_start'),
@@ -215,6 +221,9 @@ export function EventFormPage() {
             />
             <Select label={t('events.category')} {...register('category')}>
               {EVENT_CATEGORIES.map((c) => <option key={c} value={c}>{t(`categories.${c}`)}</option>)}
+            </Select>
+            <Select label={t('campus.label')} {...register('campus')}>
+              {CAMPUSES.map((c) => <option key={c} value={c}>{c} - {CAMPUS_NAMES[c]}</option>)}
             </Select>
             <Input
               label={t('events.eventDate')}

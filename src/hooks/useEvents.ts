@@ -10,6 +10,7 @@ export interface EventFilters {
   dateFrom?: string;
   dateTo?: string;
   staff?: string;
+  campus?: string;
 }
 
 export function useEvents(filters: EventFilters = {}) {
@@ -28,6 +29,7 @@ export function useEvents(filters: EventFilters = {}) {
       }
       if (filters.status) query = query.eq('status', filters.status);
       if (filters.priority) query = query.eq('priority', filters.priority);
+      if (filters.campus) query = query.eq('campus', filters.campus);
       if (filters.dateFrom) query = query.gte('event_date', filters.dateFrom);
       if (filters.dateTo) query = query.lte('event_date', filters.dateTo);
 

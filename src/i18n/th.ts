@@ -217,6 +217,11 @@ export const th: Dict = {
     sessionNote: 'หมายเหตุของ Session',
     sessionNoteHint: 'ไม่บังคับ แสดงบนบอร์ดใต้ Session นี้ สำหรับ OT การแจ้งเตือน หรือหมายเหตุสถานที่'
   },
+  campus: {
+    label: 'วิทยาเขต',
+    all: 'ทุกวิทยาเขต',
+    select: 'เลือกวิทยาเขต'
+  },
   displaySize: {
     label: 'ขนาดการแสดงผล',
     small: 'S',
@@ -289,7 +294,10 @@ export const th: Dict = {
     referencePhotos: 'รูปภาพประกอบ',
     referencePhotosHint: 'เพิ่มรูปของสิ่งของหรือจุดที่ต้องการ เช่น อุปกรณ์ที่ชำรุด หรือเฟอร์นิเจอร์ที่ต้องย้าย',
     addPhotos: 'เพิ่มรูปภาพ',
-    searchPlaceholder: 'ค้นหาจากหัวข้อ อ้างอิง หรือสถานที่...'
+    searchPlaceholder: 'ค้นหาจากหัวข้อ อ้างอิง หรือสถานที่...',
+    setupTime: 'เวลาเริ่มจัดเตรียม',
+    teardownTime: 'เวลาเก็บงาน',
+    teardownAfterSetup: 'เวลาเก็บงานต้องอยู่หลังเวลาเริ่มจัดเตรียม'
   },
   calendar: {
     title: 'ปฏิทิน',

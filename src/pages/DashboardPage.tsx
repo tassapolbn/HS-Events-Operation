@@ -6,6 +6,7 @@ import { useDashboard } from '../hooks/useDashboard';
 import { useDepartments } from '../hooks/useDepartments';
 import { useRecentActivity } from '../hooks/useAudit';
 import { useAuth } from '../contexts/AuthContext';
+import { useCampus } from '../contexts/CampusContext';
 import { useLanguage } from '../i18n';
 import { Button } from '../components/ui/Button';
 import { Card, CardBody, CardHeader, CardTitle } from '../components/ui/Card';
@@ -19,7 +20,8 @@ export function DashboardPage() {
   const { t, deptName, lang } = useLanguage();
   const { profile, isEventsTeam } = useAuth();
   const navigate = useNavigate();
-  const { data, isLoading } = useDashboard();
+  const { campusFilter } = useCampus();
+  const { data, isLoading } = useDashboard(campusFilter);
   const { data: departments } = useDepartments();
   const { data: activity } = useRecentActivity(8);
 

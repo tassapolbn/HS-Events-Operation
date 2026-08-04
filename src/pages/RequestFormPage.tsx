@@ -6,6 +6,7 @@ import { useRequest, useRequestMutations } from '../hooks/useRequests';
 import { useDepartments } from '../hooks/useDepartments';
 import { useAttachments, useAttachmentMutations } from '../hooks/useAttachments';
 import { useAuth } from '../contexts/AuthContext';
+import { useCampus } from '../contexts/CampusContext';
 import { useLanguage } from '../i18n';
 import { useToast } from '../components/ui/Toast';
 import { Button } from '../components/ui/Button';
@@ -13,19 +14,22 @@ import { Card, CardBody, CardHeader, CardTitle } from '../components/ui/Card';
 import { Input, Select } from '../components/ui/Input';
 import { RichTextEditor } from '../components/editor/RichTextEditor';
 import { Spinner } from '../components/ui/Spinner';
-import { PRIORITIES, REQUEST_STATUSES } from '../lib/constants';
+import { CAMPUSES, CAMPUS_NAMES, PRIORITIES, REQUEST_STATUSES } from '../lib/constants';
 import { supabase } from '../lib/supabase';
 import { getSignedUrl } from '../hooks/useAttachments';
-import { MAX_FILE_SIZE, randomId } from '../lib/utils';
-import type { Attachment, Priority, TaskStatus } from '../types';
+import { MAX_FILE_SIZE, fromDateTimeLocal, randomId, toDateTimeLocal } from '../lib/utils';
+import type { Attachment, Campus, Priority, TaskStatus } from '../types';
 
 interface RequestFormValues {
   department_id: string;
+  campus: Campus;
   title: string;
   reference: string;
   location: string;
   request_date: string;
   due_date: string;
+  setup_datetime: string;
+  teardown_datetime: string;
   priority: Priority;
   status: TaskStatus;
   description: string;
@@ -70,6 +74,7 @@ export function RequestFormPage() {
   const { t, deptName } = useLanguage();
   const { toast } = useToast();
   const { profile } = useAuth();
+  const { campusFilter } = useCampus();
   const { data: departments } = useDepartments();
   const { data: existing, isLoading } = useRequest(isEdit ? id : undefined);
   const { createRequest, updateRequest } = useRequestMutations();
@@ -84,14 +89,17 @@ export function RequestFormPage() {
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
 
-  const { register, handleSubmit, control, reset, formState } = useForm<RequestFormValues>({
+  const { register, handleSubmit, control, reset, setError, clearErrors, formState } = useForm<RequestFormValues>({
     defaultValues: {
       department_id: '',
+      campus: campusFilter ?? 'HSC',
       title: '',
       reference: '',
       location: '',
       request_date: new Date().toISOString().slice(0, 10),
       due_date: '',
+      setup_datetime: '',
+      teardown_datetime: '',
       priority: 'medium',
       status: 'new',
       description: '',
@@ -103,11 +111,14 @@ export function RequestFormPage() {
     if (existing && isEdit) {
       reset({
         department_id: existing.department_id,
+        campus: existing.campus ?? 'HSC',
         title: existing.title,
         reference: existing.reference,
         location: existing.location,
         request_date: existing.request_date,
         due_date: existing.due_date ?? '',
+        setup_datetime: toDateTimeLocal(existing.setup_datetime),
+        teardown_datetime: toDateTimeLocal(existing.teardown_datetime),
         priority: existing.priority,
         status: existing.status,
         description: existing.description,
@@ -167,14 +178,27 @@ export function RequestFormPage() {
   };
 
   const onSubmit = async (values: RequestFormValues) => {
+    // Teardown must come after setup when both are provided.
+    if (
+      values.setup_datetime &&
+      values.teardown_datetime &&
+      new Date(values.teardown_datetime).getTime() <= new Date(values.setup_datetime).getTime()
+    ) {
+      setError('teardown_datetime', { type: 'manual', message: t('requests.teardownAfterSetup') });
+      return;
+    }
+    clearErrors('teardown_datetime');
     setSaving(true);
     const payload = {
       department_id: values.department_id,
+      campus: values.campus,
       title: values.title.trim(),
       reference: values.reference.trim(),
       location: values.location.trim(),
       request_date: values.request_date,
       due_date: values.due_date || null,
+      setup_datetime: fromDateTimeLocal(values.setup_datetime),
+      teardown_datetime: fromDateTimeLocal(values.teardown_datetime),
       priority: values.priority,
       status: values.status,
       description: values.description,
@@ -227,6 +251,9 @@ export function RequestFormPage() {
               <option value="">{t('requests.selectDepartment')}</option>
               {(departments ?? []).map((d) => <option key={d.id} value={d.id}>{deptName(d)}</option>)}
             </Select>
+            <Select label={t('campus.label')} {...register('campus')} className="sm:col-span-2">
+              {CAMPUSES.map((c) => <option key={c} value={c}>{c} - {CAMPUS_NAMES[c]}</option>)}
+            </Select>
             <Input
               label={t('requests.requestTitle')}
               required
@@ -244,6 +271,17 @@ export function RequestFormPage() {
               {...register('request_date', { required: true })}
             />
             <Input label={t('requests.dueDate')} type="date" {...register('due_date')} />
+            <Input
+              label={`${t('requests.setupTime')} (${t('common.optional')})`}
+              type="datetime-local"
+              {...register('setup_datetime')}
+            />
+            <Input
+              label={`${t('requests.teardownTime')} (${t('common.optional')})`}
+              type="datetime-local"
+              error={formState.errors.teardown_datetime?.message}
+              {...register('teardown_datetime')}
+            />
             <Select label={t('common.priority')} {...register('priority')}>
               {PRIORITIES.map((p) => <option key={p} value={p}>{t(`priority.${p}`)}</option>)}
             </Select>

@@ -6,10 +6,12 @@ import { useDepartments } from '../hooks/useDepartments';
 import { useDebounce } from '../hooks/useDebounce';
 import { useLanguage } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
+import { useCampus } from '../contexts/CampusContext';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Input, Select } from '../components/ui/Input';
 import { PriorityBadge, TaskStatusBadge } from '../components/ui/Badge';
+import { CampusBadge } from '../components/ui/CampusBadge';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { PRIORITIES, REQUEST_STATUSES, departmentIcon } from '../lib/constants';
@@ -18,6 +20,7 @@ import { formatDate } from '../lib/utils';
 export function RequestsPage() {
   const { t, deptName, lang } = useLanguage();
   const { isEventsTeam } = useAuth();
+  const { campusFilter } = useCampus();
   const navigate = useNavigate();
   const { data: departments } = useDepartments();
 
@@ -37,9 +40,10 @@ export function RequestsPage() {
       status: status || undefined,
       priority: priority || undefined,
       dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined
+      dateTo: dateTo || undefined,
+      campus: campusFilter
     }),
-    [debouncedSearch, departmentId, status, priority, dateFrom, dateTo]
+    [debouncedSearch, departmentId, status, priority, dateFrom, dateTo, campusFilter]
   );
 
   const { data: requests, isLoading } = useRequests(filters);
@@ -135,6 +139,7 @@ export function RequestsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <CampusBadge campus={request.campus} />
                     <PriorityBadge priority={request.priority} />
                     <TaskStatusBadge status={request.status} />
                   </div>

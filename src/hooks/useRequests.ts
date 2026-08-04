@@ -9,6 +9,7 @@ export interface RequestFilters {
   priority?: string;
   dateFrom?: string;
   dateTo?: string;
+  campus?: string;
 }
 
 export function useRequests(filters: RequestFilters = {}) {
@@ -26,6 +27,7 @@ export function useRequests(filters: RequestFilters = {}) {
         if (s) query = query.or(`title.ilike.%${s}%,reference.ilike.%${s}%,location.ilike.%${s}%`);
       }
       if (filters.departmentId) query = query.eq('department_id', filters.departmentId);
+      if (filters.campus) query = query.eq('campus', filters.campus);
       if (filters.status) query = query.eq('status', filters.status);
       if (filters.priority) query = query.eq('priority', filters.priority);
       if (filters.dateFrom) query = query.gte('request_date', filters.dateFrom);

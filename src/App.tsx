@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { CampusProvider } from './contexts/CampusContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { LanguageProvider } from './i18n';
 import { ToastProvider } from './components/ui/Toast';
@@ -57,6 +58,7 @@ export default function App() {
       <ThemeProvider>
         <LanguageProvider>
           <AuthProvider>
+            <CampusProvider>
             <ToastProvider>
               <BrowserRouter>
                 <Routes>
@@ -90,6 +92,7 @@ export default function App() {
                 </Routes>
               </BrowserRouter>
             </ToastProvider>
+            </CampusProvider>
           </AuthProvider>
         </LanguageProvider>
       </ThemeProvider>

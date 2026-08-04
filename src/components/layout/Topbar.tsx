@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Globe, LogOut, Menu, Moon, Sun, Mail } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useCampus, type CampusFilter } from '../../contexts/CampusContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../i18n';
 import { useNotificationsFeed, useMarkNotificationsRead } from '../../hooks/useNotifications';
@@ -10,7 +11,9 @@ import { cn, formatDateTime } from '../../lib/utils';
 export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   const { profile, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
+  const { campus, setCampus } = useCampus();
   const { lang, setLang, t } = useLanguage();
+  const campusOptions: CampusFilter[] = ['ALL', 'HSC', 'HSN'];
   const navigate = useNavigate();
   const [notifOpen, setNotifOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -44,6 +47,29 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
         <Menu className="h-5 w-5" />
       </button>
       <div className="flex-1" />
+
+      {/* Campus switcher: filters every admin list. All manages both campuses. */}
+      <div
+        className="flex items-center rounded-xl bg-slate-100 p-0.5 dark:bg-slate-800"
+        role="group"
+        aria-label={t('campus.label')}
+      >
+        {campusOptions.map((c) => (
+          <button
+            key={c}
+            onClick={() => setCampus(c)}
+            aria-pressed={campus === c}
+            className={cn(
+              'rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500',
+              campus === c
+                ? 'bg-white text-navy-800 shadow-sm dark:bg-slate-900 dark:text-white'
+                : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
+            )}
+          >
+            {c === 'ALL' ? t('campus.all') : c}
+          </button>
+        ))}
+      </div>
 
       {/* Language toggle */}
       <button

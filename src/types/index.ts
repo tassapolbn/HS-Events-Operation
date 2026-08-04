@@ -121,12 +121,15 @@ export interface ChecklistItem {
 export interface DepartmentRequest {
   id: string;
   department_id: string;
+  campus: Campus;
   title: string;
   reference: string;
   head_responsible: string;
   location: string;
   request_date: string;
   due_date: string | null;
+  setup_datetime: string | null;
+  teardown_datetime: string | null;
   priority: Priority;
   status: TaskStatus;
   description: string;

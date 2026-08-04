@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Bell, CalendarDays, MapPin, Pencil, Trash2, User } from 'lucide-react';
+import { ArrowLeft, Bell, CalendarDays, Clock, MapPin, Pencil, Trash2, User } from 'lucide-react';
 import { useRequest, useRequestMutations } from '../hooks/useRequests';
 import { useDepartments } from '../hooks/useDepartments';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,7 +17,7 @@ import { NotifyModal } from '../components/events/NotifyModal';
 import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
 import { departmentIcon, REQUEST_STATUSES } from '../lib/constants';
-import { formatDate, isRichTextEmpty } from '../lib/utils';
+import { formatDate, formatDateTime, isRichTextEmpty } from '../lib/utils';
 import type { TaskStatus } from '../types';
 
 export function RequestDetailPage() {
@@ -125,6 +125,24 @@ export function RequestDetailPage() {
                 <div>
                   <p className="text-xs text-slate-400">{t('common.location')}</p>
                   <p className="font-medium">{request.location}</p>
+                </div>
+              </div>
+            )}
+            {request.setup_datetime && (
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-slate-400" />
+                <div>
+                  <p className="text-xs text-slate-400">{t('requests.setupTime')}</p>
+                  <p className="font-medium">{formatDateTime(request.setup_datetime, lang)}</p>
+                </div>
+              </div>
+            )}
+            {request.teardown_datetime && (
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-slate-400" />
+                <div>
+                  <p className="text-xs text-slate-400">{t('requests.teardownTime')}</p>
+                  <p className="font-medium">{formatDateTime(request.teardown_datetime, lang)}</p>
                 </div>
               </div>
             )}

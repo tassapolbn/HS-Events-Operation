@@ -8,6 +8,7 @@ import {
 import { enGB } from 'date-fns/locale/en-GB';
 import { th as thLocale } from 'date-fns/locale/th';
 import { useEvents } from '../hooks/useEvents';
+import { useCampus } from '../contexts/CampusContext';
 import { useLanguage } from '../i18n';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
@@ -27,6 +28,7 @@ const STATUS_DOT: Record<string, string> = {
 
 export function CalendarPage() {
   const { t, lang } = useLanguage();
+  const { campusFilter } = useCampus();
   const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>('month');
   const [cursor, setCursor] = useState(new Date());
@@ -47,7 +49,8 @@ export function CalendarPage() {
 
   const { data: events } = useEvents({
     dateFrom: format(range.from, 'yyyy-MM-dd'),
-    dateTo: format(range.to, 'yyyy-MM-dd')
+    dateTo: format(range.to, 'yyyy-MM-dd'),
+    campus: campusFilter
   });
 
   const eventsByDay = useMemo(() => {

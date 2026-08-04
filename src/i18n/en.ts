@@ -215,6 +215,11 @@ export const en = {
     sessionNote: 'Session note',
     sessionNoteHint: 'Optional. Shown on the board under this session, for OT, reminders or venue notes.'
   },
+  campus: {
+    label: 'Campus',
+    all: 'All campuses',
+    select: 'Select campus'
+  },
   displaySize: {
     label: 'Display size',
     small: 'S',
@@ -287,7 +292,10 @@ export const en = {
     referencePhotos: 'Reference Photos',
     referencePhotosHint: 'Add photos of the item or location, for example broken equipment or furniture to move',
     addPhotos: 'Add photos',
-    searchPlaceholder: 'Search by title, reference or location...'
+    searchPlaceholder: 'Search by title, reference or location...',
+    setupTime: 'Setup time',
+    teardownTime: 'Teardown time',
+    teardownAfterSetup: 'Teardown must be after setup'
   },
   calendar: {
     title: 'Calendar',
