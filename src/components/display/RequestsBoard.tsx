@@ -1,4 +1,5 @@
-import { CalendarDays, Check, Inbox, MapPin, Paperclip } from 'lucide-react';
+import { useState } from 'react';
+import { CalendarDays, Check, Inbox, MapPin, Paperclip, User } from 'lucide-react';
 import { useSetDisplayRequestStatus } from '../../hooks/usePublicDisplay';
 import { getSignedUrl } from '../../hooks/useAttachments';
 import { useLanguage } from '../../i18n';
@@ -15,11 +16,27 @@ interface RequestsBoardProps {
   departments: DisplayDepartment[];
   selectedDept: string;
   isLoading: boolean;
+  /**
+   * 'grid'  = square cards in a multi-column grid (the full Requests tab).
+   * 'list'  = one card per row, stacked in line (the side-by-side department view,
+   *           so requests match the event column on the left).
+   */
+  layout?: 'grid' | 'list';
 }
 
-export function RequestsBoard({ requests, departments, selectedDept, isLoading }: RequestsBoardProps) {
+/** Sort helper: soonest due date first, then anything without a due date. */
+function byDueDate(a: DisplayRequest, b: DisplayRequest): number {
+  if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
+  if (a.due_date) return -1;
+  if (b.due_date) return 1;
+  return 0;
+}
+
+export function RequestsBoard({ requests, departments, selectedDept, isLoading, layout = 'grid' }: RequestsBoardProps) {
   const { t, deptName, lang } = useLanguage();
   const setStatus = useSetDisplayRequestStatus();
+  // The name typed on each card, used when a status is set from the board.
+  const [names, setNames] = useState<Record<string, string>>({});
 
   const openFile = async (file: DisplayAttachment) => {
     try {
@@ -31,7 +48,11 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading }
   };
 
   if (isLoading) return <BoardSkeleton cards={2} />;
-  const visible = (requests ?? []).filter((request) => !selectedDept || request.department_id === selectedDept);
+  // Show the requests with the soonest deadline first, not the submission date.
+  const visible = (requests ?? [])
+    .filter((request) => !selectedDept || request.department_id === selectedDept)
+    .slice()
+    .sort(byDueDate);
   if (visible.length === 0) {
     return (
       <div className="mx-auto max-w-xl py-16">
@@ -41,11 +62,18 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading }
   }
 
   return (
-    <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3 2xl:gap-4">
+    <div
+      className={cn(
+        'grid items-start gap-3',
+        layout === 'list' ? 'grid-cols-1' : 'lg:grid-cols-2 2xl:grid-cols-3 2xl:gap-4'
+      )}
+    >
       {visible.map((request) => {
         const dept = departments.find((d) => d.id === request.department_id);
         const Icon = departmentIcon(dept?.icon ?? 'users');
         const completed = request.status === 'completed';
+        const signedName =
+          request.status === 'completed' ? request.completed_by : request.acknowledged_by;
         return (
           <article
             key={request.id}
@@ -124,18 +152,44 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading }
                 </div>
               )}
 
-              {/* Status buttons: tap to update, no login needed */}
+              {/* Status buttons: tap to update, tap the active one again to untick.
+                  The name box records who acknowledged or completed the request. */}
               <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
                 <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
                   {t('display.setStatus')}
                 </p>
+
+                {signedName && (
+                  <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    {completed ? t('display.completedBy') : t('display.acknowledgedBy')}: {signedName}
+                  </p>
+                )}
+
+                <div className="mb-2.5 flex items-center gap-2">
+                  <User className="h-4 w-4 shrink-0 text-slate-400" />
+                  <input
+                    value={names[request.id] ?? ''}
+                    onChange={(e) => setNames((prev) => ({ ...prev, [request.id]: e.target.value }))}
+                    placeholder={t('display.namePlaceholder')}
+                    aria-label={t('display.yourName')}
+                    className="w-full max-w-[16rem] rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                  />
+                </div>
+
                 <div className="flex flex-wrap gap-2">
                   {PUBLIC_REQUEST_STATUSES.map((status) => {
                     const active = request.status === status;
                     return (
                       <button
                         key={status}
-                        onClick={() => !active && setStatus.mutate({ requestId: request.id, status })}
+                        onClick={() =>
+                          setStatus.mutate({
+                            requestId: request.id,
+                            // Tapping the active status again reverts it to 'new'.
+                            status: active ? 'new' : status,
+                            name: (names[request.id] ?? '').trim()
+                          })
+                        }
                         className={cn(
                           'flex items-center gap-1.5 rounded-xl border-2 px-3 py-1.5 text-xs font-bold transition-all duration-150 hover:scale-105 active:scale-95 2xl:px-3.5 2xl:py-2 2xl:text-sm',
                           active

@@ -167,6 +167,7 @@ export function DisplayBoardPage({
                 departments={departmentList}
                 selectedDept={selectedDept}
                 isLoading={requestsQuery.isLoading}
+                layout="list"
               />
             </section>
           </div>

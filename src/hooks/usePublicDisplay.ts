@@ -153,8 +153,12 @@ export function useSetDisplayRequestStatus() {
             ? {
                 ...request,
                 status,
-                completed_by: status === 'completed' ? name ?? '' : request.completed_by,
-                acknowledged_by: status === 'acknowledged' ? name ?? '' : request.acknowledged_by
+                // Reverting to 'new' unticks the card and clears its sign-off.
+                completed_by:
+                  status === 'completed' ? name ?? '' : status === 'new' ? '' : request.completed_by,
+                acknowledged_by:
+                  status === 'acknowledged' ? name ?? '' : status === 'new' ? '' : request.acknowledged_by,
+                acknowledged_at: status === 'new' ? null : request.acknowledged_at
               }
             : request
         )

@@ -67,24 +67,6 @@ export function DisplayShell({
             </h1>
           </div>
 
-          {/* Tabs */}
-          <div className="flex rounded-2xl bg-white/10 p-1 backdrop-blur">
-            {tabs.map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => onTabChange(key)}
-                className={cn(
-                  'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-all duration-200',
-                  tab === key
-                    ? 'bg-gradient-to-r from-gold-400 to-gold-300 text-navy-900 shadow-md'
-                    : 'text-white/75 hover:bg-white/10 hover:text-white'
-                )}
-              >
-                <Icon className="h-4 w-4" /> {label}
-              </button>
-            ))}
-          </div>
-
           <div className="ml-auto hidden text-right sm:block">
             <p className="text-2xl font-extrabold tabular-nums tracking-tight text-white">{clock}</p>
             <p className="text-xs capitalize text-white/70">{dateLine}</p>
@@ -176,6 +158,33 @@ export function DisplayShell({
         </div>
         <div className="h-1 bg-gradient-to-r from-gold-400 via-gold-300/70 to-transparent" />
       </header>
+
+      {/* Primary view switch on its own bright band, so staff notice it and
+          understand they can flip between Events and Department Requests. */}
+      <div className="border-b border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 lg:px-8">
+          <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+            {t('display.chooseView')}
+          </span>
+          <div className="flex flex-1 gap-2 sm:flex-none">
+            {tabs.map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                onClick={() => onTabChange(key)}
+                aria-pressed={tab === key}
+                className={cn(
+                  'flex flex-1 items-center justify-center gap-2.5 rounded-xl px-6 py-3 text-base font-extrabold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 sm:flex-none sm:text-lg',
+                  tab === key
+                    ? 'bg-gradient-to-r from-navy-800 to-navy-600 text-white shadow-md'
+                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
+                )}
+              >
+                <Icon className="h-5 w-5" /> {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <main className="mx-auto max-w-[1800px] px-5 py-5 lg:px-8">{children}</main>
     </div>

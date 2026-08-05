@@ -265,7 +265,12 @@ export const th: Dict = {
     editBoard: 'แก้ไขบอร์ด',
     openFullEditor: 'เปิดหน้าแก้ไขแบบเต็ม',
     pickCampus: 'เลือกบอร์ดของวิทยาเขต',
-    openBoard: 'เปิดบอร์ด'
+    openBoard: 'เปิดบอร์ด',
+    chooseView: 'กำลังดู',
+    yourName: 'ชื่อของคุณ',
+    namePlaceholder: 'พิมพ์ชื่อของคุณ',
+    acknowledgedBy: 'รับทราบโดย',
+    completedBy: 'เสร็จโดย'
   },
   boardStatus: {
     upcoming: 'กำลังจะถึง',

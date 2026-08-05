@@ -263,7 +263,12 @@ export const en = {
     editBoard: 'Edit board',
     openFullEditor: 'Open full editor',
     pickCampus: 'Choose a campus board',
-    openBoard: 'Open board'
+    openBoard: 'Open board',
+    chooseView: 'Now viewing',
+    yourName: 'Your name',
+    namePlaceholder: 'Type your name',
+    acknowledgedBy: 'Acknowledged by',
+    completedBy: 'Completed by'
   },
   boardStatus: {
     upcoming: 'Upcoming',

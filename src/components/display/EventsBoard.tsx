@@ -14,6 +14,21 @@ import { categoryIcon, departmentIcon } from '../../lib/constants';
 import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty, readableTextColor } from '../../lib/utils';
 import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
 
+/**
+ * Distinct, deep gradients for session date bars. When one event runs across
+ * several dates, each date gets its own colour so staff never confuse one day
+ * with another. A single-date event keeps the default navy (index 0). All are
+ * dark enough for white text to stay readable.
+ */
+const SESSION_BAR_GRADIENTS = [
+  'linear-gradient(135deg, #0f2744 0%, #1a3c5e 55%, #2d5a87 100%)', // navy
+  'linear-gradient(135deg, #0f3d3e 0%, #115e59 55%, #0f766e 100%)', // teal
+  'linear-gradient(135deg, #3b1d4e 0%, #5b2a6e 55%, #7e3f9d 100%)', // plum
+  'linear-gradient(135deg, #14331f 0%, #166534 55%, #15803d 100%)', // forest
+  'linear-gradient(135deg, #3f1518 0%, #7f1d1d 55%, #b3341f 100%)', // brick
+  'linear-gradient(135deg, #1e1b4b 0%, #312e81 55%, #4f46e5 100%)'  // indigo
+];
+
 interface EventsBoardProps {
   events: DisplayEvent[] | undefined;
   departments: DisplayDepartment[];
@@ -221,10 +236,18 @@ export function EventsBoard({
   };
 
   /** A session states its own date, place and time once, above its panels. */
-  const sessionHeader = (session: DisplaySession, tasks: DisplayTask[], evt: DisplayEvent): ReactNode => {
+  const sessionHeader = (
+    session: DisplaySession,
+    tasks: DisplayTask[],
+    evt: DisplayEvent,
+    barGradient: string
+  ): ReactNode => {
     const done = tasks.filter((task) => task.status === 'completed').length;
     return (
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-gradient-to-r from-navy-900 via-navy-800 to-navy-600 px-4 py-3.5 text-white shadow-md">
+      <div
+        className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-4 py-3.5 text-white shadow-md"
+        style={{ backgroundImage: barGradient }}
+      >
         <span className="flex h-12 w-12 shrink-0 flex-col overflow-hidden rounded-lg bg-white shadow ring-1 ring-black/10">
           <span className="flex h-[1.1rem] items-center justify-center bg-gold-400 text-[0.55rem] font-extrabold uppercase tracking-wide text-navy-900">
             {formatDate(session.session_date, lang, 'MMM')}
@@ -395,6 +418,10 @@ export function EventsBoard({
         const sessions = event.sessions ?? [];
         const sessionIds = new Set(sessions.map((s) => s.id));
         const generalTasks = event.tasks.filter((task) => !task.session_id || !sessionIds.has(task.session_id));
+        // Give every distinct session date its own bar colour (stable order).
+        const sessionDateOrder = Array.from(new Set(sessions.map((s) => s.session_date)));
+        const barGradientFor = (date: string) =>
+          SESSION_BAR_GRADIENTS[Math.max(0, sessionDateOrder.indexOf(date)) % SESSION_BAR_GRADIENTS.length];
 
         return (
           <section
@@ -524,7 +551,7 @@ export function EventsBoard({
                             key={session.id}
                             className="space-y-4 rounded-2xl border border-navy-100 bg-slate-50 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40"
                           >
-                            {sessionHeader(session, sessionTasks, event)}
+                            {sessionHeader(session, sessionTasks, event, barGradientFor(session.session_date))}
                             {/* Operational note for this session: OT, reminders, venue instructions */}
                             {session.note && (
                               <div className="flex items-start gap-2.5 rounded-xl border-l-4 border-amber-400 bg-amber-50 px-3.5 py-2.5 dark:border-amber-500 dark:bg-amber-950/40">
