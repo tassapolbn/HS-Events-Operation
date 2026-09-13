@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
-  AlarmClock, CalendarDays, Check, ChevronDown, Clock, ListChecks, MapPin,
-  Megaphone, MessageCircleQuestion, Pencil, User
+  AlarmClock, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, Clock, LayoutList,
+  ListChecks, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, User
 } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { useLanguage } from '../../i18n';
@@ -11,7 +11,7 @@ import { AttachmentChips, EventBriefing, EventClosingBar, StatusBadge, boardStat
 import { BoardSkeleton } from './BoardSkeleton';
 import { AskQuestionModal } from './AskQuestionModal';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
-import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty, readableTextColor } from '../../lib/utils';
+import { cn, darkenColor, dayDiff, extractDate, formatDate, formatTime, isRichTextEmpty, readableTextColor } from '../../lib/utils';
 import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
 
 /**
@@ -28,6 +28,41 @@ const SESSION_BAR_GRADIENTS = [
   'linear-gradient(135deg, #3f1518 0%, #7f1d1d 55%, #b3341f 100%)', // brick
   'linear-gradient(135deg, #1e1b4b 0%, #312e81 55%, #4f46e5 100%)'  // indigo
 ];
+
+/**
+ * How the board reads. 'date' merges every event into one running order by
+ * session date, so a short event sitting between the days of a longer one
+ * cannot be scrolled past. 'event' keeps the original one card per event view.
+ */
+type BoardView = 'date' | 'event';
+
+const BOARD_VIEW_KEY = 'eventops.display.boardView';
+
+function readBoardView(): BoardView {
+  try {
+    return localStorage.getItem(BOARD_VIEW_KEY) === 'event' ? 'event' : 'date';
+  } catch {
+    return 'date';
+  }
+}
+
+/** One session (or the whole event block) shown under a day */
+interface TimelineBlock {
+  key: string;
+  session: DisplaySession | null;
+  tasks: DisplayTask[];
+}
+
+/** Everything one event has on one day */
+interface TimelineEventGroup {
+  event: DisplayEvent;
+  blocks: TimelineBlock[];
+}
+
+interface TimelineDay {
+  date: string;
+  groups: TimelineEventGroup[];
+}
 
 interface EventsBoardProps {
   events: DisplayEvent[] | undefined;
@@ -59,9 +94,21 @@ export function EventsBoard({
   const [highlighted, setHighlighted] = useState<string | null>(null);
   /** Which event the "Ask a question" dialog is open for */
   const [askEvent, setAskEvent] = useState<DisplayEvent | null>(null);
+  const [viewMode, setViewMode] = useState<BoardView>(readBoardView);
+  /** Past days start folded away; tapping the heading opens them again */
+  const [openPastDays, setOpenPastDays] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(BOARD_VIEW_KEY, viewMode);
+    } catch {
+      // Storage can be blocked on a shared display; the choice just lasts this visit
+    }
+  }, [viewMode]);
 
   /** Jump from an upcoming task card to its event: expand, scroll, flash */
   const goToEvent = (eventId: string) => {
+    setViewMode('event');
     setExpanded((prev) => new Set(prev).add(eventId));
     setHighlighted(eventId);
     window.setTimeout(() => {
@@ -332,8 +379,326 @@ export function EventsBoard({
     return null;
   };
 
+  // ---------- reading the board in date order ----------
+
+  const todayStr = formatDate(new Date(), 'en', 'yyyy-MM-dd');
+
+  /** Tasks of one event that the current department filter keeps */
+  const visibleTasks = (evt: DisplayEvent): DisplayTask[] =>
+    evt.tasks.filter((task) => !selectedDept || task.department_id === selectedDept);
+
+  /** Every date on which this event actually has work, earliest first */
+  const workDates = (evt: DisplayEvent): string[] => {
+    const tasks = visibleTasks(evt);
+    if (tasks.length === 0) return [];
+    const eventSessions = evt.sessions ?? [];
+    const ids = new Set(eventSessions.map((session) => session.id));
+    const dates = new Set<string>();
+    for (const session of eventSessions) {
+      if (tasks.some((task) => task.session_id === session.id)) dates.add(session.session_date);
+    }
+    if (tasks.some((task) => !task.session_id || !ids.has(task.session_id))) dates.add(evt.event_date);
+    return [...dates].sort();
+  };
+
+  /** Other events whose work falls inside this event's own run of dates */
+  const overlappingEvents = (evt: DisplayEvent): Array<{ event: DisplayEvent; dates: string[] }> => {
+    const range = workDates(evt);
+    // Only a run of two or more dates can have something slipped into the middle
+    if (range.length < 2) return [];
+    const first = range[0];
+    const last = range[range.length - 1];
+    return events
+      .filter((other) => other.id !== evt.id)
+      .map((other) => ({ event: other, dates: workDates(other).filter((d) => d >= first && d <= last) }))
+      .filter((entry) => entry.dates.length > 0);
+  };
+
+  /** Sort key: sessions without a clock time come last within their day */
+  const blockStart = (block: TimelineBlock) => block.session?.start_time ?? '~';
+
+  const buildTimeline = (): TimelineDay[] => {
+    const byDate = new Map<string, TimelineEventGroup[]>();
+    const add = (date: string, evt: DisplayEvent, block: TimelineBlock) => {
+      if (!date) return;
+      const groups = byDate.get(date) ?? [];
+      const existing = groups.find((group) => group.event.id === evt.id);
+      if (existing) existing.blocks.push(block);
+      else groups.push({ event: evt, blocks: [block] });
+      byDate.set(date, groups);
+    };
+
+    for (const evt of events) {
+      const tasks = visibleTasks(evt);
+      if (tasks.length === 0) continue;
+      const eventSessions = [...(evt.sessions ?? [])].sort(
+        (a, b) => a.session_date.localeCompare(b.session_date) || a.sort_order - b.sort_order
+      );
+      const ids = new Set(eventSessions.map((session) => session.id));
+
+      // Whole event work has no session date of its own, so it sits on the
+      // first day of the event that has not passed yet.
+      const general = tasks.filter((task) => !task.session_id || !ids.has(task.session_id));
+      if (general.length > 0) {
+        const dates = [evt.event_date, ...eventSessions.map((session) => session.session_date)]
+          .filter(Boolean)
+          .sort();
+        const date = dates.find((d) => d >= todayStr) ?? dates[0] ?? evt.event_date;
+        add(date, evt, { key: evt.id + '-general', session: null, tasks: general });
+      }
+
+      for (const session of eventSessions) {
+        const sessionTasks = tasks.filter((task) => task.session_id === session.id);
+        if (sessionTasks.length === 0) continue;
+        add(session.session_date, evt, { key: evt.id + '-' + session.id, session, tasks: sessionTasks });
+      }
+    }
+
+    return [...byDate.entries()]
+      .map(([date, groups]) => ({
+        date,
+        groups: groups
+          .map((group) => ({
+            ...group,
+            blocks: [...group.blocks].sort((a, b) => blockStart(a).localeCompare(blockStart(b)))
+          }))
+          .sort((a, b) => {
+            const ea = a.blocks.reduce((min, block) => (blockStart(block) < min ? blockStart(block) : min), '~~');
+            const eb = b.blocks.reduce((min, block) => (blockStart(block) < min ? blockStart(block) : min), '~~');
+            return ea.localeCompare(eb) || a.event.name.localeCompare(b.event.name);
+          })
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  };
+
+  const dayMeta = (date: string): { relative: string; past: boolean } => {
+    const diff = dayDiff(todayStr, date);
+    if (diff === 0) return { relative: t('display.today'), past: false };
+    if (diff === 1) return { relative: t('display.tomorrow'), past: false };
+    if (diff < 0) return { relative: t('display.pastDay'), past: true };
+    return { relative: lang === 'th' ? 'อีก ' + diff + ' วัน' : 'in ' + diff + ' days', past: false };
+  };
+
+  const togglePastDay = (date: string) => {
+    setOpenPastDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  };
+
+  /** Operational note a session carries: OT, reminders, venue instructions */
+  const sessionNoteBar = (session: DisplaySession): ReactNode => {
+    if (!session.note) return null;
+    return (
+      <div className="flex items-start gap-2.5 rounded-xl border-l-4 border-amber-400 bg-amber-50 px-3.5 py-2.5 dark:border-amber-500 dark:bg-amber-950/40">
+        <Megaphone className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="min-w-0">
+          <p className="text-[0.62rem] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+            {t('sessions.sessionNote')}
+          </p>
+          <p className="mt-0.5 whitespace-pre-line break-words text-sm font-semibold leading-relaxed text-amber-900 dark:text-amber-100">
+            {session.note}
+          </p>
+        </div>
+      </div>
+    );
+  };
+
+  /** One event's work on one day, inside the date ordered view */
+  const renderTimelineGroup = (date: string, group: TimelineEventGroup): ReactNode => {
+    const evt = group.event;
+    const headerColor = evt.header_color || '#1a3c5e';
+    const headerText = evt.header_text_color || '#ffffff';
+    const CategoryIcon = categoryIcon(evt.category);
+    const dates = workDates(evt);
+    const dayIndex = dates.indexOf(date) + 1;
+    const dateOrder = Array.from(new Set((evt.sessions ?? []).map((session) => session.session_date)));
+    const gradientFor = (sessionDate: string) =>
+      SESSION_BAR_GRADIENTS[Math.max(0, dateOrder.indexOf(sessionDate)) % SESSION_BAR_GRADIENTS.length];
+
+    return (
+      <div
+        key={date + '-' + evt.id}
+        data-timeline-event={evt.id}
+        className="overflow-hidden rounded-3xl border-2 bg-white shadow-[0_10px_28px_-16px_var(--event-glow)] dark:bg-slate-900"
+        style={{ '--event-glow': headerColor + '66', borderColor: headerColor + '80' } as React.CSSProperties}
+      >
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3"
+          style={{
+            background: 'linear-gradient(120deg, ' + headerColor + ' 0%, ' + darkenColor(headerColor, 0.82) + ' 100%)',
+            color: headerText
+          }}
+        >
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+            style={{ backgroundColor: headerText + '26' }}
+          >
+            <CategoryIcon className="h-5 w-5" />
+          </span>
+          <h3 className="min-w-0 truncate text-lg font-black tracking-tight" style={{ color: headerText }}>
+            {evt.name}
+          </h3>
+          <StatusBadge status={boardStatus(evt, nowMs)} />
+          {dates.length > 1 && (
+            <span
+              className="rounded-lg px-2.5 py-1 text-xs font-bold"
+              style={{ backgroundColor: headerText + '26' }}
+            >
+              {lang === 'th'
+                ? 'วันที่ ' + dayIndex + ' จาก ' + dates.length
+                : 'day ' + dayIndex + ' of ' + dates.length}
+            </span>
+          )}
+          <button
+            onClick={() => goToEvent(evt.id)}
+            title={t('display.openEvent')}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-bold transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            style={{ backgroundColor: headerText + '26', color: headerText }}
+          >
+            <span className="hidden sm:inline">{t('display.openEvent')}</span>
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="space-y-4 p-3 lg:p-4">
+          {group.blocks.map((block) => (
+            <div key={block.key} className="space-y-3">
+              {block.session ? (
+                <>
+                  {sessionHeader(block.session, block.tasks, evt, gradientFor(block.session.session_date))}
+                  {sessionNoteBar(block.session)}
+                </>
+              ) : (
+                <div className="flex items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 px-3.5 py-2.5 dark:border-slate-700 dark:bg-slate-800/30">
+                  <ListChecks className="h-5 w-5 shrink-0 text-slate-400" />
+                  <span className="text-base font-extrabold tracking-tight text-slate-500 dark:text-slate-300">
+                    {t('sessions.generalTasks')}
+                  </span>
+                </div>
+              )}
+              {renderPanels(block.tasks, evt)}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderTimeline = (): ReactNode => {
+    const days = buildTimeline();
+    if (days.length === 0) {
+      return (
+        <div className="mx-auto max-w-xl py-16">
+          <EmptyState icon={CalendarDays} message={t('display.noEvents')} />
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-7">
+        {days.map((day) => {
+          const { relative, past } = dayMeta(day.date);
+          const open = !past || openPastDays.has(day.date);
+          const taskCount = day.groups.reduce(
+            (sum, group) => sum + group.blocks.reduce((inner, block) => inner + block.tasks.length, 0),
+            0
+          );
+          return (
+            <section key={day.date} data-timeline-day={day.date} className="animate-slide-up">
+              <div
+                role={past ? 'button' : undefined}
+                tabIndex={past ? 0 : undefined}
+                aria-expanded={past ? open : undefined}
+                onClick={past ? () => togglePastDay(day.date) : undefined}
+                onKeyDown={
+                  past
+                    ? (e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          togglePastDay(day.date);
+                        }
+                      }
+                    : undefined
+                }
+                className={cn(
+                  'mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border px-4 py-3',
+                  past
+                    ? 'cursor-pointer border-slate-200 bg-slate-100 opacity-80 dark:border-slate-700 dark:bg-slate-800/60'
+                    : 'border-navy-200 bg-gradient-to-r from-navy-50 via-white to-white shadow-sm dark:border-navy-800 dark:from-navy-950/60 dark:via-slate-900 dark:to-slate-900'
+                )}
+              >
+                <span className="flex h-14 w-14 shrink-0 flex-col overflow-hidden rounded-xl bg-white shadow ring-1 ring-black/10">
+                  <span className="flex h-[1.2rem] items-center justify-center bg-navy-800 text-[0.6rem] font-extrabold uppercase tracking-wide text-white">
+                    {formatDate(day.date, lang, 'MMM')}
+                  </span>
+                  <span className="flex flex-1 items-center justify-center text-2xl font-black leading-none text-navy-900">
+                    {formatDate(day.date, lang, 'd')}
+                  </span>
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                    {formatDate(day.date, lang, 'EEEE d MMMM yyyy')}
+                  </p>
+                  <p
+                    className={cn(
+                      'mt-0.5 text-sm font-bold',
+                      past ? 'text-slate-400' : 'text-navy-600 dark:text-gold-400'
+                    )}
+                  >
+                    {relative}
+                  </p>
+                </div>
+                <span className="ml-auto flex items-center gap-2">
+                  <span className="rounded-full bg-white px-3 py-1 text-sm font-extrabold text-slate-600 shadow-sm dark:bg-slate-900 dark:text-slate-300">
+                    {day.groups.length} {t('display.eventsWord')} - {taskCount} {t('grid.tasksWord')}
+                  </span>
+                  {past && (
+                    <ChevronDown className={cn('h-5 w-5 text-slate-400 transition-transform', !open && '-rotate-90')} />
+                  )}
+                </span>
+              </div>
+              {open && <div className="space-y-4">{day.groups.map((group) => renderTimelineGroup(day.date, group))}</div>}
+            </section>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const viewToggle = (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex shrink-0 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        {([
+          ['date', CalendarRange, t('display.viewByDate')],
+          ['event', LayoutList, t('display.viewByEvent')]
+        ] as Array<[BoardView, typeof CalendarRange, string]>).map(([mode, Icon, label]) => (
+          <button
+            key={mode}
+            onClick={() => setViewMode(mode)}
+            aria-pressed={viewMode === mode}
+            className={cn(
+              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500',
+              viewMode === mode
+                ? 'bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900'
+                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
+            )}
+          >
+            <Icon className="h-4 w-4" /> {label}
+          </button>
+        ))}
+      </div>
+      {viewMode === 'date' && (
+        <p className="min-w-0 flex-1 text-sm text-slate-500 dark:text-slate-400">{t('display.dateViewHint')}</p>
+      )}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
+      {viewToggle}
+
       {upcoming.length > 0 && (
         <section className="animate-slide-up rounded-3xl border border-gold-200 bg-gradient-to-r from-gold-50 via-white to-white p-4 shadow-sm dark:border-gold-900 dark:from-gold-950/30 dark:via-slate-900 dark:to-slate-900">
           <div className="mb-3 flex items-center gap-2">
@@ -404,7 +769,9 @@ export function EventsBoard({
         </section>
       )}
 
-      {events.map((event) => {
+      {viewMode === 'date' && renderTimeline()}
+
+      {viewMode === 'event' && events.map((event) => {
         const isCollapsed = !expanded.has(event.id);
         const anyVisibleTask = event.tasks.some((task) => !selectedDept || task.department_id === selectedDept);
         if (selectedDept && !anyVisibleTask) return null;
@@ -415,6 +782,8 @@ export function EventsBoard({
         const headerText = event.header_text_color || '#ffffff';
         const CategoryIcon = categoryIcon(event.category);
         const status = boardStatus(event, nowMs);
+        // Anything from another event that lands between this event's own days
+        const overlaps = overlappingEvents(event);
         const sessions = event.sessions ?? [];
         const sessionIds = new Set(sessions.map((s) => s.id));
         const generalTasks = event.tasks.filter((task) => !task.session_id || !sessionIds.has(task.session_id));
@@ -520,6 +889,42 @@ export function EventsBoard({
               </div>
             </header>
 
+            {/* A longer event can have another event slipped between its days */}
+            {overlaps.length > 0 && (
+              <div className="flex flex-wrap items-start gap-3 border-b border-amber-200 bg-amber-50 px-5 py-3 dark:border-amber-900 dark:bg-amber-950/40 lg:px-7">
+                <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-extrabold text-amber-800 dark:text-amber-200">
+                    {t('display.overlapTitle')}
+                  </p>
+                  <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">{t('display.overlapHint')}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {overlaps.map(({ event: other, dates }) => (
+                      <button
+                        key={other.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          goToEvent(other.id);
+                        }}
+                        title={t('display.tapToView')}
+                        className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-900 shadow-sm transition-colors hover:bg-amber-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:border-amber-700 dark:bg-slate-900 dark:text-amber-200 dark:hover:bg-slate-800"
+                      >
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{ backgroundColor: other.header_color || '#1a3c5e' }}
+                        />
+                        <span className="tabular-nums">
+                          {dates.map((d) => formatDate(d, lang, 'd MMM')).join(', ')}
+                        </span>
+                        <span className="truncate">{other.name}</span>
+                        <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {!isCollapsed && (
               <div className="px-5 pb-5 pt-4 lg:px-7">
                 {/* Everything the whole event needs, stated once */}
@@ -553,19 +958,7 @@ export function EventsBoard({
                           >
                             {sessionHeader(session, sessionTasks, event, barGradientFor(session.session_date))}
                             {/* Operational note for this session: OT, reminders, venue instructions */}
-                            {session.note && (
-                              <div className="flex items-start gap-2.5 rounded-xl border-l-4 border-amber-400 bg-amber-50 px-3.5 py-2.5 dark:border-amber-500 dark:bg-amber-950/40">
-                                <Megaphone className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                                <div className="min-w-0">
-                                  <p className="text-[0.62rem] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300">
-                                    {t('sessions.sessionNote')}
-                                  </p>
-                                  <p className="mt-0.5 whitespace-pre-line break-words text-sm font-semibold leading-relaxed text-amber-900 dark:text-amber-100">
-                                    {session.note}
-                                  </p>
-                                </div>
-                              </div>
-                            )}
+                            {sessionNoteBar(session)}
                             {panels}
                           </div>
                         );

@@ -319,7 +319,17 @@ export const en = {
     yourName: 'Your name',
     namePlaceholder: 'Type your name',
     acknowledgedBy: 'Acknowledged by',
-    completedBy: 'Completed by'
+    completedBy: 'Completed by',
+    viewByDate: 'By date',
+    viewByEvent: 'By event',
+    dateViewHint: 'Every event in date order, so work that falls between the days of a longer event is not missed.',
+    today: 'Today',
+    tomorrow: 'Tomorrow',
+    pastDay: 'Already past',
+    eventsWord: 'events',
+    openEvent: 'Open event',
+    overlapTitle: 'Other events fall inside these dates',
+    overlapHint: 'This event runs across several days. The work below belongs to other events happening in between, so please check those too.'
   },
   boardStatus: {
     upcoming: 'Upcoming',
