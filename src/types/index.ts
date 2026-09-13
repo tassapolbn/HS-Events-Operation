@@ -173,6 +173,22 @@ export interface TemplateData {
     priority: Priority;
     times: Record<string, string | null>; // HH:mm per milestone field
   };
+  /**
+   * Sessions stored relative to the event date, so the same template can be used
+   * on any date and still keep its multi day or multi venue shape.
+   * Missing on templates saved before sessions were kept.
+   */
+  sessions?: Array<{
+    title: string;
+    /** Days after the event date this session falls on */
+    day_offset: number;
+    location: string;
+    start_time: string | null; // HH:mm
+    end_time: string | null; // HH:mm
+    time_note: string;
+    note: string;
+    sort_order: number;
+  }>;
   tasks: Array<{
     department_code: string;
     title: string;
@@ -185,6 +201,9 @@ export interface TemplateData {
     start_time: string | null; // HH:mm
     completion_time: string | null; // HH:mm
     checklist: string[];
+    /** Index into `sessions`; null or missing means a whole event task */
+    session_index?: number | null;
+    notes?: string;
   }>;
   attachments: Array<{
     file_name: string;
