@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CalendarDays, Check, Inbox, MapPin, Paperclip, User } from 'lucide-react';
 import { useSetDisplayRequestStatus } from '../../hooks/usePublicDisplay';
-import { getSignedUrl } from '../../hooks/useAttachments';
+import { showAttachment } from './AttachmentViewer';
 import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
 import { EmptyState } from '../ui/EmptyState';
@@ -38,14 +38,8 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading, 
   // The name typed on each card, used when a status is set from the board.
   const [names, setNames] = useState<Record<string, string>>({});
 
-  const openFile = async (file: DisplayAttachment) => {
-    try {
-      const url = await getSignedUrl(file.storage_path);
-      window.open(url, '_blank', 'noopener');
-    } catch {
-      /* board */
-    }
-  };
+  // Files open on the board itself, not in another tab
+  const openFile = (file: DisplayAttachment, siblings: DisplayAttachment[]) => showAttachment(file, siblings);
 
   if (isLoading) return <BoardSkeleton cards={2} />;
   // Show the requests with the soonest deadline first, not the submission date.
@@ -143,7 +137,7 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading, 
                   {request.attachments.map((file) => (
                     <button
                       key={file.id}
-                      onClick={() => openFile(file)}
+                      onClick={() => openFile(file, request.attachments)}
                       className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600 transition-transform hover:scale-105 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300"
                     >
                       <Paperclip className="h-3 w-3" /> {file.file_name}

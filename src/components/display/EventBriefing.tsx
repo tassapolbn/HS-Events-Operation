@@ -1,8 +1,8 @@
 import {
-  ChevronRight, Clock, DoorOpen, FileText, Flag, Hammer, Map as MapIcon, MapPin,
+  Clock, DoorOpen, FileText, Flag, Hammer, Map as MapIcon, MapPin, Maximize2,
   PackageCheck, PackageOpen, Paperclip, PlayCircle, StickyNote, type LucideIcon
 } from 'lucide-react';
-import { getSignedUrl } from '../../hooks/useAttachments';
+import { showAttachment } from './AttachmentViewer';
 import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
 import { cn, extractDate, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
@@ -66,13 +66,12 @@ export function StatusBadge({ status }: { status: BoardStatus }) {
   );
 }
 
-export async function openAttachment(file: DisplayAttachment) {
-  try {
-    const url = await getSignedUrl(file.storage_path);
-    window.open(url, '_blank', 'noopener');
-  } catch {
-    /* read only board */
-  }
+/**
+ * Open a file on the board itself. Staff never leave the page they are reading,
+ * which matters on a wall display or a tablet with no easy way back.
+ */
+export function openAttachment(file: DisplayAttachment, siblings?: DisplayAttachment[]) {
+  showAttachment(file, siblings);
 }
 
 export function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
@@ -84,7 +83,7 @@ export function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
           key={file.id}
           onClick={(e) => {
             e.stopPropagation();
-            openAttachment(file);
+            openAttachment(file, files);
           }}
           className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition-all hover:-translate-y-0.5 hover:shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
         >
@@ -251,17 +250,20 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
 
         {plans.length > 0 && (
           <button
-            onClick={() => openAttachment(plans[0])}
+            onClick={() => openAttachment(plans[0], plans)}
             className="group flex items-center gap-3 rounded-2xl border-2 border-gold-400 bg-gold-50 px-4 py-3.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:bg-gold-100 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 dark:border-gold-600 dark:bg-gold-950/40"
           >
             <span className={cn(TILE, 'bg-gold-400 text-navy-900')}>
               <MapIcon className="h-5 w-5" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className={cn(LABEL, 'text-gold-700 dark:text-gold-400')}>{t('display.floorPlan')}</p>
+              <p className={cn(LABEL, 'text-gold-700 dark:text-gold-400')}>
+                {t('display.floorPlan')}
+                {plans.length > 1 && ` (${plans.length})`}
+              </p>
               <p className="truncate text-lg font-extrabold text-gold-900 dark:text-gold-200">{t('display.viewFloorPlan')}</p>
             </div>
-            <ChevronRight className="h-5 w-5 shrink-0 text-gold-600 transition-transform duration-200 group-hover:translate-x-1" />
+            <Maximize2 className="h-5 w-5 shrink-0 text-gold-600 transition-transform duration-200 group-hover:scale-110" />
           </button>
         )}
 

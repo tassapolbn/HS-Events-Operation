@@ -329,7 +329,16 @@ export const en = {
     eventsWord: 'events',
     openEvent: 'Open event',
     overlapTitle: 'Other events fall inside these dates',
-    overlapHint: 'This event runs across several days. The work below belongs to other events happening in between, so please check those too.'
+    overlapHint: 'This event runs across several days. The work below belongs to other events happening in between, so please check those too.',
+    viewerZoomIn: 'Zoom in',
+    viewerZoomOut: 'Zoom out',
+    viewerFit: 'Fit to the screen',
+    viewerPrev: 'Previous file',
+    viewerNext: 'Next file',
+    viewerNewTab: 'Open in a new tab',
+    viewerHint: 'Scroll or pinch to zoom, drag to move, double tap to fit',
+    viewerCannotPreview: 'This kind of file cannot be shown here. Open it in a new tab instead.',
+    viewerFailed: 'The file could not be opened. Please try again.'
   },
   boardStatus: {
     upcoming: 'Upcoming',

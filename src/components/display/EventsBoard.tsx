@@ -1,13 +1,13 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   AlarmClock, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, Clock, LayoutList,
-  ListChecks, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, User
+  ListChecks, Map as MapIcon, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, User
 } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { useLanguage } from '../../i18n';
 import { RichTextViewer } from '../editor/RichTextViewer';
 import { EmptyState } from '../ui/EmptyState';
-import { AttachmentChips, EventBriefing, EventClosingBar, StatusBadge, boardStatus } from './EventBriefing';
+import { AttachmentChips, EventBriefing, EventClosingBar, StatusBadge, boardStatus, openAttachment } from './EventBriefing';
 import { BoardSkeleton } from './BoardSkeleton';
 import { AskQuestionModal } from './AskQuestionModal';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
@@ -517,6 +517,7 @@ export function EventsBoard({
     const dateOrder = Array.from(new Set((evt.sessions ?? []).map((session) => session.session_date)));
     const gradientFor = (sessionDate: string) =>
       SESSION_BAR_GRADIENTS[Math.max(0, dateOrder.indexOf(sessionDate)) % SESSION_BAR_GRADIENTS.length];
+    const plans = evt.attachments.filter((file) => file.mime_type.startsWith('image/'));
 
     return (
       <div
@@ -552,15 +553,28 @@ export function EventsBoard({
                 : 'day ' + dayIndex + ' of ' + dates.length}
             </span>
           )}
-          <button
-            onClick={() => goToEvent(evt.id)}
-            title={t('display.openEvent')}
-            className="ml-auto inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-bold transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-            style={{ backgroundColor: headerText + '26', color: headerText }}
-          >
-            <span className="hidden sm:inline">{t('display.openEvent')}</span>
-            <ChevronRight className="h-4 w-4" />
-          </button>
+          <span className="ml-auto flex items-center gap-2">
+            {/* The plan opens straight on the board, without leaving this view */}
+            {plans.length > 0 && (
+              <button
+                onClick={() => openAttachment(plans[0], plans)}
+                title={t('display.viewFloorPlan')}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-gold-400 px-3 py-1.5 text-sm font-extrabold text-navy-900 transition-all hover:bg-gold-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              >
+                <MapIcon className="h-4 w-4" />
+                <span className="hidden sm:inline">{t('display.floorPlan')}</span>
+              </button>
+            )}
+            <button
+              onClick={() => goToEvent(evt.id)}
+              title={t('display.openEvent')}
+              className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-bold transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              style={{ backgroundColor: headerText + '26', color: headerText }}
+            >
+              <span className="hidden sm:inline">{t('display.openEvent')}</span>
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </span>
         </div>
 
         <div className="space-y-4 p-3 lg:p-4">

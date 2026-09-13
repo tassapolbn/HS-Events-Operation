@@ -4,6 +4,7 @@ import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../
 import { DisplayShell, type DisplayScale, type DisplayTab } from '../components/display/DisplayShell';
 import { EventsBoard } from '../components/display/EventsBoard';
 import { RequestsBoard } from '../components/display/RequestsBoard';
+import { AttachmentViewer } from '../components/display/AttachmentViewer';
 import { EventEditModal } from '../components/display/EventEditModal';
 import { TaskEditModal } from '../components/display/TaskEditModal';
 import { SessionFormModal } from '../components/events/SessionFormModal';
@@ -210,6 +211,9 @@ export function DisplayBoardPage({
         task={editing?.kind === 'task' ? editing.task : null}
         departments={departmentList}
       />
+
+      {/* Floor plans and other files open here, on top of the board */}
+      <AttachmentViewer />
     </DisplayShell>
   );
 }
