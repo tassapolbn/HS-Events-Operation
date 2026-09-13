@@ -174,6 +174,8 @@ export interface TemplateData {
     times: Record<string, string | null>; // HH:mm per milestone field
   };
   tasks: Array<{
+    /** Index into sessions. Omitted by templates saved before session support. */
+    session_index?: number | null;
     department_code: string;
     title: string;
     description: string;
@@ -185,6 +187,15 @@ export interface TemplateData {
     start_time: string | null; // HH:mm
     completion_time: string | null; // HH:mm
     checklist: string[];
+  }>;
+  sessions?: Array<{
+    title: string;
+    day_offset: number;
+    location: string;
+    start_time: string | null;
+    end_time: string | null;
+    time_note: string;
+    note: string;
   }>;
   attachments: Array<{
     file_name: string;

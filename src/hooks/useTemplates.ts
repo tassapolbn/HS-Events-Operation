@@ -54,7 +54,17 @@ export function useTemplateMutations() {
             breakdown_deadline: extractTime(args.event.breakdown_deadline)
           }
         },
+        sessions: args.event.event_sessions.map((session) => ({
+          title: session.title,
+          day_offset: Math.round((Date.parse(`${session.session_date}T00:00:00Z`) - Date.parse(`${args.event.event_date}T00:00:00Z`)) / 86_400_000),
+          location: session.location,
+          start_time: extractTime(session.start_time),
+          end_time: extractTime(session.end_time),
+          time_note: session.time_note,
+          note: session.note
+        })),
         tasks: args.event.event_tasks.map((task) => ({
+          session_index: task.session_id ? args.event.event_sessions.findIndex((session) => session.id === task.session_id) : null,
           department_code: deptCode(task.department_id),
           title: task.title,
           description: task.description,
@@ -137,14 +147,38 @@ export function useTemplateMutations() {
       if (eventError) throw eventError;
       const eventId = eventRow.id as string;
 
+      const sessionIds: string[] = [];
+      for (const [index, session] of (d.sessions ?? []).entries()) {
+        const date = new Date(`${eventDate}T00:00:00Z`);
+        date.setUTCDate(date.getUTCDate() + session.day_offset);
+        const sessionDate = date.toISOString().slice(0, 10);
+        const { data: sessionRow, error: sessionError } = await supabase.from('event_sessions').insert({
+          event_id: eventId,
+          title: session.title,
+          session_date: sessionDate,
+          location: session.location,
+          start_time: combineDateTime(sessionDate, session.start_time),
+          end_time: combineDateTime(sessionDate, session.end_time),
+          time_note: session.time_note,
+          note: session.note,
+          sort_order: index
+        }).select().single();
+        if (sessionError) throw sessionError;
+        sessionIds.push(sessionRow.id as string);
+      }
+
       for (const [index, task] of d.tasks.entries()) {
         const dept = departments.find((x) => x.code === task.department_code);
         if (!dept) continue;
+        const sessionIndex = task.session_index;
+        const session = sessionIndex != null && sessionIndex >= 0 ? (d.sessions ?? [])[sessionIndex] : undefined;
+        const taskDate = session ? (() => { const date = new Date(`${eventDate}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + session.day_offset); return date.toISOString().slice(0, 10); })() : eventDate;
         const { data: taskRow, error: taskError } = await supabase
           .from('event_tasks')
           .insert({
             event_id: eventId,
             department_id: dept.id,
+            session_id: sessionIndex != null && sessionIndex >= 0 ? sessionIds[sessionIndex] : null,
             title: task.title,
             description: task.description,
             instructions: task.instructions,
@@ -152,8 +186,8 @@ export function useTemplateMutations() {
             setup_location: task.setup_location,
             assigned_staff: task.assigned_staff,
             priority: task.priority,
-            start_time: combineDateTime(eventDate, task.start_time),
-            completion_time: combineDateTime(eventDate, task.completion_time),
+            start_time: combineDateTime(taskDate, task.start_time),
+            completion_time: combineDateTime(taskDate, task.completion_time),
             sort_order: index,
             created_by: userId
           })

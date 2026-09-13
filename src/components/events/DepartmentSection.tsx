@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Bell, ChevronDown, Clock, ListPlus, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Bell, ChevronDown, Clock, Copy, ListPlus, Pencil, Plus, Trash2 } from 'lucide-react';
 import { departmentIcon, TASK_STATUS_DOTS } from '../../lib/constants';
 import { useLanguage } from '../../i18n';
 import { cn, formatTime } from '../../lib/utils';
@@ -14,6 +14,9 @@ interface DepartmentSectionProps {
   onOpenTask: (task: EventTask) => void;
   /** Creates a task instantly from a single line of text */
   onQuickAdd: (departmentId: string, title: string) => Promise<void>;
+  onBulkAdd: (departmentId: string, titles: string[]) => Promise<void>;
+  onRenameTask: (task: EventTask, title: string) => Promise<void>;
+  onCopyTask: (task: EventTask) => Promise<void>;
   /** Quick actions on a task row */
   onEditTask: (task: EventTask) => void;
   onDeleteTask: (task: EventTask) => void;
@@ -24,13 +27,15 @@ interface DepartmentSectionProps {
 }
 
 export function DepartmentSection({
-  department, tasks, canEdit, onAddTask, onOpenTask, onQuickAdd, onEditTask, onDeleteTask, onNotify, onDropTask
+  department, tasks, canEdit, onAddTask, onOpenTask, onQuickAdd, onBulkAdd, onRenameTask, onCopyTask, onEditTask, onDeleteTask, onNotify, onDropTask
 }: DepartmentSectionProps) {
   const { t, deptName, lang } = useLanguage();
   const [collapsed, setCollapsed] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
   const [adding, setAdding] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTitle, setEditingTitle] = useState('');
   const Icon = departmentIcon(department.icon);
 
   const done = tasks.filter((task) => task.status === 'completed').length;
@@ -139,7 +144,29 @@ export function DepartmentSection({
                     {index + 1}.
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span
+                    {editingId === task.id ? (
+                      <input
+                        autoFocus
+                        value={editingTitle}
+                        onChange={(e) => setEditingTitle(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                        onBlur={async () => {
+                          if (editingTitle.trim() && editingTitle.trim() !== task.title) await onRenameTask(task, editingTitle.trim());
+                          setEditingId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') e.currentTarget.blur();
+                          if (e.key === 'Escape') setEditingId(null);
+                        }}
+                        className="w-full rounded border border-navy-400 bg-white px-1.5 py-0.5 text-[13px] outline-none dark:bg-slate-900"
+                      />
+                    ) : <span
+                      onDoubleClick={(e) => {
+                        if (!canEdit) return;
+                        e.stopPropagation();
+                        setEditingId(task.id);
+                        setEditingTitle(task.title);
+                      }}
                       className={cn(
                         'block text-[13px] leading-snug text-slate-700 dark:text-slate-200',
                         (task.status === 'completed' || task.status === 'cancelled') &&
@@ -147,7 +174,7 @@ export function DepartmentSection({
                       )}
                     >
                       {task.title}
-                    </span>
+                    </span>}
                     {(task.start_time || task.assigned_staff) && (
                       <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-slate-400">
                         {task.start_time && (
@@ -173,6 +200,11 @@ export function DepartmentSection({
                   )}
                   {canEdit && (
                     <span className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); onCopyTask(task); }}
+                        title={t('tasks.copyTask')}
+                        className="rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-navy-700 dark:hover:bg-slate-700"
+                      ><Copy className="h-3.5 w-3.5" /></button>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -215,6 +247,13 @@ export function DepartmentSection({
                     e.preventDefault();
                     submitQuickAdd();
                   }
+                }}
+                onPaste={async (e) => {
+                  const rows = e.clipboardData.getData('text/plain').split(/\r?\n/).map((row) => row.split('\t')[0].trim()).filter(Boolean);
+                  if (rows.length < 2) return;
+                  e.preventDefault();
+                  setAdding(true);
+                  try { await onBulkAdd(department.id, rows); setQuickTitle(''); } finally { setAdding(false); }
                 }}
                 placeholder={t('tasks.quickAddPlaceholder')}
                 disabled={adding}

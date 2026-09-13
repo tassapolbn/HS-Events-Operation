@@ -6,8 +6,9 @@ import { Input, Textarea } from '../ui/Input';
 import { useLanguage } from '../../i18n';
 import { useToast } from '../ui/Toast';
 import { useSessionMutations } from '../../hooks/useSessions';
+import { useTaskMutations } from '../../hooks/useTasks';
 import { combineDateTime, extractTime } from '../../lib/utils';
-import type { EventSession } from '../../types';
+import type { EventSession, EventTask } from '../../types';
 
 interface SessionFormValues {
   title: string;
@@ -27,13 +28,16 @@ interface SessionFormModalProps {
   eventId: string;
   eventDate: string;
   session?: EventSession | null;
+  copySource?: EventSession | null;
+  sourceTasks?: EventTask[];
   nextSortOrder: number;
 }
 
-export function SessionFormModal({ open, onClose, eventId, eventDate, session, nextSortOrder }: SessionFormModalProps) {
+export function SessionFormModal({ open, onClose, eventId, eventDate, session, copySource, sourceTasks = [], nextSortOrder }: SessionFormModalProps) {
   const { t } = useLanguage();
   const { toast } = useToast();
   const { createSession, updateSession } = useSessionMutations(eventId);
+  const { createTask } = useTaskMutations(eventId);
 
   const { register, handleSubmit, reset, formState } = useForm<SessionFormValues>({
     defaultValues: { title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' }
@@ -41,20 +45,21 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
 
   useEffect(() => {
     if (!open) return;
-    if (session) {
+    const initial = session ?? copySource;
+    if (initial) {
       reset({
-        title: session.title,
-        session_date: session.session_date,
-        location: session.location,
-        start_time: extractTime(session.start_time) ?? '',
-        end_time: extractTime(session.end_time) ?? '',
-        time_note: session.time_note ?? '',
-        note: session.note ?? ''
+        title: copySource ? `${initial.title} (${t('common.copy')})` : initial.title,
+        session_date: initial.session_date,
+        location: initial.location,
+        start_time: extractTime(initial.start_time) ?? '',
+        end_time: extractTime(initial.end_time) ?? '',
+        time_note: initial.time_note ?? '',
+        note: initial.note ?? ''
       });
     } else {
       reset({ title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' });
     }
-  }, [open, session, eventDate, reset]);
+  }, [open, session, copySource, eventDate, reset, t]);
 
   const onSubmit = async (values: SessionFormValues) => {
     const payload = {
@@ -67,10 +72,22 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
       note: values.note.trim()
     };
     try {
-      if (session) {
+      if (session && !copySource) {
         await updateSession.mutateAsync({ id: session.id, ...payload });
       } else {
-        await createSession.mutateAsync({ ...payload, sort_order: nextSortOrder });
+        const created = await createSession.mutateAsync({ ...payload, sort_order: nextSortOrder });
+        if (copySource) {
+          for (const task of sourceTasks) {
+            const { id: _id, created_at: _created, updated_at: _updated, deleted_at: _deleted, ...copy } = task;
+            await createTask.mutateAsync({
+              ...copy,
+              session_id: created.id,
+              status: 'not_started',
+              start_time: combineDateTime(values.session_date, extractTime(task.start_time)),
+              completion_time: combineDateTime(values.session_date, extractTime(task.completion_time))
+            });
+          }
+        }
       }
       toast(t('common.savedSuccess'));
       onClose();
@@ -83,12 +100,12 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
     <Modal
       open={open}
       onClose={onClose}
-      title={session ? t('sessions.editSession') : t('sessions.addSession')}
+      title={copySource ? t('sessions.copySession') : session ? t('sessions.editSession') : t('sessions.addSession')}
       subtitle={t('sessions.hint')}
       footer={
         <>
           <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={createSession.isPending || updateSession.isPending}>
+          <Button onClick={handleSubmit(onSubmit)} loading={createSession.isPending || updateSession.isPending || createTask.isPending}>
             {t('common.save')}
           </Button>
         </>
