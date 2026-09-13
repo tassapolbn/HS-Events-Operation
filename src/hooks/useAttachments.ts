@@ -22,7 +22,11 @@ export function useAttachments(entityType: EntityType, entityId: string | undefi
 
 export function useAttachmentMutations(entityType: EntityType, entityId: string | undefined) {
   const queryClient = useQueryClient();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ['attachments', entityType, entityId] });
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['attachments', entityType, entityId] });
+    queryClient.invalidateQueries({ queryKey: ['display'] });
+    queryClient.invalidateQueries({ queryKey: ['events'] });
+  };
 
   const upload = useMutation({
     mutationFn: async ({ file, userId }: { file: File; userId: string }) => {
@@ -33,7 +37,7 @@ export function useAttachmentMutations(entityType: EntityType, entityId: string 
         upsert: false
       });
       if (storageError) throw storageError;
-      const { error: rowError } = await supabase.from('attachments').insert({
+      const { data, error: rowError } = await supabase.from('attachments').insert({
         entity_type: entityType,
         entity_id: entityId,
         file_name: file.name,
@@ -41,8 +45,12 @@ export function useAttachmentMutations(entityType: EntityType, entityId: string 
         mime_type: file.type || 'application/octet-stream',
         size_bytes: file.size,
         uploaded_by: userId
-      });
-      if (rowError) throw rowError;
+      }).select().single();
+      if (rowError) {
+        await supabase.storage.from('attachments').remove([path]);
+        throw rowError;
+      }
+      return data as Attachment;
     },
     onSuccess: invalidate
   });

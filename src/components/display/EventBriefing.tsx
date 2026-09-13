@@ -1,3 +1,4 @@
+import { FloorPlanPreview } from './FloorPlanPreview';
 import {
   Clock, DoorOpen, FileText, Flag, Hammer, Map as MapIcon, MapPin, Maximize2,
   PackageCheck, PackageOpen, Paperclip, PlayCircle, StickyNote, type LucideIcon
@@ -154,7 +155,7 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
   ).filter((m) => Boolean(m.value) || Boolean(m.note));
 
   const nextIndex = milestones.findIndex((m) => m.value && new Date(m.value).getTime() > now);
-  const plans = event.attachments.filter((f) => f.mime_type.startsWith('image/'));
+  const plans = event.attachments.filter((f) => f.mime_type.startsWith('image/') && !(event.sessions ?? []).some(session => session.floor_plan_attachment_id === f.id));
   const docs = event.attachments.filter((f) => !f.mime_type.startsWith('image/'));
 
   return (
@@ -277,6 +278,8 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
         )}
         </div>
       </div>
+
+      {plans.map(file => <FloorPlanPreview key={file.id} file={file} />)}
 
       {/* Notes sit on a neutral card with a single amber accent, not a full colour wash */}
       {!isRichTextEmpty(event.additional_notes) && (

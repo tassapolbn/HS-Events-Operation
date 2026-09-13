@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDownToLine, Check, ClipboardPaste, Columns3, Copy, CopyPlus, Keyboard, Maximize2, Plus, Trash2, Undo2
+  ArrowDownToLine, Check, ClipboardPaste, Columns3, Copy, CopyPlus, Keyboard, Maximize2, Plus, Trash2, Undo2, Search, Table2, ChevronDown, Pencil, Loader2
 } from 'lucide-react';
 import { en } from '../../i18n/en';
 import { th } from '../../i18n/th';
@@ -147,6 +147,11 @@ export function TaskGrid({
   const dragMode = useRef<'none' | 'select' | 'fill'>('none');
   const focusAfterCreate = useRef<{ id: string; field: GridField } | null>(null);
 
+  const [search, setSearch] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [sessionFilter, setSessionFilter] = useState('all');
+  const [comfortable, setComfortable] = useState(true);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<GridField[]>(readHiddenColumns);
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -188,7 +193,11 @@ export function TaskGrid({
     const groupOf = (task: EventTask) =>
       task.session_id && sessionOrder.has(task.session_id) ? task.session_id : '';
 
-    const ordered = [...tasks].sort((a, b) => {
+    const ordered = tasks.filter(task =>
+      (!departmentFilter || task.department_id === departmentFilter) &&
+      (sessionFilter === 'all' || (task.session_id ?? '') === sessionFilter) &&
+      (!search.trim() || [task.title, task.assigned_staff, task.work_location, task.setup_location].join(' ').toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()))
+    ).sort((a, b) => {
       const ga = sessionOrder.get(groupOf(a)) ?? 0;
       const gb = sessionOrder.get(groupOf(b)) ?? 0;
       return (
@@ -219,7 +228,9 @@ export function TaskGrid({
     });
 
     return { rows: built, bands: labels };
-  }, [tasks, departments, sessions, pending, sessionLabel, t]);
+  }, [tasks, departments, sessions, pending, sessionLabel, t, search, departmentFilter, sessionFilter]);
+
+  useEffect(() => { setSel(null); setEditing(null); }, [search, departmentFilter, sessionFilter]);
 
   const rowById = useMemo(() => new Map(rows.map((row) => [row.task.id, row])), [rows]);
 
@@ -378,8 +389,10 @@ export function TaskGrid({
   // ---------- writing ----------
 
   const toDbPatch = useCallback(
-    (values: Partial<RowValues>): TaskInput => {
+    (values: Partial<RowValues>, task?: EventTask): TaskInput => {
       const patch: TaskInput = {};
+      const sessionId = values.session_id !== undefined ? values.session_id : task?.session_id;
+      const date = sessions.find(session => session.id === sessionId)?.session_date ?? eventDate;
       for (const [field, value] of Object.entries(values) as Array<[GridField, string]>) {
         switch (field) {
           case 'department_id':
@@ -404,10 +417,10 @@ export function TaskGrid({
             patch.notes = value;
             break;
           case 'start_time':
-            patch.start_time = combineDateTime(eventDate, value || null);
+            patch.start_time = combineDateTime(date, value || null);
             break;
           case 'completion_time':
-            patch.completion_time = combineDateTime(eventDate, value || null);
+            patch.completion_time = combineDateTime(date, value || null);
             break;
           case 'priority':
             if ((PRIORITIES as string[]).includes(value)) patch.priority = value as Priority;
@@ -417,9 +430,13 @@ export function TaskGrid({
             break;
         }
       }
+      if ('session_id' in values && task) {
+        if (!('start_time' in values)) patch.start_time = combineDateTime(date, extractTime(task.start_time));
+        if (!('completion_time' in values)) patch.completion_time = combineDateTime(date, extractTime(task.completion_time));
+      }
       return patch;
     },
-    [eventDate]
+    [eventDate, sessions]
   );
 
   const pushUndo = useCallback((entry: UndoEntry) => {
@@ -445,12 +462,15 @@ export function TaskGrid({
         for (const { id, values } of real) next[id] = { ...(next[id] ?? {}), ...values };
         return next;
       });
-      if (undoable) pushUndo({ kind: 'update', patches: before });
+      setSaveFailed(false);
 
       try {
-        const patches: TaskPatch[] = real.map(({ id, values }) => ({ id, ...toDbPatch(values) }));
+        const patches: TaskPatch[] = real.map(({ id, values }) => ({ id, ...toDbPatch(values, tasks.find(task => task.id === id)) }));
         await updateTasks.mutateAsync(patches);
+        if (undoable) pushUndo({ kind: 'update', patches: before });
+        return true;
       } catch {
+        setSaveFailed(true);
         setPending((prev) => {
           const next = { ...prev };
           for (const { id, values } of real) {
@@ -462,9 +482,10 @@ export function TaskGrid({
           return next;
         });
         toast(t('common.errorGeneric'), 'error');
+        return false;
       }
     },
-    [canEdit, rowById, pushUndo, toDbPatch, updateTasks, toast, t]
+    [canEdit, rowById, pushUndo, toDbPatch, updateTasks, toast, t, tasks]
   );
 
   const nextSortOrder = useCallback(
@@ -488,15 +509,15 @@ export function TaskGrid({
       work_location: values.work_location,
       setup_location: values.setup_location,
       assigned_staff: values.assigned_staff,
-      start_time: combineDateTime(eventDate, values.start_time || null),
-      completion_time: combineDateTime(eventDate, values.completion_time || null),
+      start_time: combineDateTime(sessions.find(session => session.id === values.session_id)?.session_date ?? eventDate, values.start_time || null),
+      completion_time: combineDateTime(sessions.find(session => session.id === values.session_id)?.session_date ?? eventDate, values.completion_time || null),
       priority: (PRIORITIES as string[]).includes(values.priority) ? (values.priority as Priority) : 'medium',
       status: (TASK_STATUSES as string[]).includes(values.status) ? (values.status as TaskStatus) : 'not_started',
       notes: values.notes,
       sort_order: sortOrder,
       created_by: profile?.id ?? null
     }),
-    [eventId, eventDate, departments, profile?.id]
+    [eventId, eventDate, departments, profile?.id, sessions]
   );
 
   const bounds = useMemo(() => {
@@ -573,6 +594,19 @@ export function TaskGrid({
   const applyTable = async (table: string[][]) => {
     if (!bounds || !canEdit || table.length === 0) return;
 
+    // Validate the complete paste before changing any cells.
+    const single = table.length === 1 && table[0].length === 1;
+    for (let r = 0; r < table.length; r += 1) {
+      const cells = single ? Array.from({ length: bounds.right - bounds.left + 1 }, () => table[0][0]) : table[r];
+      for (let c = 0; c < cells.length; c += 1) {
+        const column = columns[bounds.left + c];
+        if (!column || parseCellInput(column, cells[c]) === null) {
+          toast(lang === 'th' ? `ข้อมูลไม่ถูกต้อง แถว ${r + 1} คอลัมน์ ${column ? t(column.labelKey) : c + 1}` : `Invalid value at pasted row ${r + 1}, column ${column ? t(column.labelKey) : c + 1}`, 'error');
+          return;
+        }
+      }
+    }
+
     // One copied cell fills the whole selection, exactly like a spreadsheet
     if (table.length === 1 && table[0].length === 1) {
       const raw = table[0][0];
@@ -622,7 +656,7 @@ export function TaskGrid({
       inserts.push(toInsert(merged, start));
     });
 
-    await commitUpdates(changes);
+    if (changes.length && !(await commitUpdates(changes))) return;
     if (inserts.length > 0) {
       try {
         const created = await createTasks.mutateAsync(inserts);
@@ -711,11 +745,12 @@ export function TaskGrid({
 
   const addRows = async (count = 1, focusField: GridField = 'title', from?: RowValues) => {
     if (!canEdit) return;
+    setSearch('');
     const reference = from ?? rows[bounds?.bottom ?? rows.length - 1]?.values;
     const seed: RowValues = {
       ...emptyValues(),
-      department_id: reference?.department_id || departments[0]?.id || '',
-      session_id: reference?.session_id ?? ''
+      department_id: departmentFilter || reference?.department_id || departments[0]?.id || '',
+      session_id: sessionFilter !== 'all' ? sessionFilter : reference?.session_id ?? ''
     };
     if (!seed.department_id) {
       toast(t('validation.departmentRequired'), 'error');
@@ -787,8 +822,8 @@ export function TaskGrid({
       work_location: item.work_location,
       setup_location: item.setup_location,
       assigned_staff: item.assigned_staff,
-      start_time: combineDateTime(eventDate, item.start_time),
-      completion_time: combineDateTime(eventDate, item.completion_time),
+      start_time: combineDateTime(sessions.find(session => session.id === sessionId)?.session_date ?? eventDate, item.start_time),
+      completion_time: combineDateTime(sessions.find(session => session.id === sessionId)?.session_date ?? eventDate, item.completion_time),
       priority: item.priority,
       status: 'not_started',
       notes: item.notes,
@@ -810,11 +845,13 @@ export function TaskGrid({
     setUndoDepth(undoStack.current.length);
     if (!entry) return;
     try {
-      if (entry.kind === 'update') await commitUpdates(entry.patches, false);
+      if (entry.kind === 'update' && !(await commitUpdates(entry.patches, false))) { undoStack.current.push(entry); setUndoDepth(undoStack.current.length); return; }
       if (entry.kind === 'create') await deleteTasks.mutateAsync(entry.ids);
       if (entry.kind === 'delete') await restoreTasks.mutateAsync(entry.ids);
       toast(t('grid.undone'));
     } catch {
+      undoStack.current.push(entry);
+      setUndoDepth(undoStack.current.length);
       toast(t('common.errorGeneric'), 'error');
     }
   };
@@ -822,7 +859,7 @@ export function TaskGrid({
   // ---------- keyboard ----------
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    if (editing) return;
+    if (editing || event.nativeEvent.isComposing) return;
     const mod = event.ctrlKey || event.metaKey;
     const key = event.key;
 
@@ -863,7 +900,10 @@ export function TaskGrid({
         return;
       case 'Tab':
         event.preventDefault();
-        move(0, event.shiftKey ? -1 : 1, false);
+        if (sel) {
+          const c = sel.c + (event.shiftKey ? -1 : 1);
+          selectCell(sel.r + (c < 0 ? -1 : c >= columns.length ? 1 : 0), (c + columns.length) % columns.length);
+        } else selectCell(0, 0);
         return;
       case 'Home':
         event.preventDefault();
@@ -905,8 +945,13 @@ export function TaskGrid({
     if (!column || !row) return;
 
     const parsed = column.type === 'time' ? normalizeTimeInput(raw) : raw;
+    if (column.type === 'time' && raw.trim() && !parsed) {
+      toast(lang === 'th' ? 'กรุณาใส่เวลา เช่น 09:30' : 'Enter a valid time, e.g. 09:30', 'error');
+      setEditing({ ...cell, initial: raw });
+      return;
+    }
     const changed = parsed !== row.values[column.field];
-    if (changed) await commitUpdates([{ id: row.task.id, values: { [column.field]: parsed } }]);
+    if (changed && !(await commitUpdates([{ id: row.task.id, values: { [column.field]: parsed } }]))) return;
 
     if (direction === 'down') {
       if (cell.r === rows.length - 1) {
@@ -917,8 +962,8 @@ export function TaskGrid({
       return;
     }
     if (direction === 'up') selectCell(cell.r - 1, cell.c);
-    if (direction === 'right') selectCell(cell.r, cell.c + 1);
-    if (direction === 'left') selectCell(cell.r, cell.c - 1);
+    if (direction === 'right') selectCell(cell.c === columns.length - 1 ? cell.r + 1 : cell.r, (cell.c + 1) % columns.length);
+    if (direction === 'left') selectCell(cell.c === 0 ? cell.r - 1 : cell.r, cell.c === 0 ? columns.length - 1 : cell.c - 1);
   };
 
   const cancelEdit = () => {
@@ -933,6 +978,7 @@ export function TaskGrid({
   const inFillPreview = (r: number) =>
     fillTo !== null && !!bounds && r > bounds.bottom && r <= fillTo;
 
+  const busy = createTasks.isPending || updateTasks.isPending || deleteTasks.isPending || restoreTasks.isPending;
   const selectedRowCount = bounds ? bounds.bottom - bounds.top + 1 : 0;
 
   const toolbarButton =
@@ -940,6 +986,20 @@ export function TaskGrid({
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-gradient-to-r from-teal-50 to-white px-4 py-4 dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
+        <span className="rounded-xl bg-teal-700 p-2 text-white"><Table2 className="h-5 w-5" /></span>
+        <div className="flex-1"><h3 className="text-base font-bold">{lang === 'th' ? 'ตารางลงงาน' : 'Task worksheet'}</h3><p className="text-xs text-slate-500">{lang === 'th' ? 'แก้ไขในเซลล์ • วางจาก Google Sheets • บันทึกอัตโนมัติ' : 'Edit cells · Paste from Google Sheets · Auto-save'}</p></div>
+        <span role="status" className={cn('flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold', saveFailed ? 'bg-red-50 text-red-700' : 'bg-white text-teal-700 dark:bg-slate-800 dark:text-teal-300')}>
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+          {busy ? (lang === 'th' ? 'กำลังบันทึก…' : 'Saving…') : saveFailed ? (lang === 'th' ? 'บันทึกไม่สำเร็จ โปรดลองอีกครั้ง' : 'Save failed. Please retry.') : (lang === 'th' ? 'บันทึกครบแล้ว' : 'All changes saved')}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-2 border-b border-slate-100 p-3 dark:border-slate-800">
+        <label className="flex min-w-48 flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 dark:border-slate-700"><Search className="h-4 w-4 text-slate-400" /><input aria-label={lang === 'th' ? 'ค้นหาในตาราง' : 'Search worksheet'} placeholder={lang === 'th' ? 'ค้นหางาน ผู้รับผิดชอบ สถานที่…' : 'Search tasks, people, locations…'} value={search} onChange={event => setSearch(event.target.value)} className="w-full bg-transparent py-2 text-sm outline-none" /></label>
+        <select aria-label={t('common.department')} value={departmentFilter} onChange={event => setDepartmentFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-transparent p-2 text-sm dark:border-slate-700"><option value="">{lang === 'th' ? 'ทุกแผนก' : 'All departments'}</option>{departments.map(dept => <option key={dept.id} value={dept.id}>{deptName(dept)}</option>)}</select>
+        <select aria-label={t('sessions.title')} value={sessionFilter} onChange={event => setSessionFilter(event.target.value)} className="max-w-64 rounded-xl border border-slate-200 bg-transparent p-2 text-sm dark:border-slate-700"><option value="all">{lang === 'th' ? 'ทุก session' : 'All sessions'}</option><option value="">{t('sessions.whole')}</option>{sessions.map(session => <option key={session.id} value={session.id}>{sessionLabel(session)}</option>)}</select>
+        <button type="button" onClick={() => setComfortable(value => !value)} className={toolbarButton}>{comfortable ? (lang === 'th' ? 'แถวกระชับ' : 'Compact rows') : (lang === 'th' ? 'แถวอ่านง่าย' : 'Comfortable rows')}</button>
+      </div>
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 p-2 dark:border-slate-800">
         {canEdit && (
@@ -1064,6 +1124,11 @@ export function TaskGrid({
         </div>
       </div>
 
+      <div className="flex min-h-11 items-center gap-3 border-y border-slate-200 bg-slate-50 px-3 text-sm dark:border-slate-700 dark:bg-slate-800">
+        <span className="w-14 shrink-0 border-r border-slate-200 font-mono text-xs font-bold text-teal-700">{sel ? `${String.fromCharCode(65 + sel.c)}${sel.r + 1}` : '—'}</span>
+        <span className="min-w-0 flex-1 truncate text-slate-600 dark:text-slate-300">{sel && rows[sel.r] && columns[sel.c] ? displayValue(rows[sel.r], columns[sel.c]) || (lang === 'th' ? 'เซลล์ว่าง' : 'Empty cell') : (lang === 'th' ? 'เลือกเซลล์แล้วพิมพ์ หรือดับเบิลคลิกเพื่อแก้ไข' : 'Select a cell and type, or double-click to edit')}</span>
+        {sel && canEdit && <button className={toolbarButton} onClick={() => startEdit(sel.r, sel.c)}><Pencil className="h-3 w-3" />{t('common.edit')}</button>}
+      </div>
       {/* Grid */}
       {rows.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm italic text-slate-400">{t('tasks.noTasks')}</p>
@@ -1075,9 +1140,10 @@ export function TaskGrid({
           onCopy={handleCopy}
           onCut={handleCut}
           onPaste={handlePaste}
-          className="max-h-[72vh] overflow-auto outline-none"
+          aria-label={lang === 'th' ? 'ตารางลงงาน ใช้ปุ่มลูกศรเพื่อเลื่อนเซลล์' : 'Task worksheet. Use arrow keys to navigate cells.'}
+          className={cn('max-h-[72vh] overflow-auto outline-none', comfortable && '[&_[data-cell]>div]:min-h-[44px]')}
         >
-          <table className="w-max min-w-full select-none border-separate border-spacing-0 text-[13px]">
+          <table role="grid" aria-readonly={!canEdit} className="w-max min-w-full select-none border-separate border-spacing-0 text-[13px]">
             <colgroup>
               <col style={{ width: 46 }} />
               {columns.map((column) => (
@@ -1098,7 +1164,7 @@ export function TaskGrid({
                       index === 0 ? 'left-[46px] z-20' : 'z-10'
                     )}
                   >
-                    {t(column.labelKey)}
+                    <span className="mr-2 text-[10px] font-normal text-slate-400">{String.fromCharCode(65 + index)}</span>{t(column.labelKey)}
                   </th>
                 ))}
                 <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800" />
@@ -1138,6 +1204,9 @@ export function TaskGrid({
                       return (
                         <td
                           key={column.field}
+                          role="gridcell"
+                          aria-selected={selected}
+                          aria-label={`${t(column.labelKey)} ${r + 1}: ${displayValue(row, column)}`}
                           data-cell={`${r}-${c}`}
                           onMouseDown={(event) => {
                             if (event.button !== 0) return;
@@ -1180,6 +1249,7 @@ export function TaskGrid({
                                 inFillPreview(r) && 'bg-gold-100/70 dark:bg-gold-900/30'
                               )}
                             >
+                              {column.type === 'select' && <ChevronDown className="order-last ml-auto h-3 w-3 shrink-0 text-slate-400" />}
                               {column.field === 'status' && (
                                 <span
                                   className="h-2 w-2 shrink-0 rounded-full"
@@ -1232,7 +1302,7 @@ export function TaskGrid({
       )}
 
       <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400 dark:border-slate-800">
-        {t('grid.footerHint')}
+        <span className="mr-4 font-semibold text-teal-700 dark:text-teal-300">{rows.length}/{tasks.length} {t('grid.tasksWord')}{selectedRowCount > 0 && ` · ${selectedRowCount} ${lang === 'th' ? 'แถวที่เลือก' : 'rows selected'}`}</span>{t('grid.footerHint')}
       </p>
     </section>
   );
@@ -1273,6 +1343,7 @@ function CellEditor({
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     event.stopPropagation();
+    if (event.nativeEvent.isComposing) return;
     if (event.key === 'Enter') {
       event.preventDefault();
       finish(draft, event.shiftKey ? 'up' : 'down');
@@ -1304,6 +1375,7 @@ function CellEditor({
             : TASK_STATUSES.map((status) => ({ value: status, label: t(`taskStatus.${status}`) }));
     return (
       <select
+        aria-label={t(column.labelKey)}
         autoFocus
         value={draft}
         onChange={(event) => {
@@ -1326,6 +1398,7 @@ function CellEditor({
   return (
     <input
       ref={inputRef}
+      aria-label={t(column.labelKey)}
       autoFocus
       value={draft}
       onChange={(event) => setDraft(event.target.value)}

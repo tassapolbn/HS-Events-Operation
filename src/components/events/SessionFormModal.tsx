@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { SessionFloorPlanPicker } from './SessionFloorPlanPicker';
 import { useForm } from 'react-hook-form';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -12,6 +13,7 @@ import { combineDateTime, extractTime } from '../../lib/utils';
 import type { EventSession, EventTask } from '../../types';
 
 interface SessionFormValues {
+  floor_plan_attachment_id: string;
   title: string;
   session_date: string;
   location: string;
@@ -47,11 +49,12 @@ export function SessionFormModal({
 
   const duplicating = !!duplicateFrom;
   const source = duplicateFrom ?? session ?? null;
+  const [uploading, setUploading] = useState(false);
   const [copyTasks, setCopyTasks] = useState(true);
   const [resetStatus, setResetStatus] = useState(true);
 
-  const { register, handleSubmit, reset, formState } = useForm<SessionFormValues>({
-    defaultValues: { title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' }
+  const { register, handleSubmit, reset, formState, watch, setValue } = useForm<SessionFormValues>({
+    defaultValues: { floor_plan_attachment_id: '', title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' }
   });
 
   useEffect(() => {
@@ -60,6 +63,7 @@ export function SessionFormModal({
     setResetStatus(true);
     if (source) {
       reset({
+        floor_plan_attachment_id: source.floor_plan_attachment_id ?? '',
         title: source.title,
         session_date: source.session_date,
         location: source.location,
@@ -69,12 +73,13 @@ export function SessionFormModal({
         note: source.note ?? ''
       });
     } else {
-      reset({ title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' });
+      reset({ floor_plan_attachment_id: '', title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' });
     }
   }, [open, source, eventDate, reset]);
 
   const onSubmit = async (values: SessionFormValues) => {
     const payload = {
+      floor_plan_attachment_id: values.floor_plan_attachment_id || null,
       title: values.title.trim(),
       session_date: values.session_date,
       location: values.location.trim(),
@@ -98,8 +103,8 @@ export function SessionFormModal({
               work_location: task.work_location,
               setup_location: task.setup_location,
               assigned_staff: task.assigned_staff,
-              start_time: combineDateTime(eventDate, extractTime(task.start_time)),
-              completion_time: combineDateTime(eventDate, extractTime(task.completion_time)),
+              start_time: combineDateTime(values.session_date, extractTime(task.start_time)),
+              completion_time: combineDateTime(values.session_date, extractTime(task.completion_time)),
               priority: task.priority,
               status: resetStatus ? 'not_started' : task.status,
               notes: task.notes,
@@ -139,6 +144,7 @@ export function SessionFormModal({
           <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
           <Button
             onClick={handleSubmit(onSubmit)}
+            disabled={uploading}
             loading={createSession.isPending || updateSession.isPending || createTasks.isPending}
           >
             {t('common.save')}
@@ -172,6 +178,8 @@ export function SessionFormModal({
           className="sm:col-span-2"
           {...register('note')}
         />
+
+        <SessionFloorPlanPicker eventId={eventId} value={watch('floor_plan_attachment_id')} onChange={id => setValue('floor_plan_attachment_id', id, { shouldDirty: true })} onUploading={setUploading} />
 
         {duplicating && sourceTasks.length > 0 && (
           <div className="space-y-2 rounded-xl border border-gold-200 bg-gold-50/60 p-3 sm:col-span-2 dark:border-gold-900 dark:bg-gold-950/20">

@@ -5,13 +5,6 @@ import type { ChecklistItem, EventTask } from '../types';
 export type TaskInput = Partial<Omit<EventTask, 'id' | 'created_at' | 'updated_at' | 'deleted_at'>>;
 export type TaskPatch = TaskInput & { id: string };
 
-/** Run promises a few at a time so a large paste does not open 40 sockets at once. */
-async function inChunks<T>(items: T[], size: number, run: (item: T) => Promise<void>) {
-  for (let i = 0; i < items.length; i += size) {
-    await Promise.all(items.slice(i, i + size).map(run));
-  }
-}
-
 export function useTaskMutations(eventId?: string) {
   const queryClient = useQueryClient();
   const invalidate = () => {
@@ -53,13 +46,16 @@ export function useTaskMutations(eventId?: string) {
 
   /** Apply a different patch to each task (one grid edit, paste or fill). */
   const updateTasks = useMutation({
+    scope: { id: `task-grid-${eventId}` },
     mutationFn: async (patches: TaskPatch[]) => {
-      await inChunks(patches, 6, async ({ id, ...input }) => {
-        const { error } = await supabase.from('event_tasks').update(input).eq('id', id);
-        if (error) throw error;
+      if (!patches.length) return;
+      const { error } = await supabase.rpc('update_task_grid', {
+        p_event_id: eventId,
+        p_patches: patches
       });
+      if (error) throw error;
     },
-    onSuccess: invalidate
+    onSettled: invalidate
   });
 
   const deleteTask = useMutation({

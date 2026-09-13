@@ -71,6 +71,7 @@ export interface EventRow {
 }
 
 export interface EventSession {
+  floor_plan_attachment_id?: string | null;
   id: string;
   event_id: string;
   title: string;
@@ -267,6 +268,8 @@ export interface DisplayAttachment {
 }
 
 export interface DisplaySession {
+  floor_plan_attachment_id?: string | null;
+  floor_plan?: DisplayAttachment | null;
   id: string;
   title: string;
   session_date: string;

@@ -1,3 +1,6 @@
+import { BoardDateFilter } from './BoardDateFilter';
+import { FloorPlanPreview } from './FloorPlanPreview';
+import { matchesDateScope, type DateScope } from '../../lib/boardDates';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   AlarmClock, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, Clock, LayoutList,
@@ -94,6 +97,8 @@ export function EventsBoard({
   const [highlighted, setHighlighted] = useState<string | null>(null);
   /** Which event the "Ask a question" dialog is open for */
   const [askEvent, setAskEvent] = useState<DisplayEvent | null>(null);
+  const [dateScope, setDateScope] = useState<DateScope>('all');
+  const [selectedDate, setSelectedDate] = useState('');
   const [viewMode, setViewMode] = useState<BoardView>(readBoardView);
   /** Past days start folded away; tapping the heading opens them again */
   const [openPastDays, setOpenPastDays] = useState<Set<string>>(new Set());
@@ -390,14 +395,14 @@ export function EventsBoard({
   /** Every date on which this event actually has work, earliest first */
   const workDates = (evt: DisplayEvent): string[] => {
     const tasks = visibleTasks(evt);
-    if (tasks.length === 0) return [];
+    if (tasks.length === 0 && selectedDept) return [];
     const eventSessions = evt.sessions ?? [];
     const ids = new Set(eventSessions.map((session) => session.id));
     const dates = new Set<string>();
     for (const session of eventSessions) {
-      if (tasks.some((task) => task.session_id === session.id)) dates.add(session.session_date);
+      if (!selectedDept || tasks.some((task) => task.session_id === session.id)) dates.add(session.session_date);
     }
-    if (tasks.some((task) => !task.session_id || !ids.has(task.session_id))) dates.add(evt.event_date);
+    if (eventSessions.length === 0 || tasks.some((task) => !task.session_id || !ids.has(task.session_id))) dates.add(evt.event_date);
     return [...dates].sort();
   };
 
@@ -430,7 +435,7 @@ export function EventsBoard({
 
     for (const evt of events) {
       const tasks = visibleTasks(evt);
-      if (tasks.length === 0) continue;
+      if (tasks.length === 0 && selectedDept) continue;
       const eventSessions = [...(evt.sessions ?? [])].sort(
         (a, b) => a.session_date.localeCompare(b.session_date) || a.sort_order - b.sort_order
       );
@@ -439,7 +444,7 @@ export function EventsBoard({
       // Whole event work has no session date of its own, so it sits on the
       // first day of the event that has not passed yet.
       const general = tasks.filter((task) => !task.session_id || !ids.has(task.session_id));
-      if (general.length > 0) {
+      if (general.length > 0 || eventSessions.length === 0) {
         const dates = [evt.event_date, ...eventSessions.map((session) => session.session_date)]
           .filter(Boolean)
           .sort();
@@ -449,7 +454,7 @@ export function EventsBoard({
 
       for (const session of eventSessions) {
         const sessionTasks = tasks.filter((task) => task.session_id === session.id);
-        if (sessionTasks.length === 0) continue;
+        if (sessionTasks.length === 0 && selectedDept) continue;
         add(session.session_date, evt, { key: evt.id + '-' + session.id, session, tasks: sessionTasks });
       }
     }
@@ -513,11 +518,11 @@ export function EventsBoard({
     const headerText = evt.header_text_color || '#ffffff';
     const CategoryIcon = categoryIcon(evt.category);
     const dates = workDates(evt);
-    const dayIndex = dates.indexOf(date) + 1;
+    const dayIndex = Math.max(1, dates.indexOf(date) + 1);
     const dateOrder = Array.from(new Set((evt.sessions ?? []).map((session) => session.session_date)));
     const gradientFor = (sessionDate: string) =>
       SESSION_BAR_GRADIENTS[Math.max(0, dateOrder.indexOf(sessionDate)) % SESSION_BAR_GRADIENTS.length];
-    const plans = evt.attachments.filter((file) => file.mime_type.startsWith('image/'));
+    const plans = evt.attachments.filter((file) => file.mime_type.startsWith('image/') && !(evt.sessions ?? []).some(session => session.floor_plan_attachment_id === file.id));
 
     return (
       <div
@@ -593,6 +598,9 @@ export function EventsBoard({
                   </span>
                 </div>
               )}
+              {(block.session?.floor_plan ? [block.session.floor_plan] : plans).map(file => (
+                <FloorPlanPreview key={file.id} file={file} label={block.session?.title ? `${t('display.floorPlan')} · ${block.session.title}` : t('display.floorPlan')} />
+              ))}
               {renderPanels(block.tasks, evt)}
             </div>
           ))}
@@ -602,7 +610,7 @@ export function EventsBoard({
   };
 
   const renderTimeline = (): ReactNode => {
-    const days = buildTimeline();
+    const days = buildTimeline().filter(day => matchesDateScope(day.date, todayStr, dateScope, selectedDate));
     if (days.length === 0) {
       return (
         <div className="mx-auto max-w-xl py-16">
@@ -620,7 +628,7 @@ export function EventsBoard({
             0
           );
           return (
-            <section key={day.date} data-timeline-day={day.date} className="animate-slide-up">
+            <section key={day.date} data-timeline-day={day.date} className="animate-slide-up rounded-3xl border border-slate-200 bg-slate-100/60 p-3 shadow-sm sm:p-5 dark:border-slate-700 dark:bg-slate-950/40">
               <div
                 role={past ? 'button' : undefined}
                 tabIndex={past ? 0 : undefined}
@@ -637,10 +645,10 @@ export function EventsBoard({
                     : undefined
                 }
                 className={cn(
-                  'mb-3 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border px-4 py-3',
+                  'mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-l-[6px] px-4 py-4',
                   past
                     ? 'cursor-pointer border-slate-200 bg-slate-100 opacity-80 dark:border-slate-700 dark:bg-slate-800/60'
-                    : 'border-navy-200 bg-gradient-to-r from-navy-50 via-white to-white shadow-sm dark:border-navy-800 dark:from-navy-950/60 dark:via-slate-900 dark:to-slate-900'
+                    : day.date === todayStr ? 'border-teal-300 border-l-teal-600 bg-teal-50 shadow-sm dark:border-teal-800 dark:bg-teal-950/40' : 'border-slate-200 border-l-navy-700 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900'
                 )}
               >
                 <span className="flex h-14 w-14 shrink-0 flex-col overflow-hidden rounded-xl bg-white shadow ring-1 ring-black/10">
@@ -652,7 +660,7 @@ export function EventsBoard({
                   </span>
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                  <p className="text-lg font-black tracking-tight text-slate-900 sm:text-xl dark:text-white">
                     {formatDate(day.date, lang, 'EEEE d MMMM yyyy')}
                   </p>
                   <p
@@ -704,7 +712,7 @@ export function EventsBoard({
         ))}
       </div>
       {viewMode === 'date' && (
-        <p className="min-w-0 flex-1 text-sm text-slate-500 dark:text-slate-400">{t('display.dateViewHint')}</p>
+        <p className="w-full text-sm leading-relaxed text-slate-500 sm:min-w-48 sm:flex-1 dark:text-slate-400">{t('display.dateViewHint')}</p>
       )}
     </div>
   );
@@ -712,6 +720,12 @@ export function EventsBoard({
   return (
     <div className="space-y-6">
       {viewToggle}
+      {viewMode === 'date' && <BoardDateFilter dates={buildTimeline().map(day => day.date)} today={todayStr} scope={dateScope} selectedDate={selectedDate} onChange={(scope, date = '') => {
+        setDateScope(scope);
+        setSelectedDate(date);
+        if (scope === 'past') setOpenPastDays(new Set(buildTimeline().filter(day => day.date < todayStr).map(day => day.date)));
+        if (scope === 'custom' && date < todayStr) setOpenPastDays(previous => new Set(previous).add(date));
+      }} />}
 
       {upcoming.length > 0 && (
         <section className="animate-slide-up rounded-3xl border border-gold-200 bg-gradient-to-r from-gold-50 via-white to-white p-4 shadow-sm dark:border-gold-900 dark:from-gold-950/30 dark:via-slate-900 dark:to-slate-900">
@@ -939,6 +953,10 @@ export function EventsBoard({
               </div>
             )}
 
+            {isCollapsed && <div className="space-y-4 p-4">
+              {event.attachments.filter(file => file.mime_type.startsWith('image/') && !sessions.some(session => session.floor_plan_attachment_id === file.id)).map(file => <FloorPlanPreview key={file.id} file={file} />)}
+              {sessions.filter(session => session.floor_plan && (!selectedDept || event.tasks.some(task => task.session_id === session.id && task.department_id === selectedDept))).map(session => <FloorPlanPreview key={session.id} file={session.floor_plan!} label={`${t('display.floorPlan')} · ${session.title || formatDate(session.session_date, lang)}`} />)}
+            </div>}
             {!isCollapsed && (
               <div className="px-5 pb-5 pt-4 lg:px-7">
                 {/* Everything the whole event needs, stated once */}
@@ -962,9 +980,9 @@ export function EventsBoard({
                       )}
                       {sessions.map((session) => {
                         const sessionTasks = event.tasks.filter((task) => task.session_id === session.id);
-                        if (sessionTasks.length === 0) return null;
+                        if (sessionTasks.length === 0 && selectedDept) return null;
                         const panels = renderPanels(sessionTasks, event);
-                        if (!panels) return null;
+                        if (!panels && selectedDept) return null;
                         return (
                           <div
                             key={session.id}
@@ -973,6 +991,7 @@ export function EventsBoard({
                             {sessionHeader(session, sessionTasks, event, barGradientFor(session.session_date))}
                             {/* Operational note for this session: OT, reminders, venue instructions */}
                             {sessionNoteBar(session)}
+                            {session.floor_plan && <FloorPlanPreview file={session.floor_plan} label={`${t('display.floorPlan')} · ${session.title || formatDate(session.session_date, lang)}`} />}
                             {panels}
                           </div>
                         );
