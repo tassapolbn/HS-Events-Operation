@@ -1,3 +1,4 @@
+import { ContextMenu } from '../ui/ContextMenu';
 import { useState } from 'react';
 import {
   Bell, ChevronDown, ClipboardPaste, Clock, Copy, CopyPlus, ListPlus, Pencil, Plus, Trash2
@@ -41,6 +42,7 @@ export function DepartmentSection({
 }: DepartmentSectionProps) {
   const { t, deptName, lang } = useLanguage();
   const clipboard = useTaskClipboard();
+  const [context, setContext] = useState<{x:number;y:number;task:EventTask} | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
   const [adding, setAdding] = useState(false);
@@ -157,6 +159,13 @@ export function DepartmentSection({
               {tasks.map((task, index) => (
                 <li
                   key={task.id}
+                  tabIndex={0}
+                  onContextMenu={event => { if (!canEdit) return; event.preventDefault(); setContext({x:event.clientX,y:event.clientY,task}); }}
+                  onKeyDown={event => {
+                    if (event.target !== event.currentTarget) return;
+                    if (event.key === 'Enter') { event.preventDefault(); onOpenTask(task); }
+                    if (canEdit && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) { event.preventDefault(); const rect=event.currentTarget.getBoundingClientRect(); setContext({x:rect.left+20,y:rect.bottom,task}); }
+                  }}
                   draggable={canEdit}
                   onDragStart={(e) => {
                     e.dataTransfer.setData('text/task-id', task.id);
@@ -265,6 +274,7 @@ export function DepartmentSection({
                 onChange={(e) => setQuickTitle(e.target.value)}
                 onPaste={(e) => void handleQuickPaste(e)}
                 onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     submitQuickAdd();
@@ -298,6 +308,15 @@ export function DepartmentSection({
           )}
         </div>
       )}
+      {context && canEdit && <ContextMenu x={context.x} y={context.y} title={context.task.title} onClose={() => setContext(null)} actions={[
+        {label:t('tasks.taskDetails'),onSelect:()=>onOpenTask(context.task)},
+        {label:t('common.edit'),onSelect:()=>onEditTask(context.task)},
+        {label:t('tasks.copyTask'),divider:true,onSelect:()=>onCopyTask(context.task)},
+        {label:t('tasks.duplicateTask'),onSelect:()=>void onDuplicateTask(context.task)},
+        {label:lang === 'th' ? 'เพิ่มงานในแผนกนี้' : 'Add task to this department',onSelect:()=>onAddTask(department.id)},
+        {label:t('tasks.pasteHere'),disabled:!clipboard,onSelect:()=>void onPasteTasks(department.id)},
+        {label:t('tasks.deleteTask'),danger:true,divider:true,onSelect:()=>onDeleteTask(context.task)}
+      ]} />}
     </section>
   );
 }

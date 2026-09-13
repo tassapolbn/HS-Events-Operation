@@ -218,7 +218,7 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
                       <DateChip value={m.value} eventDate={event.event_date} />
                       <span
                         className={cn(
-                          'w-[4.75rem] text-right text-xl font-black tabular-nums',
+                          'min-w-[5.5rem] rounded-lg bg-gold-100 px-2 py-1 text-right text-2xl font-black tabular-nums dark:bg-gold-950/50',
                           isNext ? 'text-gold-900 dark:text-gold-200' : 'text-slate-900 dark:text-slate-100'
                         )}
                       >
@@ -240,13 +240,13 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
           milestones.length > 0 ? 'xl:col-span-2 xl:grid-cols-1' : 'xl:grid-cols-3'
         )}
       >
-        <div className={cn('flex items-center gap-3 px-4 py-3.5', CARD)}>
+        <div className={cn('flex items-center gap-3 border-2 !border-teal-300 !bg-teal-50 px-4 py-4 dark:!border-teal-800 dark:!bg-teal-950/30', CARD)}>
           <span className={cn(TILE, 'bg-navy-50 text-navy-700 dark:bg-navy-900/60 dark:text-navy-200')}>
             <MapPin className="h-5 w-5" />
           </span>
           <div className="min-w-0">
             <p className={cn(LABEL, 'text-slate-400')}>{t('common.location')}</p>
-            <p className="truncate text-lg font-extrabold text-slate-900 dark:text-slate-100"><BoardEditableText entity="event" id={event.id} eventId={event.id} field="location" value={event.location} label={t('common.location')} /></p>
+            <p className="break-words text-2xl font-black text-navy-950 dark:text-white"><BoardEditableText entity="event" id={event.id} eventId={event.id} field="location" value={event.location} label={t('common.location')} /></p>
           </div>
         </div>
 

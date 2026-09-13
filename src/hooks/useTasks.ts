@@ -35,6 +35,15 @@ export function useTaskMutations(eventId?: string) {
     onSuccess: invalidate
   });
 
+  const insertTaskRows = useMutation({
+    mutationFn: async ({anchorId, position, count}: {anchorId: string; position: 'above' | 'below'; count: number}): Promise<EventTask[]> => {
+      const {data, error} = await supabase.rpc('insert_task_rows', {p_event_id:eventId, p_anchor_id:anchorId, p_position:position, p_count:count});
+      if (error) throw error;
+      return (data ?? []) as EventTask[];
+    },
+    onSuccess: invalidate
+  });
+
   const updateTask = useMutation({
     mutationFn: async ({ id, ...input }: TaskPatch): Promise<EventTask> => {
       const { data, error } = await supabase.from('event_tasks').update(input).eq('id', id).select().single();
@@ -91,7 +100,7 @@ export function useTaskMutations(eventId?: string) {
     onSuccess: invalidate
   });
 
-  return { createTask, createTasks, updateTask, updateTasks, deleteTask, deleteTasks, restoreTasks };
+  return { createTask, createTasks, insertTaskRows, updateTask, updateTasks, deleteTask, deleteTasks, restoreTasks };
 }
 
 export function useChecklist(taskId: string | undefined) {

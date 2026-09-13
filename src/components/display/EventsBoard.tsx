@@ -1,9 +1,10 @@
+import { sessionHasEnded } from '../../lib/sessionVisibility';
 import { BoardEditableText } from './BoardEditableText';
 import { sessionTimeline } from '../../lib/sessionTimeline';
 import { FloorPlanPreview } from './FloorPlanPreview';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  AlarmClock, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, Clock, LayoutList,
+  EyeOff, Eye, AlarmClock, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, Clock, LayoutList,
   ListChecks, Map as MapIcon, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, User
 } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
@@ -77,6 +78,9 @@ export function EventsBoard({
   // Events open collapsed, so the board reads as a clean overview first and
   // staff expand only the event they are working on.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [hiddenSessions, setHiddenSessions] = useState<Set<string>>(new Set());
+  const [boardNow, setBoardNow] = useState(Date.now);
+  useEffect(() => { const timer = window.setInterval(() => setBoardNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   /** Which event the "Ask a question" dialog is open for */
   const [askEvent, setAskEvent] = useState<DisplayEvent | null>(null);
@@ -296,21 +300,19 @@ export function EventsBoard({
               <CalendarDays className="h-4 w-4 text-gold-400" /> {formatDate(session.session_date, lang)}
             </span>
             {session.location && (
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold">
-                <MapPin className="h-4 w-4 text-gold-400" /> <BoardEditableText entity="session" id={session.id} eventId={evt.id} field="location" value={session.location} label={t('common.location')} />
+              <span className="inline-flex max-w-full items-center gap-2.5 rounded-xl bg-white px-3.5 py-2.5 text-navy-950 shadow-sm ring-1 ring-white/80">
+                <MapPin className="h-6 w-6 shrink-0 text-teal-700" />
+                <span className="min-w-0"><span className="block text-[0.6rem] font-extrabold uppercase tracking-wider text-teal-700">{t('common.location')}</span>
+                <span className="break-words text-lg font-black sm:text-xl"><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="location" value={session.location} label={t('common.location')} /></span></span>
               </span>
             )}
-            {/* Clock time and free text timing share one chip, e.g. "13:50 - 14:20 after school" */}
-            {(session.start_time || session.time_note) && (
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold">
-                <Clock className="h-4 w-4 shrink-0 text-gold-400" />
-                {session.start_time && (
-                  <span className="tabular-nums">
-                    {formatTime(session.start_time, lang)}
-                    {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
-                  </span>
-                )}
-                {session.time_note && <span><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="time_note" value={session.time_note} label={t('common.notes')} /></span>}
+            {(session.start_time || session.end_time || session.time_note) && (
+              <span className="inline-flex max-w-full items-center gap-2.5 rounded-xl bg-gold-400 px-3.5 py-2.5 text-navy-950 shadow-sm ring-1 ring-gold-200">
+                <Clock className="h-6 w-6 shrink-0" />
+                <span className="min-w-0"><span className="block text-[0.6rem] font-extrabold uppercase tracking-wider">{lang === 'th' ? 'เวลาปฏิบัติงาน' : 'Session time'}</span>
+                {(session.start_time || session.end_time) && <span className="block text-xl font-black tabular-nums sm:text-2xl">{session.start_time ? formatTime(session.start_time, lang) : '—'}{session.end_time && <> – {formatTime(session.end_time, lang)}</>}</span>}
+                {session.time_note && <span className="block break-words text-base font-bold"><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="time_note" value={session.time_note} label={t('common.notes')} /></span>}
+                </span>
               </span>
             )}
           </div>
@@ -418,6 +420,9 @@ export function EventsBoard({
   /** One event's work on one day, inside the date ordered view */
   const renderTimelineGroup = (date: string, group: TimelineEventGroup): ReactNode => {
     const evt = group.event;
+    const currentSession = group.blocks[0].session;
+    const canHide = currentSession && sessionHasEnded(currentSession, boardNow);
+    const isHidden = canHide && hiddenSessions.has(currentSession.id);
     const headerColor = evt.header_color || '#1a3c5e';
     const headerText = evt.header_text_color || '#ffffff';
     const CategoryIcon = categoryIcon(evt.category);
@@ -464,6 +469,9 @@ export function EventsBoard({
           )}
           <span className="ml-auto flex items-center gap-2">
             {editMode && <button type="button" onClick={() => onEditEvent?.(evt)} aria-label={`${t('events.editEvent')}: ${evt.name}`} className="rounded-lg bg-white/20 p-2 hover:bg-white/30"><Pencil className="h-4 w-4" /></button>}
+            {canHide && <button type="button" aria-expanded={!isHidden} onClick={() => setHiddenSessions(previous => { const next = new Set(previous); if (next.has(currentSession.id)) next.delete(currentSession.id); else next.add(currentSession.id); return next; })} className="inline-flex items-center gap-1.5 rounded-xl bg-white/20 px-3 py-2 text-sm font-bold hover:bg-white/30">
+              {isHidden ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}{isHidden ? (lang === 'th' ? 'แสดง session' : 'Show session') : (lang === 'th' ? 'ซ่อน session ที่ผ่านมา' : 'Hide past session')}
+            </button>}
             {/* The plan opens straight on the board, without leaving this view */}
             {plans.length > 0 && (
               <button
@@ -487,7 +495,7 @@ export function EventsBoard({
           </span>
         </div>
 
-        <div className="space-y-4 p-3 lg:p-4">
+        {isHidden ? <div className="flex flex-wrap gap-x-3 gap-y-1 bg-slate-50 px-4 py-3 text-sm text-slate-500 dark:bg-slate-800/50 dark:text-slate-300"><span>{currentSession.title || formatDate(date, lang)}</span><span>{formatDate(date, lang)} · {lang === 'th' ? 'ซ่อนรายละเอียดแล้ว' : 'Details hidden'}</span></div> : <div className="space-y-4 p-3 lg:p-4">
           {group.blocks.map((block) => (
             <div key={block.key} className="space-y-3">
               {block.session ? (
@@ -509,14 +517,17 @@ export function EventsBoard({
               {renderPanels(block.tasks, evt)}
             </div>
           ))}
-        </div>
+        </div>}
       </div>
     );
   };
 
   const renderTimeline = (): ReactNode => {
     const entries = sessionTimeline(events, selectedDept);
-    return <div className="space-y-6">{entries.map(({date, event, block}) =>
+    const past = entries.flatMap(entry => entry.block.session && sessionHasEnded(entry.block.session, boardNow) ? [entry.block.session.id] : []);
+    return <div className="space-y-6">
+      {past.length > 0 && <div className="flex flex-wrap items-center gap-2 text-sm text-slate-500"><span>{lang === 'th' ? `ผ่านมาแล้ว ${past.length} session` : `${past.length} past sessions`}</span><button type="button" onClick={() => setHiddenSessions(new Set(past))} className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-white">{lang === 'th' ? 'ซ่อน session ที่ผ่านมาทั้งหมด' : 'Hide all past sessions'}</button>{past.some(id => hiddenSessions.has(id)) && <button type="button" onClick={() => setHiddenSessions(new Set())} className="rounded-lg px-3 py-1.5 font-semibold text-teal-700 dark:text-teal-300">{lang === 'th' ? 'แสดงทั้งหมด' : 'Show all'}</button>}</div>}
+      {entries.map(({date, event, block}) =>
       renderTimelineGroup(date, {event, blocks: [block]})
     )}</div>;
   };
@@ -778,10 +789,6 @@ export function EventsBoard({
               </div>
             )}
 
-            {isCollapsed && <div className="space-y-4 p-4">
-              {event.attachments.filter(file => file.mime_type.startsWith('image/') && !sessions.some(session => session.floor_plan_attachment_id === file.id)).map(file => <FloorPlanPreview key={file.id} file={file} />)}
-              {sessions.filter(session => session.floor_plan && (!selectedDept || event.tasks.some(task => task.session_id === session.id && task.department_id === selectedDept))).map(session => <FloorPlanPreview key={session.id} file={session.floor_plan!} label={`${t('display.floorPlan')} · ${session.title || formatDate(session.session_date, lang)}`} />)}
-            </div>}
             {!isCollapsed && (
               <div className="px-5 pb-5 pt-4 lg:px-7">
                 {/* Everything the whole event needs, stated once */}

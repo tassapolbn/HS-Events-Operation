@@ -1,6 +1,8 @@
+import { ContextMenu, type ContextAction } from '../ui/ContextMenu';
+import { inverseGridEntry, type GridHistoryEntry } from '../../lib/gridHistory';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDownToLine, Check, ClipboardPaste, Columns3, Copy, CopyPlus, Keyboard, Maximize2, Plus, Trash2, Undo2, Search, Table2, ChevronDown, Pencil, Loader2
+  ArrowDownToLine, Check, ClipboardPaste, Columns3, Copy, CopyPlus, Keyboard, Maximize2, Plus, Trash2, Undo2, Redo2, MoreHorizontal, Search, Table2, ChevronDown, Pencil, Loader2
 } from 'lucide-react';
 import { en } from '../../i18n/en';
 import { th } from '../../i18n/th';
@@ -115,10 +117,7 @@ interface Selection {
   c2: number;
 }
 
-type UndoEntry =
-  | { kind: 'update'; patches: Array<{ id: string; values: Partial<RowValues> }> }
-  | { kind: 'create'; ids: string[] }
-  | { kind: 'delete'; ids: string[] };
+type UndoEntry = GridHistoryEntry<GridField>;
 
 interface TaskGridProps {
   eventId: string;
@@ -139,10 +138,18 @@ export function TaskGrid({
   const { t, deptName, lang } = useLanguage();
   const { toast } = useToast();
   const { profile } = useAuth();
-  const { createTasks, updateTasks, deleteTasks, restoreTasks } = useTaskMutations(eventId);
+  const { createTasks, insertTaskRows, updateTasks, deleteTasks, restoreTasks } = useTaskMutations(eventId);
   const clipboard = useTaskClipboard();
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const redoStack = useRef<UndoEntry[]>([]);
+  const historyBusy = useRef(false);
+  const actionBusy = useRef(false);
+  const editVersion = useRef(0);
+  const [redoDepth, setRedoDepth] = useState(0);
+  const [rowsToAdd, setRowsToAdd] = useState(5);
+  const [context, setContext] = useState<{x: number; y: number} | null>(null);
   const undoStack = useRef<UndoEntry[]>([]);
   const dragMode = useRef<'none' | 'select' | 'fill'>('none');
   const focusAfterCreate = useRef<{ id: string; field: GridField } | null>(null);
@@ -156,7 +163,7 @@ export function TaskGrid({
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [sel, setSel] = useState<Selection | null>(null);
-  const [editing, setEditing] = useState<{ r: number; c: number; initial: string | null } | null>(null);
+  const [editing, setEditing] = useState<{ r: number; c: number; initial: string | null; version?: number } | null>(null);
   const [pending, setPending] = useState<Record<string, Partial<RowValues>>>({});
   const [fillTo, setFillTo] = useState<number | null>(null);
   const [undoDepth, setUndoDepth] = useState(0);
@@ -230,7 +237,9 @@ export function TaskGrid({
     return { rows: built, bands: labels };
   }, [tasks, departments, sessions, pending, sessionLabel, t, search, departmentFilter, sessionFilter]);
 
-  useEffect(() => { setSel(null); setEditing(null); }, [search, departmentFilter, sessionFilter]);
+  useEffect(() => { setSel(null); setEditing(null); setContext(null); }, [search, departmentFilter, sessionFilter]);
+  const visibleIds = rows.map(row => row.task.id).join('|');
+  useEffect(() => { setContext(null); }, [visibleIds, hiddenColumns]);
 
   const rowById = useMemo(() => new Map(rows.map((row) => [row.task.id, row])), [rows]);
 
@@ -293,7 +302,7 @@ export function TaskGrid({
     focusAfterCreate.current = null;
     setSel({ r: rowIndex, c: Math.max(colIndex, 0), r2: rowIndex, c2: Math.max(colIndex, 0) });
     containerRef.current?.focus();
-  }, [rows, columns]);
+  }, [rows, columns, undoDepth]);
 
   // End a drag even if the pointer leaves the table
   useEffect(() => {
@@ -440,6 +449,8 @@ export function TaskGrid({
   );
 
   const pushUndo = useCallback((entry: UndoEntry) => {
+    redoStack.current = [];
+    setRedoDepth(0);
     undoStack.current.push(entry);
     if (undoStack.current.length > 30) undoStack.current.shift();
     setUndoDepth(undoStack.current.length);
@@ -452,8 +463,9 @@ export function TaskGrid({
 
       const before = real.map(({ id, values }) => {
         const row = rowById.get(id);
+        const source = row?.values ?? (tasks.find(task => task.id === id) ? toRowValues(tasks.find(task => task.id === id)!) : undefined);
         const previous: Partial<RowValues> = {};
-        if (row) for (const field of Object.keys(values) as GridField[]) previous[field] = row.values[field];
+        if (source) for (const field of Object.keys(values) as GridField[]) previous[field] = source[field];
         return { id, values: previous };
       });
 
@@ -555,8 +567,8 @@ export function TaskGrid({
   };
 
   const startEdit = (r: number, c: number, initial: string | null = null) => {
-    if (!canEdit || !rows[r] || !columns[c]) return;
-    setEditing({ r, c, initial });
+    if (!canEdit || busy || !rows[r] || !columns[c]) return;
+    setEditing({ r, c, initial, version: ++editVersion.current });
   };
 
   // ---------- clipboard ----------
@@ -592,7 +604,7 @@ export function TaskGrid({
   };
 
   const applyTable = async (table: string[][]) => {
-    if (!bounds || !canEdit || table.length === 0) return;
+    if (!bounds || !canEdit || busy || table.length === 0) return false;
 
     // Validate the complete paste before changing any cells.
     const single = table.length === 1 && table[0].length === 1;
@@ -602,7 +614,7 @@ export function TaskGrid({
         const column = columns[bounds.left + c];
         if (!column || parseCellInput(column, cells[c]) === null) {
           toast(lang === 'th' ? `ข้อมูลไม่ถูกต้อง แถว ${r + 1} คอลัมน์ ${column ? t(column.labelKey) : c + 1}` : `Invalid value at pasted row ${r + 1}, column ${column ? t(column.labelKey) : c + 1}`, 'error');
-          return;
+          return false;
         }
       }
     }
@@ -621,8 +633,7 @@ export function TaskGrid({
         }
         changes.push({ id: row.task.id, values });
       }
-      await commitUpdates(changes);
-      return;
+      return (await commitUpdates(changes)) === true;
     }
 
     const changes: Array<{ id: string; values: Partial<RowValues> }> = [];
@@ -640,14 +651,14 @@ export function TaskGrid({
       const values: Partial<RowValues> = {};
       cells.forEach((raw, index) => {
         const column = columns[bounds.left + index];
-        if (!column) return;
+        if (!column) return false;
         const parsed = parseCellInput(column, raw);
         if (parsed !== null) values[column.field] = parsed;
       });
       const row = rows[r];
       if (row) {
         changes.push({ id: row.task.id, values });
-        return;
+        return false;
       }
       const merged: RowValues = { ...base, ...values };
       const key = `${merged.session_id}|${merged.department_id}`;
@@ -656,7 +667,7 @@ export function TaskGrid({
       inserts.push(toInsert(merged, start));
     });
 
-    if (changes.length && !(await commitUpdates(changes))) return;
+    if (changes.length && !(await commitUpdates(changes))) return false;
     if (inserts.length > 0) {
       try {
         const created = await createTasks.mutateAsync(inserts);
@@ -664,12 +675,14 @@ export function TaskGrid({
         toast(`${t('grid.rowsAdded')} ${created.length}`);
       } catch {
         toast(t('common.errorGeneric'), 'error');
+        return false;
       }
     }
+    return true;
   };
 
   const handlePaste = (event: React.ClipboardEvent) => {
-    if (editing || !canEdit) return;
+    if (editing || !canEdit || busy) return;
     const text = event.clipboardData.getData('text/plain');
     if (!text) return;
     event.preventDefault();
@@ -677,7 +690,7 @@ export function TaskGrid({
   };
 
   const clearRange = async () => {
-    if (!bounds || !canEdit) return;
+    if (!bounds || !canEdit || busy) return;
     const changes: Array<{ id: string; values: Partial<RowValues> }> = [];
     for (let r = bounds.top; r <= bounds.bottom; r += 1) {
       const row = rows[r];
@@ -703,7 +716,7 @@ export function TaskGrid({
   // ---------- fill ----------
 
   const fillDown = async () => {
-    if (!bounds || !canEdit) return;
+    if (!bounds || !canEdit || busy) return;
     let source = bounds.top;
     let firstTarget = bounds.top + 1;
     if (bounds.top === bounds.bottom) {
@@ -744,7 +757,7 @@ export function TaskGrid({
   // ---------- rows ----------
 
   const addRows = async (count = 1, focusField: GridField = 'title', from?: RowValues) => {
-    if (!canEdit) return;
+    if (!canEdit || busy || actionBusy.current) return;
     setSearch('');
     const reference = from ?? rows[bounds?.bottom ?? rows.length - 1]?.values;
     const seed: RowValues = {
@@ -768,7 +781,7 @@ export function TaskGrid({
   };
 
   const duplicateRows = async () => {
-    if (!bounds || !canEdit) return;
+    if (!bounds || !canEdit || busy) return;
     const sources = rows.slice(bounds.top, bounds.bottom + 1);
     if (sources.length === 0) return;
     const counters = new Map<string, number>();
@@ -792,7 +805,7 @@ export function TaskGrid({
   };
 
   const removeRows = async () => {
-    if (!bounds || !canEdit) return;
+    if (!bounds || !canEdit || busy) return;
     const ids = rows.slice(bounds.top, bounds.bottom + 1).map((row) => row.task.id);
     if (ids.length === 0) return;
     try {
@@ -806,7 +819,7 @@ export function TaskGrid({
 
   const pasteCopiedTasks = async () => {
     const clip = getTaskClipboard();
-    if (!clip || !canEdit) return;
+    if (!clip || !canEdit || busy) return;
     const reference = rows[bounds?.top ?? rows.length - 1]?.values;
     const departmentId = reference?.department_id || departments[0]?.id;
     if (!departmentId) return;
@@ -840,28 +853,88 @@ export function TaskGrid({
     }
   };
 
-  const undo = async () => {
-    const entry = undoStack.current.pop();
-    setUndoDepth(undoStack.current.length);
+  const travelHistory = async (redo = false) => {
+    if (!canEdit || busy || historyBusy.current) return;
+    const from = redo ? redoStack : undoStack;
+    const to = redo ? undoStack : redoStack;
+    const entry = from.current[from.current.length - 1];
     if (!entry) return;
+    historyBusy.current = true;
     try {
-      if (entry.kind === 'update' && !(await commitUpdates(entry.patches, false))) { undoStack.current.push(entry); setUndoDepth(undoStack.current.length); return; }
+      const values = new Map(tasks.map(task => [task.id, {...toRowValues(task), ...pending[task.id]}]));
+      const inverse = inverseGridEntry(entry, values);
+      if (entry.kind === 'update' && !(await commitUpdates(entry.patches, false))) return;
       if (entry.kind === 'create') await deleteTasks.mutateAsync(entry.ids);
       if (entry.kind === 'delete') await restoreTasks.mutateAsync(entry.ids);
-      toast(t('grid.undone'));
-    } catch {
-      undoStack.current.push(entry);
-      setUndoDepth(undoStack.current.length);
-      toast(t('common.errorGeneric'), 'error');
-    }
+      from.current.pop();
+      to.current.push(inverse);
+      setUndoDepth(undoStack.current.length); setRedoDepth(redoStack.current.length);
+      toast(redo ? (lang === 'th' ? 'ทำซ้ำแล้ว' : 'Redone') : t('grid.undone'));
+    } catch { toast(t('common.errorGeneric'), 'error'); }
+    finally { historyBusy.current = false; }
   };
+  const undo = () => travelHistory();
+
+  const insertRows = async (position: 'above' | 'below', count = 1) => {
+    if (!canEdit || busy || actionBusy.current || !bounds) return;
+    const anchor = rows[position === 'above' ? bounds.top : bounds.bottom];
+    if (!anchor) return;
+    actionBusy.current = true;
+    try {
+      const created = await insertTaskRows.mutateAsync({anchorId: anchor.task.id, position, count});
+      pushUndo({kind: 'create', ids: created.map(task => task.id)});
+      setSearch('');
+      if (created[0]) focusAfterCreate.current = {id: created[0].id, field:'title'};
+    } catch { toast(t('common.errorGeneric'), 'error'); }
+    finally { actionBusy.current = false; }
+  };
+
+  const copyCells = async () => {
+    const text = toClipboardTable(selectionAsTable());
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); stashSelectedTasks(); toast(t('grid.copied')); }
+    catch { toast(lang === 'th' ? 'กด Ctrl+C เพื่อคัดลอกเซลล์ที่เลือก' : 'Press Ctrl+C to copy the selected cells.', 'error'); }
+  };
+  const pasteCells = async () => {
+    try { const text = await navigator.clipboard.readText(); if (text) await applyTable(parseClipboardTable(text)); }
+    catch { toast(lang === 'th' ? 'กด Ctrl+V เพื่อวางที่เซลล์ที่เลือก' : 'Press Ctrl+V to paste into the selection.', 'error'); }
+  };
+  const openContext = (event: React.MouseEvent, r: number, c: number, wholeRow = false) => {
+    event.preventDefault(); event.stopPropagation();
+    if (busy) return;
+    const x = event.clientX, y = event.clientY;
+    if (editing) return;
+    if (wholeRow && sel && bounds && r >= bounds.top && r <= bounds.bottom) setSel({...sel,c:0,c2:columns.length-1});
+    else if (!inSelection(r,c)) setSel({r,c:wholeRow ? 0:c,r2:r,c2:wholeRow ? columns.length-1:c});
+    dragMode.current = 'none';
+    setContext({x,y});
+  };
+  const openKeyboardMenu = () => {
+    if (!sel) return;
+    const rect = containerRef.current?.querySelector(`[data-cell="${sel.r}-${sel.c}"]`)?.getBoundingClientRect();
+    if (rect) setContext({x:rect.left+12, y:rect.bottom});
+  };
+  const closeContext = () => { setContext(null); containerRef.current?.focus(); };
 
   // ---------- keyboard ----------
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    if (editing || event.nativeEvent.isComposing) return;
+    if (editing || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || context) return;
     const mod = event.ctrlKey || event.metaKey;
     const key = event.key;
+    if (key === 'ContextMenu' || (event.shiftKey && key === 'F10')) { event.preventDefault(); openKeyboardMenu(); return; }
+    if (mod && key.toLowerCase() === 'f') { event.preventDefault(); searchRef.current?.focus(); return; }
+    if (mod && key === '/') { event.preventDefault(); setHelpOpen(open => !open); return; }
+    if (event.altKey && key === 'Enter' && sel && rows[sel.r]) { event.preventDefault(); onOpenTask(rows[sel.r].task); return; }
+    if (mod && ['Home','End'].includes(key)) { event.preventDefault(); if (rows.length) selectCell(key === 'Home' ? 0 : rows.length-1, key === 'Home' ? 0 : columns.length-1, event.shiftKey); return; }
+    if (event.shiftKey && key === ' ' && sel) { event.preventDefault(); setSel({...sel,c:0,c2:columns.length-1}); return; }
+    if (mod && key === ' ' && sel) { event.preventDefault(); setSel({...sel,r:0,r2:rows.length-1}); return; }
+    if (busy && (mod || ['Delete','Backspace','Enter','F2'].includes(key))) { event.preventDefault(); return; }
+    if (mod && event.altKey && ['ArrowUp','ArrowDown'].includes(key)) { event.preventDefault(); void insertRows(key === 'ArrowUp' ? 'above' : 'below'); return; }
+    if (mod && event.altKey && key === 'Backspace') { event.preventDefault(); void removeRows(); return; }
+    if (mod && key.toLowerCase() === 's') { event.preventDefault(); return; }
+    if (mod && key.toLowerCase() === 'y') { event.preventDefault(); void travelHistory(true); return; }
+    if (mod && event.shiftKey && key.toLowerCase() === 'd') { event.preventDefault(); void duplicateRows(); return; }
 
     if (mod && key.toLowerCase() === 'd') {
       event.preventDefault();
@@ -870,7 +943,7 @@ export function TaskGrid({
     }
     if (mod && key.toLowerCase() === 'z') {
       event.preventDefault();
-      void undo();
+      void travelHistory(event.shiftKey);
       return;
     }
     if (mod && key.toLowerCase() === 'a') {
@@ -935,24 +1008,26 @@ export function TaskGrid({
     }
   };
 
-  const commitEdit = async (raw: string, direction: 'down' | 'up' | 'right' | 'left' | 'stay') => {
+  const commitEdit = async (raw: string, direction: 'down' | 'up' | 'right' | 'left' | 'stay' | 'fill') => {
     const cell = editing;
     setEditing(null);
     containerRef.current?.focus();
-    if (!cell) return;
+    if (!cell) return false;
     const column = columns[cell.c];
     const row = rows[cell.r];
-    if (!column || !row) return;
+    if (!column || !row) return false;
 
+    if (direction === 'fill') { const saved = await applyTable([[raw]]); if (!saved) setEditing({...cell,initial:raw,version:++editVersion.current}); return saved; }
     const parsed = column.type === 'time' ? normalizeTimeInput(raw) : raw;
     if (column.type === 'time' && raw.trim() && !parsed) {
       toast(lang === 'th' ? 'กรุณาใส่เวลา เช่น 09:30' : 'Enter a valid time, e.g. 09:30', 'error');
-      setEditing({ ...cell, initial: raw });
-      return;
+      setEditing({ ...cell, initial: raw, version: ++editVersion.current });
+      return false;
     }
     const changed = parsed !== row.values[column.field];
-    if (changed && !(await commitUpdates([{ id: row.task.id, values: { [column.field]: parsed } }]))) return;
+    if (changed && !(await commitUpdates([{ id: row.task.id, values: { [column.field]: parsed } }]))) { setEditing({...cell, initial:raw, version: ++editVersion.current}); return false; }
 
+    if (direction === 'stay') return true;
     if (direction === 'down') {
       if (cell.r === rows.length - 1) {
         if (changed && parsed.trim() !== '') await addRows(1, column.field, row.values);
@@ -978,8 +1053,25 @@ export function TaskGrid({
   const inFillPreview = (r: number) =>
     fillTo !== null && !!bounds && r > bounds.bottom && r <= fillTo;
 
-  const busy = createTasks.isPending || updateTasks.isPending || deleteTasks.isPending || restoreTasks.isPending;
+  const busy = insertTaskRows.isPending || createTasks.isPending || updateTasks.isPending || deleteTasks.isPending || restoreTasks.isPending;
   const selectedRowCount = bounds ? bounds.bottom - bounds.top + 1 : 0;
+
+  const text = (th: string, en: string) => lang === 'th' ? th : en;
+  const contextActions: ContextAction[] = [
+    {label:text('แก้ไขเซลล์','Edit cell'), shortcut:'F2', disabled:!canEdit || busy, onSelect:()=>{if(sel) startEdit(sel.r,sel.c);}},
+    {label:text('รายละเอียดงาน','Task details'), shortcut:'Alt+Enter', onSelect:()=>{if(sel && rows[sel.r]) onOpenTask(rows[sel.r].task);}},
+    {label:text('คัดลอกเซลล์','Copy cells'), shortcut:'Ctrl+C', divider:true, onSelect:()=>void copyCells()},
+    {label:text('วางในเซลล์','Paste cells'), shortcut:'Ctrl+V', disabled:!canEdit || busy, onSelect:()=>void pasteCells()},
+    {label:text('ล้างข้อความในเซลล์','Clear cell contents'), shortcut:'Delete', disabled:!canEdit || busy, onSelect:()=>void clearRange()},
+    {label:text('เติมค่าลงล่าง','Fill down'), shortcut:'Ctrl+D', disabled:!canEdit || busy, onSelect:()=>void fillDown()},
+    {label:text('แทรกแถวด้านบน','Insert row above'), shortcut:'Ctrl+Alt+↑', divider:true, disabled:!canEdit || busy, onSelect:()=>void insertRows('above')},
+    {label:text('แทรกแถวด้านล่าง','Insert row below'), shortcut:'Ctrl+Alt+↓', disabled:!canEdit || busy, onSelect:()=>void insertRows('below')},
+    {label:text(`แทรก ${rowsToAdd} แถวด้านล่าง`,`Insert ${rowsToAdd} rows below`), disabled:!canEdit || busy, onSelect:()=>void insertRows('below',rowsToAdd)},
+    {label:text('ทำสำเนาแถวที่เลือก','Duplicate selected rows'), shortcut:'Ctrl+Shift+D', disabled:!canEdit || busy, onSelect:()=>void duplicateRows()},
+    {label:text('ลบแถวที่เลือก','Delete selected rows'), shortcut:'Ctrl+Alt+⌫', danger:true, disabled:!canEdit || busy, onSelect:()=>void removeRows()},
+    {label:text('ย้อนกลับ','Undo'), shortcut:'Ctrl+Z', divider:true, disabled:!canEdit || !undoDepth || busy, onSelect:()=>void undo()},
+    {label:text('ทำซ้ำอีกครั้ง','Redo'), shortcut:'Ctrl+Y', disabled:!canEdit || !redoDepth || busy, onSelect:()=>void travelHistory(true)}
+  ];
 
   const toolbarButton =
     'inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-navy-700 disabled:opacity-40 disabled:hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-gold-300';
@@ -995,7 +1087,7 @@ export function TaskGrid({
         </span>
       </div>
       <div className="flex flex-wrap gap-2 border-b border-slate-100 p-3 dark:border-slate-800">
-        <label className="flex min-w-48 flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 dark:border-slate-700"><Search className="h-4 w-4 text-slate-400" /><input aria-label={lang === 'th' ? 'ค้นหาในตาราง' : 'Search worksheet'} placeholder={lang === 'th' ? 'ค้นหางาน ผู้รับผิดชอบ สถานที่…' : 'Search tasks, people, locations…'} value={search} onChange={event => setSearch(event.target.value)} className="w-full bg-transparent py-2 text-sm outline-none" /></label>
+        <label className="flex min-w-48 flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 dark:border-slate-700"><Search className="h-4 w-4 text-slate-400" /><input ref={searchRef} aria-label={lang === 'th' ? 'ค้นหาในตาราง' : 'Search worksheet'} placeholder={lang === 'th' ? 'ค้นหางาน ผู้รับผิดชอบ สถานที่…' : 'Search tasks, people, locations…'} value={search} onChange={event => setSearch(event.target.value)} className="w-full bg-transparent py-2 text-sm outline-none" /></label>
         <select aria-label={t('common.department')} value={departmentFilter} onChange={event => setDepartmentFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-transparent p-2 text-sm dark:border-slate-700"><option value="">{lang === 'th' ? 'ทุกแผนก' : 'All departments'}</option>{departments.map(dept => <option key={dept.id} value={dept.id}>{deptName(dept)}</option>)}</select>
         <select aria-label={t('sessions.title')} value={sessionFilter} onChange={event => setSessionFilter(event.target.value)} className="max-w-64 rounded-xl border border-slate-200 bg-transparent p-2 text-sm dark:border-slate-700"><option value="all">{lang === 'th' ? 'ทุก session' : 'All sessions'}</option><option value="">{t('sessions.whole')}</option>{sessions.map(session => <option key={session.id} value={session.id}>{sessionLabel(session)}</option>)}</select>
         <button type="button" onClick={() => setComfortable(value => !value)} className={toolbarButton}>{comfortable ? (lang === 'th' ? 'แถวกระชับ' : 'Compact rows') : (lang === 'th' ? 'แถวอ่านง่าย' : 'Comfortable rows')}</button>
@@ -1004,21 +1096,21 @@ export function TaskGrid({
       <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 p-2 dark:border-slate-800">
         {canEdit && (
           <>
-            <button className={toolbarButton} onClick={() => void addRows(1)} disabled={createTasks.isPending}>
+            <button className={toolbarButton} onClick={() => void addRows(1)} disabled={busy}>
               <Plus className="h-3.5 w-3.5" /> {t('grid.addRow')}
             </button>
-            <button className={toolbarButton} onClick={() => void duplicateRows()} disabled={!bounds}>
+            <button className={toolbarButton} onClick={() => void duplicateRows()} disabled={!bounds || busy}>
               <CopyPlus className="h-3.5 w-3.5" /> {t('grid.duplicateRow')}
               {selectedRowCount > 1 && <span className="text-slate-400">({selectedRowCount})</span>}
             </button>
-            <button className={toolbarButton} onClick={() => void fillDown()} disabled={!bounds}>
+            <button className={toolbarButton} onClick={() => void fillDown()} disabled={!bounds || busy}>
               <ArrowDownToLine className="h-3.5 w-3.5" /> {t('grid.fillDown')}
             </button>
           </>
         )}
         <button
           className={toolbarButton}
-          disabled={!bounds}
+          disabled={!bounds || busy}
           onClick={async () => {
             const table = selectionAsTable();
             const count = stashSelectedTasks();
@@ -1043,17 +1135,20 @@ export function TaskGrid({
           <button
             className={cn(toolbarButton, 'hover:!text-red-600')}
             onClick={() => void removeRows()}
-            disabled={!bounds}
+            disabled={!bounds || busy}
           >
             <Trash2 className="h-3.5 w-3.5" /> {t('common.delete')}
           </button>
         )}
+        {canEdit && <><input aria-label={lang === 'th' ? 'จำนวนแถวที่จะเพิ่ม' : 'Rows to add'} type="number" min={1} max={100} value={rowsToAdd} onChange={event => setRowsToAdd(Math.max(1, Math.min(100, Math.floor(Number(event.target.value)) || 1)))} className="w-14 rounded-lg border border-slate-200 bg-transparent px-2 py-1 text-xs dark:border-slate-700" /><button className={toolbarButton} disabled={busy} onClick={() => void addRows(rowsToAdd)}>{lang === 'th' ? `เพิ่ม ${rowsToAdd} แถว` : `Add ${rowsToAdd} rows`}</button></>}
         {canEdit && (
-          <button className={toolbarButton} onClick={() => void undo()} disabled={undoDepth === 0}>
+          <button className={toolbarButton} onClick={() => void undo()} disabled={undoDepth === 0 || busy}>
             <Undo2 className="h-3.5 w-3.5" /> {t('grid.undo')}
           </button>
         )}
 
+        {canEdit && <button className={toolbarButton} disabled={!redoDepth || busy} onClick={() => void travelHistory(true)}><Redo2 className="h-3.5 w-3.5" />{lang === 'th' ? 'ทำซ้ำอีกครั้ง' : 'Redo'}</button>}
+        <button className={toolbarButton} disabled={!sel || busy} onClick={openKeyboardMenu}><MoreHorizontal className="h-4 w-4" />{lang === 'th' ? 'แอคชั่น' : 'Actions'}</button>
         <div className="ml-auto flex items-center gap-1.5">
           <div className="relative">
             {columnMenuOpen && <div className="fixed inset-0 z-20" onClick={() => setColumnMenuOpen(false)} />}
@@ -1116,7 +1211,15 @@ export function TaskGrid({
                   <p>{t('grid.helpCopy')}</p>
                   <p>{t('grid.helpFill')}</p>
                   <p>{t('grid.helpPasteRows')}</p>
-                  <p>{t('grid.helpUndo')}</p>
+                  <p>{t('grid.helpUndo')} · Ctrl+Y / Ctrl+Shift+Z: Redo</p>
+                  <p>Shift+Space: {lang === 'th' ? 'เลือกแถว' : 'Select rows'} · Ctrl+Space: {lang === 'th' ? 'เลือกคอลัมน์' : 'Select column'}</p>
+                  <p>Ctrl+Enter: {lang === 'th' ? 'ใส่ค่าเดียวกันในเซลล์ที่เลือก' : 'Apply typed value to selected cells'}</p>
+                  <p>Ctrl+Alt+↑ / ↓: {lang === 'th' ? 'แทรกแถวบน / ล่าง' : 'Insert row above / below'}</p>
+                  <p>Ctrl+Shift+D: {lang === 'th' ? 'ทำสำเนาแถว' : 'Duplicate rows'}</p>
+                  <p>Ctrl+Alt+Backspace: {lang === 'th' ? 'ลบแถว' : 'Delete rows'}</p>
+                  <p>Ctrl+Home / End: {lang === 'th' ? 'ไปต้น / ท้ายตาราง' : 'First / last cell'}</p>
+                  <p>Alt+Enter: {lang === 'th' ? 'รายละเอียดงาน' : 'Task details'} · Shift+F10: {lang === 'th' ? 'เมนูแอคชั่น' : 'Actions menu'}</p>
+                  <p>Ctrl+F: {lang === 'th' ? 'ค้นหาในตาราง' : 'Search worksheet'}</p>
                 </div>
               </>
             )}
@@ -1185,7 +1288,8 @@ export function TaskGrid({
                   )}
                   <tr className="group">
                     <td
-                      onClick={() => setSel({ r, c: 0, r2: r, c2: columns.length - 1 })}
+                      onContextMenu={event => openContext(event, r, 0, true)}
+                      onClick={event => { containerRef.current?.focus(); setSel(previous => ({r: event.shiftKey && previous ? previous.r : r,c:0,r2:r,c2:columns.length-1})); }}
                       className={cn(
                         'sticky left-0 z-[2] cursor-pointer border-b border-r border-slate-100 px-1 py-0 text-center text-[11px] font-bold dark:border-slate-800',
                         bounds && r >= bounds.top && r <= bounds.bottom
@@ -1208,6 +1312,7 @@ export function TaskGrid({
                           aria-selected={selected}
                           aria-label={`${t(column.labelKey)} ${r + 1}: ${displayValue(row, column)}`}
                           data-cell={`${r}-${c}`}
+                          onContextMenu={event => openContext(event, r, c)}
                           onMouseDown={(event) => {
                             if (event.button !== 0) return;
                             if (isEditing) return;
@@ -1230,6 +1335,12 @@ export function TaskGrid({
                         >
                           {isEditing ? (
                             <CellEditor
+                              key={editing?.version ?? 0}
+                              onContextMenu={(event, raw) => {
+                                event.preventDefault(); event.stopPropagation();
+                                const x = event.clientX, y = event.clientY;
+                                void commitEdit(raw, 'stay').then(saved => { if (saved) setContext({x,y}); });
+                              }}
                               column={column}
                               value={row.values[column.field]}
                               initial={editing?.initial ?? null}
@@ -1284,7 +1395,7 @@ export function TaskGrid({
                         </td>
                       );
                     })}
-                    <td className="border-b border-slate-100 px-1 text-center dark:border-slate-800">
+                    <td onContextMenu={event => openContext(event, r, 0, true)} className="border-b border-slate-100 px-1 text-center dark:border-slate-800">
                       <button
                         onClick={() => (canEdit ? onEditTask(row.task) : onOpenTask(row.task))}
                         title={canEdit ? t('grid.openFullForm') : t('tasks.taskDetails')}
@@ -1301,26 +1412,28 @@ export function TaskGrid({
         </div>
       )}
 
+      {context && <ContextMenu x={context.x} y={context.y} title={`${selectedRowCount} ${lang === 'th' ? 'แถวที่เลือก' : 'rows selected'}`} actions={contextActions} onClose={closeContext} />}
       <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400 dark:border-slate-800">
-        <span className="mr-4 font-semibold text-teal-700 dark:text-teal-300">{rows.length}/{tasks.length} {t('grid.tasksWord')}{selectedRowCount > 0 && ` · ${selectedRowCount} ${lang === 'th' ? 'แถวที่เลือก' : 'rows selected'}`}</span>{t('grid.footerHint')}
+        {lang === 'th' ? 'คลิกขวาเพื่อเปิดแอคชั่น · ' : 'Right-click for actions · '}<span className="mr-4 font-semibold text-teal-700 dark:text-teal-300">{rows.length}/{tasks.length} {t('grid.tasksWord')}{selectedRowCount > 0 && ` · ${selectedRowCount} ${lang === 'th' ? 'แถวที่เลือก' : 'rows selected'}`}</span>{t('grid.footerHint')}
       </p>
     </section>
   );
 }
 
 interface CellEditorProps {
+  onContextMenu: (event: React.MouseEvent, raw: string) => void;
   column: ColumnDef;
   value: string;
   initial: string | null;
   departments: Department[];
   sessions: EventSession[];
   sessionLabel: (session: EventSession) => string;
-  onCommit: (raw: string, direction: 'down' | 'up' | 'right' | 'left' | 'stay') => void;
+  onCommit: (raw: string, direction: 'down' | 'up' | 'right' | 'left' | 'stay' | 'fill') => void;
   onCancel: () => void;
 }
 
 function CellEditor({
-  column, value, initial, departments, sessions, sessionLabel, onCommit, onCancel
+  column, value, initial, departments, sessions, sessionLabel, onCommit, onCancel, onContextMenu
 }: CellEditorProps) {
   const { t, deptName } = useLanguage();
   const [draft, setDraft] = useState(initial ?? value);
@@ -1335,7 +1448,7 @@ function CellEditor({
     input.setSelectionRange(end, end);
   }, []);
 
-  const finish = (raw: string, direction: 'down' | 'up' | 'right' | 'left' | 'stay') => {
+  const finish = (raw: string, direction: 'down' | 'up' | 'right' | 'left' | 'stay' | 'fill') => {
     if (committed.current) return;
     committed.current = true;
     onCommit(raw, direction);
@@ -1343,10 +1456,11 @@ function CellEditor({
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     event.stopPropagation();
-    if (event.nativeEvent.isComposing) return;
+    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); finish(draft, 'stay'); return; }
     if (event.key === 'Enter') {
       event.preventDefault();
-      finish(draft, event.shiftKey ? 'up' : 'down');
+      finish(draft, event.ctrlKey || event.metaKey ? 'fill' : event.shiftKey ? 'up' : 'down');
       return;
     }
     if (event.key === 'Tab') {
@@ -1382,6 +1496,7 @@ function CellEditor({
           setDraft(event.target.value);
           finish(event.target.value, 'stay');
         }}
+        onContextMenu={event => { committed.current = true; onContextMenu(event, draft); }}
         onKeyDown={onKeyDown}
         onBlur={() => finish(draft, 'stay')}
         className="h-[34px] w-full border-0 bg-white px-1.5 text-[13px] text-slate-800 outline-none ring-2 ring-inset ring-navy-600 dark:bg-slate-900 dark:text-slate-100 dark:ring-gold-400"
@@ -1402,6 +1517,7 @@ function CellEditor({
       autoFocus
       value={draft}
       onChange={(event) => setDraft(event.target.value)}
+      onContextMenu={event => { committed.current = true; onContextMenu(event, draft); }}
       onKeyDown={onKeyDown}
       onBlur={() => finish(draft, 'stay')}
       placeholder={column.type === 'time' ? 'HH:mm' : undefined}
