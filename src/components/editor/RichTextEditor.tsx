@@ -15,6 +15,7 @@ import {
 import { cn } from '../../lib/utils';
 
 interface RichTextEditorProps {
+  autoFocus?: boolean;
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
@@ -51,9 +52,10 @@ const PRESET_COLORS = [
   '#F0B323', '#ffffff', '#dc2626', '#ea580c', '#16a34a', '#0ea5e9', '#8b5cf6', '#ec4899', '#0f172a'
 ];
 
-export function RichTextEditor({ value, onChange, placeholder, className }: RichTextEditorProps) {
+export function RichTextEditor({ value, onChange, placeholder, className, autoFocus = false }: RichTextEditorProps) {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const editor = useEditor({
+    autofocus: autoFocus ? 'end' : false,
     extensions: [
       StarterKit.configure({ heading: false, codeBlock: false, blockquote: false, horizontalRule: false }),
       Underline,

@@ -1,4 +1,4 @@
-import { forwardRef, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import { forwardRef, useId, type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { cn } from '../../lib/utils';
 
 const baseField =
@@ -9,6 +9,7 @@ const baseField =
   'dark:focus:border-gold-400 dark:focus:ring-gold-400/20 dark:disabled:bg-slate-800';
 
 interface FieldWrapperProps {
+  htmlFor?: string;
   label?: string;
   error?: string;
   required?: boolean;
@@ -17,11 +18,11 @@ interface FieldWrapperProps {
   className?: string;
 }
 
-export function FieldWrapper({ label, error, required, hint, children, className }: FieldWrapperProps) {
+export function FieldWrapper({ label, error, required, hint, children, className, htmlFor }: FieldWrapperProps) {
   return (
     <div className={cn('space-y-1.5', className)}>
       {label && (
-        <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <label htmlFor={htmlFor} className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           {label}
           {required && <span className="ml-0.5 text-red-500">*</span>}
         </label>
@@ -43,9 +44,11 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
   { label, error, hint, required, className, ...props },
   ref
 ) {
+  const generatedId = useId();
+  const id = props.id ?? generatedId;
   return (
-    <FieldWrapper label={label} error={error} required={required} hint={hint} className={className}>
-      <input ref={ref} required={required} className={cn(baseField, error && 'border-red-400')} {...props} />
+    <FieldWrapper htmlFor={id} label={label} error={error} required={required} hint={hint} className={className}>
+      <input ref={ref} id={id} aria-invalid={!!error} required={required} className={cn(baseField, error && 'border-red-400')} {...props} />
     </FieldWrapper>
   );
 });
@@ -60,9 +63,11 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
   { label, error, hint, required, className, ...props },
   ref
 ) {
+  const generatedId = useId();
+  const id = props.id ?? generatedId;
   return (
-    <FieldWrapper label={label} error={error} required={required} hint={hint} className={className}>
-      <textarea ref={ref} required={required} className={cn(baseField, 'min-h-[90px]', error && 'border-red-400')} {...props} />
+    <FieldWrapper htmlFor={id} label={label} error={error} required={required} hint={hint} className={className}>
+      <textarea ref={ref} id={id} aria-invalid={!!error} required={required} className={cn(baseField, 'min-h-[90px]', error && 'border-red-400')} {...props} />
     </FieldWrapper>
   );
 });
@@ -77,9 +82,11 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   { label, error, hint, required, className, children, ...props },
   ref
 ) {
+  const generatedId = useId();
+  const id = props.id ?? generatedId;
   return (
-    <FieldWrapper label={label} error={error} required={required} hint={hint} className={className}>
-      <select ref={ref} required={required} className={cn(baseField, 'appearance-none pr-8', error && 'border-red-400')} {...props}>
+    <FieldWrapper htmlFor={id} label={label} error={error} required={required} hint={hint} className={className}>
+      <select ref={ref} id={id} aria-invalid={!!error} required={required} className={cn(baseField, 'appearance-none pr-8', error && 'border-red-400')} {...props}>
         {children}
       </select>
     </FieldWrapper>

@@ -15,7 +15,8 @@ const corsHeaders = {
 };
 
 interface Payload {
-  type: 'event' | 'request';
+  type: 'event' | 'request' | 'task';
+  changeKind?: 'added' | 'updated';
   id: string;
   departmentIds: string[];
 }
@@ -114,17 +115,39 @@ Deno.serve(async (req: Request) => {
     }
 
     const payload = (await req.json()) as Payload;
-    if (!payload?.id || !Array.isArray(payload.departmentIds) || payload.departmentIds.length === 0) {
+    if (!payload?.id || !['event', 'request', 'task'].includes(payload.type) || (payload.type === 'task' ? !['added', 'updated'].includes(payload.changeKind ?? '') : !Array.isArray(payload.departmentIds) || payload.departmentIds.length === 0)) {
       return new Response(JSON.stringify({ error: 'Invalid payload' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
-    const { data: departments } = await admin
+    // The recipient is derived from the saved task; callers cannot broaden it.
+    let task = null;
+    let taskEvent = null;
+    let taskSession = null;
+    let departmentIds = payload.departmentIds;
+    if (payload.type === 'task') {
+      const found = await admin.from('event_tasks').select('*').eq('id', payload.id).is('deleted_at', null).single();
+      if (found.error || !found.data) return new Response(JSON.stringify({ error: 'Task not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      task = found.data;
+      const parent = await admin.from('events').select('*').eq('id', task.event_id).is('deleted_at', null).single();
+      if (parent.error || !parent.data) return new Response(JSON.stringify({ error: 'Event not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      taskEvent = parent.data;
+      if (task.session_id) {
+        const session = await admin.from('event_sessions').select('*').eq('id', task.session_id).eq('event_id', task.event_id).single();
+        if (session.error) throw session.error;
+        taskSession = session.data;
+      }
+      departmentIds = [task.department_id];
+    }
+
+    const { data: departments, error: departmentError } = await admin
       .from('departments')
       .select('id, code, name_en, emails')
-      .in('id', payload.departmentIds);
+      .in('id', departmentIds);
+    if (departmentError) throw departmentError;
+    if (!departments?.length) throw new Error('No recipient department found');
 
     const results: { department: string; emailed: string[]; error?: string }[] = [];
 
@@ -136,7 +159,32 @@ Deno.serve(async (req: Request) => {
       let eventId: string | null = null;
       let requestId: string | null = null;
 
-      if (payload.type === 'event') {
+      if (payload.type === 'task' && task && taskEvent) {
+        const action = payload.changeKind === 'added' ? 'Task added / เพิ่มงาน' : 'Task updated / แก้ไขงาน';
+        const fmt = (value: string | null) => value ? new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' }) : '-';
+        const plain = (value: string | null) => (value ?? '').replace(/<[^>]*>/g, ' ').trim();
+        eventId = taskEvent.id;
+        subject = `[${action}] ${task.title} - ${taskEvent.name}`;
+        inAppTitle = `${action}: ${task.title}`;
+        inAppBody = `${taskEvent.name} · ${taskSession?.title || taskSession?.session_date || taskEvent.event_date} · ${task.title}`;
+        html = emailHtml({
+          heading: action, eventName: taskEvent.name,
+          eventDate: taskSession?.session_date || taskEvent.event_date,
+          departmentName: dept.name_en,
+          rows: [
+            { label: 'Session', value: taskSession?.title || '-' },
+            { label: 'Location', value: task.work_location || taskSession?.location || taskEvent.location || '-' },
+            { label: 'Assigned staff', value: task.assigned_staff || '-' },
+            { label: 'Start', value: fmt(task.start_time) },
+            { label: 'Complete by', value: fmt(task.completion_time) },
+            { label: 'Description', value: plain(task.description) || '-' },
+            { label: 'Instructions', value: plain(task.instructions) || '-' },
+            { label: 'Notes', value: plain(task.notes) || '-' }
+          ],
+          taskLines: [task.title],
+          link: `${appUrl}/events/${taskEvent.id}?task=${encodeURIComponent(task.id)}`
+        });
+      } else if (payload.type === 'event') {
         const { data: event } = await admin
           .from('events')
           .select('*')
@@ -246,8 +294,8 @@ Deno.serve(async (req: Request) => {
       }
 
       // Record the in-app notification regardless of email outcome
-      await admin.from('notifications').insert({
-        kind: payload.type,
+      const { error: recordError } = await admin.from('notifications').insert({
+        kind: payload.type === 'task' ? 'event' : payload.type,
         title: inAppTitle,
         body: inAppBody,
         event_id: eventId,
@@ -257,6 +305,7 @@ Deno.serve(async (req: Request) => {
         created_by: user.id
       });
 
+      if (recordError) errorMsg = [errorMsg, 'Could not record the in-app notification'].filter(Boolean).join('; ');
       results.push({ department: dept.name_en, emailed, error: errorMsg });
     }
 

@@ -35,11 +35,11 @@ export function useMarkNotificationsRead(userId: string | undefined) {
   });
 }
 
-export interface SendNotificationPayload {
+export type SendNotificationPayload = {
   type: 'event' | 'request';
   id: string;
   departmentIds: string[];
-}
+} | { type: 'task'; id: string; changeKind: 'updated' | 'added' };
 
 export interface SendNotificationResult {
   ok: boolean;

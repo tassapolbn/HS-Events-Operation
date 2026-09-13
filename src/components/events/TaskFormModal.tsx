@@ -84,6 +84,7 @@ export function TaskFormModal({ open, onClose, eventId, eventDate, departments, 
   }, [open, task, defaultDepartmentId, defaultSessionId, reset]);
 
   const onSubmit = async (values: TaskFormValues) => {
+    const taskDate = sessions.find(session => session.id === values.session_id)?.session_date || eventDate;
     const payload = {
       title: values.title.trim(),
       department_id: values.department_id,
@@ -93,8 +94,8 @@ export function TaskFormModal({ open, onClose, eventId, eventDate, departments, 
       work_location: values.work_location.trim(),
       setup_location: values.setup_location.trim(),
       assigned_staff: values.assigned_staff.trim(),
-      start_time: combineDateTime(eventDate, values.start_time || null),
-      completion_time: combineDateTime(eventDate, values.completion_time || null),
+      start_time: combineDateTime(taskDate, values.start_time || null),
+      completion_time: combineDateTime(taskDate, values.completion_time || null),
       priority: values.priority,
       status: values.status
     };
@@ -116,6 +117,8 @@ export function TaskFormModal({ open, onClose, eventId, eventDate, departments, 
 
   return (
     <Modal
+      onConfirm={handleSubmit(onSubmit)}
+      confirmDisabled={createTask.isPending || updateTask.isPending || formState.isSubmitting}
       open={open}
       onClose={onClose}
       title={task ? t('tasks.editTask') : t('tasks.addTask')}

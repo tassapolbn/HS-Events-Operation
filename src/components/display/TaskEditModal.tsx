@@ -1,3 +1,4 @@
+import { TaskNotifyPanel } from '../events/TaskNotifyPanel';
 import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { Modal } from '../ui/Modal';
@@ -96,6 +97,8 @@ export function TaskEditModal({ open, onClose, event, task, departments }: TaskE
 
   return (
     <Modal
+      onConfirm={handleSubmit(onSubmit)}
+      confirmDisabled={updateTask.isPending || formState.isSubmitting}
       open={open}
       onClose={onClose}
       title={t('tasks.editTask')}
@@ -151,6 +154,7 @@ export function TaskEditModal({ open, onClose, event, task, departments }: TaskE
         <Input label={t('tasks.startTime')} type="time" {...register('start_time')} />
         <Input label={t('tasks.completionTime')} type="time" {...register('completion_time')} />
       </form>
+      {task && <div className="mt-4"><TaskNotifyPanel taskId={task.id} title={task.title} department={deptName(departments.find(d => d.id === task.department_id))} disabled={formState.isDirty || updateTask.isPending} /></div>}
     </Modal>
   );
 }

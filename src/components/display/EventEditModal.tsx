@@ -119,6 +119,8 @@ export function EventEditModal({ open, onClose, event }: EventEditModalProps) {
 
   return (
     <Modal
+      onConfirm={handleSubmit(onSubmit)}
+      confirmDisabled={updateEvent.isPending || formState.isSubmitting}
       open={open}
       onClose={onClose}
       title={t('events.editEvent')}

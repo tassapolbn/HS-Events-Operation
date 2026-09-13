@@ -17,6 +17,8 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, message, confir
   const { t } = useLanguage();
   return (
     <Modal
+      onConfirm={onConfirm}
+      confirmDisabled={loading}
       open={open}
       onClose={onClose}
       title={title}

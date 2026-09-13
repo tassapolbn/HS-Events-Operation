@@ -1,6 +1,6 @@
-import { BoardDateFilter } from './BoardDateFilter';
+import { BoardEditableText } from './BoardEditableText';
+import { sessionTimeline } from '../../lib/sessionTimeline';
 import { FloorPlanPreview } from './FloorPlanPreview';
-import { matchesDateScope, type DateScope } from '../../lib/boardDates';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   AlarmClock, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, Clock, LayoutList,
@@ -8,13 +8,12 @@ import {
 } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { useLanguage } from '../../i18n';
-import { RichTextViewer } from '../editor/RichTextViewer';
 import { EmptyState } from '../ui/EmptyState';
 import { AttachmentChips, EventBriefing, EventClosingBar, StatusBadge, boardStatus, openAttachment } from './EventBriefing';
 import { BoardSkeleton } from './BoardSkeleton';
 import { AskQuestionModal } from './AskQuestionModal';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
-import { cn, darkenColor, dayDiff, extractDate, formatDate, formatTime, isRichTextEmpty, readableTextColor } from '../../lib/utils';
+import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty, readableTextColor } from '../../lib/utils';
 import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
 
 /**
@@ -49,23 +48,7 @@ function readBoardView(): BoardView {
   }
 }
 
-/** One session (or the whole event block) shown under a day */
-interface TimelineBlock {
-  key: string;
-  session: DisplaySession | null;
-  tasks: DisplayTask[];
-}
-
-/** Everything one event has on one day */
-interface TimelineEventGroup {
-  event: DisplayEvent;
-  blocks: TimelineBlock[];
-}
-
-interface TimelineDay {
-  date: string;
-  groups: TimelineEventGroup[];
-}
+type TimelineEventGroup = { event: DisplayEvent; blocks: ReturnType<typeof sessionTimeline>[number]['block'][] };
 
 interface EventsBoardProps {
   events: DisplayEvent[] | undefined;
@@ -97,11 +80,7 @@ export function EventsBoard({
   const [highlighted, setHighlighted] = useState<string | null>(null);
   /** Which event the "Ask a question" dialog is open for */
   const [askEvent, setAskEvent] = useState<DisplayEvent | null>(null);
-  const [dateScope, setDateScope] = useState<DateScope>('all');
-  const [selectedDate, setSelectedDate] = useState('');
   const [viewMode, setViewMode] = useState<BoardView>(readBoardView);
-  /** Past days start folded away; tapping the heading opens them again */
-  const [openPastDays, setOpenPastDays] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     try {
@@ -229,7 +208,7 @@ export function EventsBoard({
                         </button>
 
                         <div className="min-w-0 flex-1">
-                          <p
+                          <div
                             className={cn(
                               'flex items-start gap-2 break-words text-[0.95rem] font-semibold leading-snug text-slate-800 dark:text-slate-100',
                               completed && 'text-slate-400 line-through dark:text-slate-500'
@@ -238,18 +217,18 @@ export function EventsBoard({
                             <span className="mt-px inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[0.7rem] font-extrabold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                               {index + 1}
                             </span>
-                            <span className="min-w-0 flex-1">{task.title}</span>
-                          </p>
+                            <span className="min-w-0 flex-1"><BoardEditableText entity="task" id={task.id} eventId={evt.id} field="title" value={task.title} label={t('tasks.taskTitle')} /></span>
+                          </div>
 
                           {!isRichTextEmpty(task.description) && !completed && (
-                            <RichTextViewer html={task.description} className="mt-1 pl-7 text-sm text-slate-500 dark:text-slate-400" />
+                            <BoardEditableText entity="task" id={task.id} eventId={evt.id} field="description" value={task.description} rich label={t('tasks.taskDescription')} className="mt-1 block pl-7 text-sm text-slate-500 dark:text-slate-400" />
                           )}
 
                           {hasMeta && (
                             <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-7">
                               {task.assigned_staff && !completed && (
                                 <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                  <User className="h-3.5 w-3.5" /> {task.assigned_staff}
+                                  <User className="h-3.5 w-3.5" /> <BoardEditableText entity="task" id={task.id} eventId={evt.id} field="assigned_staff" value={task.assigned_staff} label={t('tasks.assignedStaff')} />
                                 </span>
                               )}
                               {!completed && <AttachmentChips files={task.attachments} />}
@@ -262,7 +241,7 @@ export function EventsBoard({
                           )}
 
                           {!isRichTextEmpty(task.notes) && !completed && (
-                            <RichTextViewer html={task.notes} className="mt-1 pl-7 text-sm italic text-slate-400" />
+                            <BoardEditableText entity="task" id={task.id} eventId={evt.id} field="notes" value={task.notes} rich label={t('common.notes')} className="mt-1 block pl-7 text-sm italic text-slate-400" />
                           )}
                         </div>
                         {editMode && (
@@ -309,16 +288,16 @@ export function EventsBoard({
           </span>
         </span>
         <div className="min-w-0">
-          <p className="text-lg font-extrabold tracking-tight">
-            {session.title || formatDate(session.session_date, lang, 'EEEE d MMMM')}
-          </p>
-          <p className="mt-1 flex flex-wrap items-center gap-2">
+          <div className="text-lg font-extrabold tracking-tight">
+            <BoardEditableText entity="session" id={session.id} eventId={evt.id} field="title" value={session.title} placeholder={formatDate(session.session_date, lang, 'EEEE d MMMM')} label={t('sessions.title')} />
+          </div>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold">
               <CalendarDays className="h-4 w-4 text-gold-400" /> {formatDate(session.session_date, lang)}
             </span>
             {session.location && (
               <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold">
-                <MapPin className="h-4 w-4 text-gold-400" /> {session.location}
+                <MapPin className="h-4 w-4 text-gold-400" /> <BoardEditableText entity="session" id={session.id} eventId={evt.id} field="location" value={session.location} label={t('common.location')} />
               </span>
             )}
             {/* Clock time and free text timing share one chip, e.g. "13:50 - 14:20 after school" */}
@@ -331,10 +310,10 @@ export function EventsBoard({
                     {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
                   </span>
                 )}
-                {session.time_note && <span>{session.time_note}</span>}
+                {session.time_note && <span><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="time_note" value={session.time_note} label={t('common.notes')} /></span>}
               </span>
             )}
-          </p>
+          </div>
         </div>
         <div className="ml-auto flex items-center gap-2">
           {editMode && (
@@ -386,7 +365,6 @@ export function EventsBoard({
 
   // ---------- reading the board in date order ----------
 
-  const todayStr = formatDate(new Date(), 'en', 'yyyy-MM-dd');
 
   /** Tasks of one event that the current department filter keeps */
   const visibleTasks = (evt: DisplayEvent): DisplayTask[] =>
@@ -419,93 +397,19 @@ export function EventsBoard({
       .filter((entry) => entry.dates.length > 0);
   };
 
-  /** Sort key: sessions without a clock time come last within their day */
-  const blockStart = (block: TimelineBlock) => block.session?.start_time ?? '~';
-
-  const buildTimeline = (): TimelineDay[] => {
-    const byDate = new Map<string, TimelineEventGroup[]>();
-    const add = (date: string, evt: DisplayEvent, block: TimelineBlock) => {
-      if (!date) return;
-      const groups = byDate.get(date) ?? [];
-      const existing = groups.find((group) => group.event.id === evt.id);
-      if (existing) existing.blocks.push(block);
-      else groups.push({ event: evt, blocks: [block] });
-      byDate.set(date, groups);
-    };
-
-    for (const evt of events) {
-      const tasks = visibleTasks(evt);
-      if (tasks.length === 0 && selectedDept) continue;
-      const eventSessions = [...(evt.sessions ?? [])].sort(
-        (a, b) => a.session_date.localeCompare(b.session_date) || a.sort_order - b.sort_order
-      );
-      const ids = new Set(eventSessions.map((session) => session.id));
-
-      // Whole event work has no session date of its own, so it sits on the
-      // first day of the event that has not passed yet.
-      const general = tasks.filter((task) => !task.session_id || !ids.has(task.session_id));
-      if (general.length > 0 || eventSessions.length === 0) {
-        const dates = [evt.event_date, ...eventSessions.map((session) => session.session_date)]
-          .filter(Boolean)
-          .sort();
-        const date = dates.find((d) => d >= todayStr) ?? dates[0] ?? evt.event_date;
-        add(date, evt, { key: evt.id + '-general', session: null, tasks: general });
-      }
-
-      for (const session of eventSessions) {
-        const sessionTasks = tasks.filter((task) => task.session_id === session.id);
-        if (sessionTasks.length === 0 && selectedDept) continue;
-        add(session.session_date, evt, { key: evt.id + '-' + session.id, session, tasks: sessionTasks });
-      }
-    }
-
-    return [...byDate.entries()]
-      .map(([date, groups]) => ({
-        date,
-        groups: groups
-          .map((group) => ({
-            ...group,
-            blocks: [...group.blocks].sort((a, b) => blockStart(a).localeCompare(blockStart(b)))
-          }))
-          .sort((a, b) => {
-            const ea = a.blocks.reduce((min, block) => (blockStart(block) < min ? blockStart(block) : min), '~~');
-            const eb = b.blocks.reduce((min, block) => (blockStart(block) < min ? blockStart(block) : min), '~~');
-            return ea.localeCompare(eb) || a.event.name.localeCompare(b.event.name);
-          })
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-  };
-
-  const dayMeta = (date: string): { relative: string; past: boolean } => {
-    const diff = dayDiff(todayStr, date);
-    if (diff === 0) return { relative: t('display.today'), past: false };
-    if (diff === 1) return { relative: t('display.tomorrow'), past: false };
-    if (diff < 0) return { relative: t('display.pastDay'), past: true };
-    return { relative: lang === 'th' ? 'อีก ' + diff + ' วัน' : 'in ' + diff + ' days', past: false };
-  };
-
-  const togglePastDay = (date: string) => {
-    setOpenPastDays((prev) => {
-      const next = new Set(prev);
-      if (next.has(date)) next.delete(date);
-      else next.add(date);
-      return next;
-    });
-  };
-
   /** Operational note a session carries: OT, reminders, venue instructions */
-  const sessionNoteBar = (session: DisplaySession): ReactNode => {
+  const sessionNoteBar = (session: DisplaySession, eventId: string): ReactNode => {
     if (!session.note) return null;
     return (
       <div className="flex items-start gap-2.5 rounded-xl border-l-4 border-amber-400 bg-amber-50 px-3.5 py-2.5 dark:border-amber-500 dark:bg-amber-950/40">
         <Megaphone className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
         <div className="min-w-0">
-          <p className="text-[0.62rem] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+          <div className="text-[0.62rem] font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300">
             {t('sessions.sessionNote')}
-          </p>
-          <p className="mt-0.5 whitespace-pre-line break-words text-sm font-semibold leading-relaxed text-amber-900 dark:text-amber-100">
-            {session.note}
-          </p>
+          </div>
+          <div className="mt-0.5 whitespace-pre-line break-words text-sm font-semibold leading-relaxed text-amber-900 dark:text-amber-100">
+            <BoardEditableText entity="session" id={session.id} eventId={eventId} field="note" value={session.note} label={t('sessions.sessionNote')} />
+          </div>
         </div>
       </div>
     );
@@ -526,7 +430,7 @@ export function EventsBoard({
 
     return (
       <div
-        key={date + '-' + evt.id}
+        key={group.blocks[0].key}
         data-timeline-event={evt.id}
         className="overflow-hidden rounded-3xl border-2 bg-white shadow-[0_10px_28px_-16px_var(--event-glow)] dark:bg-slate-900"
         style={{ '--event-glow': headerColor + '66', borderColor: headerColor + '80' } as React.CSSProperties}
@@ -545,7 +449,7 @@ export function EventsBoard({
             <CategoryIcon className="h-5 w-5" />
           </span>
           <h3 className="min-w-0 truncate text-lg font-black tracking-tight" style={{ color: headerText }}>
-            {evt.name}
+            <BoardEditableText entity="event" id={evt.id} eventId={evt.id} field="name" value={evt.name} label={t('events.eventName')} />
           </h3>
           <StatusBadge status={boardStatus(evt, nowMs)} />
           {dates.length > 1 && (
@@ -559,6 +463,7 @@ export function EventsBoard({
             </span>
           )}
           <span className="ml-auto flex items-center gap-2">
+            {editMode && <button type="button" onClick={() => onEditEvent?.(evt)} aria-label={`${t('events.editEvent')}: ${evt.name}`} className="rounded-lg bg-white/20 p-2 hover:bg-white/30"><Pencil className="h-4 w-4" /></button>}
             {/* The plan opens straight on the board, without leaving this view */}
             {plans.length > 0 && (
               <button
@@ -588,13 +493,13 @@ export function EventsBoard({
               {block.session ? (
                 <>
                   {sessionHeader(block.session, block.tasks, evt, gradientFor(block.session.session_date))}
-                  {sessionNoteBar(block.session)}
+                  {sessionNoteBar(block.session, evt.id)}
                 </>
               ) : (
                 <div className="flex items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 px-3.5 py-2.5 dark:border-slate-700 dark:bg-slate-800/30">
                   <ListChecks className="h-5 w-5 shrink-0 text-slate-400" />
                   <span className="text-base font-extrabold tracking-tight text-slate-500 dark:text-slate-300">
-                    {t('sessions.generalTasks')}
+                    {t('sessions.generalTasks')} · {formatDate(date, lang)}
                   </span>
                 </div>
               )}
@@ -610,83 +515,10 @@ export function EventsBoard({
   };
 
   const renderTimeline = (): ReactNode => {
-    const days = buildTimeline().filter(day => matchesDateScope(day.date, todayStr, dateScope, selectedDate));
-    if (days.length === 0) {
-      return (
-        <div className="mx-auto max-w-xl py-16">
-          <EmptyState icon={CalendarDays} message={t('display.noEvents')} />
-        </div>
-      );
-    }
-    return (
-      <div className="space-y-7">
-        {days.map((day) => {
-          const { relative, past } = dayMeta(day.date);
-          const open = !past || openPastDays.has(day.date);
-          const taskCount = day.groups.reduce(
-            (sum, group) => sum + group.blocks.reduce((inner, block) => inner + block.tasks.length, 0),
-            0
-          );
-          return (
-            <section key={day.date} data-timeline-day={day.date} className="animate-slide-up rounded-3xl border border-slate-200 bg-slate-100/60 p-3 shadow-sm sm:p-5 dark:border-slate-700 dark:bg-slate-950/40">
-              <div
-                role={past ? 'button' : undefined}
-                tabIndex={past ? 0 : undefined}
-                aria-expanded={past ? open : undefined}
-                onClick={past ? () => togglePastDay(day.date) : undefined}
-                onKeyDown={
-                  past
-                    ? (e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          togglePastDay(day.date);
-                        }
-                      }
-                    : undefined
-                }
-                className={cn(
-                  'mb-5 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-l-[6px] px-4 py-4',
-                  past
-                    ? 'cursor-pointer border-slate-200 bg-slate-100 opacity-80 dark:border-slate-700 dark:bg-slate-800/60'
-                    : day.date === todayStr ? 'border-teal-300 border-l-teal-600 bg-teal-50 shadow-sm dark:border-teal-800 dark:bg-teal-950/40' : 'border-slate-200 border-l-navy-700 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900'
-                )}
-              >
-                <span className="flex h-14 w-14 shrink-0 flex-col overflow-hidden rounded-xl bg-white shadow ring-1 ring-black/10">
-                  <span className="flex h-[1.2rem] items-center justify-center bg-navy-800 text-[0.6rem] font-extrabold uppercase tracking-wide text-white">
-                    {formatDate(day.date, lang, 'MMM')}
-                  </span>
-                  <span className="flex flex-1 items-center justify-center text-2xl font-black leading-none text-navy-900">
-                    {formatDate(day.date, lang, 'd')}
-                  </span>
-                </span>
-                <div className="min-w-0">
-                  <p className="text-lg font-black tracking-tight text-slate-900 sm:text-xl dark:text-white">
-                    {formatDate(day.date, lang, 'EEEE d MMMM yyyy')}
-                  </p>
-                  <p
-                    className={cn(
-                      'mt-0.5 text-sm font-bold',
-                      past ? 'text-slate-400' : 'text-navy-600 dark:text-gold-400'
-                    )}
-                  >
-                    {relative}
-                  </p>
-                </div>
-                <span className="ml-auto flex items-center gap-2">
-                  <span className="rounded-full bg-white px-3 py-1 text-sm font-extrabold text-slate-600 shadow-sm dark:bg-slate-900 dark:text-slate-300">
-                    {day.groups.length} {t('display.eventsWord')} - {taskCount} {t('grid.tasksWord')}
-                  </span>
-                  {past && (
-                    <ChevronDown className={cn('h-5 w-5 text-slate-400 transition-transform', !open && '-rotate-90')} />
-                  )}
-                </span>
-              </div>
-              {open && <div className="space-y-4">{day.groups.map((group) => renderTimelineGroup(day.date, group))}</div>}
-            </section>
-          );
-        })}
-      </div>
-    );
+    const entries = sessionTimeline(events, selectedDept);
+    return <div className="space-y-6">{entries.map(({date, event, block}) =>
+      renderTimelineGroup(date, {event, blocks: [block]})
+    )}</div>;
   };
 
   const viewToggle = (
@@ -712,7 +544,7 @@ export function EventsBoard({
         ))}
       </div>
       {viewMode === 'date' && (
-        <p className="w-full text-sm leading-relaxed text-slate-500 sm:min-w-48 sm:flex-1 dark:text-slate-400">{t('display.dateViewHint')}</p>
+        <div className="w-full text-sm leading-relaxed text-slate-500 sm:min-w-48 sm:flex-1 dark:text-slate-400">{t('display.dateViewHint')}</div>
       )}
     </div>
   );
@@ -720,14 +552,7 @@ export function EventsBoard({
   return (
     <div className="space-y-6">
       {viewToggle}
-      {viewMode === 'date' && <BoardDateFilter dates={buildTimeline().map(day => day.date)} today={todayStr} scope={dateScope} selectedDate={selectedDate} onChange={(scope, date = '') => {
-        setDateScope(scope);
-        setSelectedDate(date);
-        if (scope === 'past') setOpenPastDays(new Set(buildTimeline().filter(day => day.date < todayStr).map(day => day.date)));
-        if (scope === 'custom' && date < todayStr) setOpenPastDays(previous => new Set(previous).add(date));
-      }} />}
-
-      {upcoming.length > 0 && (
+      {viewMode === 'event' && upcoming.length > 0 && (
         <section className="animate-slide-up rounded-3xl border border-gold-200 bg-gradient-to-r from-gold-50 via-white to-white p-4 shadow-sm dark:border-gold-900 dark:from-gold-950/30 dark:via-slate-900 dark:to-slate-900">
           <div className="mb-3 flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-gold-400 text-navy-900">
@@ -775,7 +600,7 @@ export function EventsBoard({
                       </span>
                     )}
                   </div>
-                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">{task.title}</p>
+                  <div className="line-clamp-2 text-sm font-semibold leading-snug text-slate-800 dark:text-slate-100">{task.title}</div>
                   <div className="mt-auto flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
                     <span className="inline-flex max-w-full items-center gap-1.5 truncate font-bold" style={{ color: event.header_color || '#1a3c5e' }}>
                       <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: event.header_color || '#1a3c5e' }} />
@@ -855,7 +680,7 @@ export function EventsBoard({
               </span>
               <div className="min-w-0 flex-1">
                 <h2 className="truncate text-2xl font-black tracking-tight 2xl:text-3xl" style={{ color: headerText }}>
-                  {event.name}
+                  <BoardEditableText entity="event" id={event.id} eventId={event.id} field="name" value={event.name} label={t('events.eventName')} />
                 </h2>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <StatusBadge status={status} />
@@ -922,10 +747,10 @@ export function EventsBoard({
               <div className="flex flex-wrap items-start gap-3 border-b border-amber-200 bg-amber-50 px-5 py-3 dark:border-amber-900 dark:bg-amber-950/40 lg:px-7">
                 <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-extrabold text-amber-800 dark:text-amber-200">
+                  <div className="text-sm font-extrabold text-amber-800 dark:text-amber-200">
                     {t('display.overlapTitle')}
-                  </p>
-                  <p className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">{t('display.overlapHint')}</p>
+                  </div>
+                  <div className="mt-0.5 text-xs text-amber-700 dark:text-amber-300">{t('display.overlapHint')}</div>
                   <div className="mt-2 flex flex-wrap gap-2">
                     {overlaps.map(({ event: other, dates }) => (
                       <button
@@ -990,7 +815,7 @@ export function EventsBoard({
                           >
                             {sessionHeader(session, sessionTasks, event, barGradientFor(session.session_date))}
                             {/* Operational note for this session: OT, reminders, venue instructions */}
-                            {sessionNoteBar(session)}
+                            {sessionNoteBar(session, event.id)}
                             {session.floor_plan && <FloorPlanPreview file={session.floor_plan} label={`${t('display.floorPlan')} · ${session.title || formatDate(session.session_date, lang)}`} />}
                             {panels}
                           </div>

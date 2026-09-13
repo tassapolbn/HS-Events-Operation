@@ -23,8 +23,6 @@ interface DisplayShellProps {
   updatedAt?: Date | null;
   /** Signed-in events team only: reveal the edit board toggle */
   canEdit?: boolean;
-  editMode?: boolean;
-  onEditModeChange?: (on: boolean) => void;
   /** Campus name shown in the header, so a wall screen states which campus it is */
   campusName?: string;
   children: ReactNode;
@@ -33,7 +31,7 @@ interface DisplayShellProps {
 /** Light, modern frame for the public display board: TVs, monitors and tablets */
 export function DisplayShell({
   tab, onTabChange, scale, onScaleChange, departments, selectedDepartmentId,
-  onSelectDepartment, onRefresh, refreshing, updatedAt, canEdit, editMode, onEditModeChange, campusName, children
+  onSelectDepartment, onRefresh, refreshing, updatedAt, canEdit, campusName, children
 }: DisplayShellProps) {
   const { t, lang, setLang, deptName } = useLanguage();
   const [now, setNow] = useState(new Date());
@@ -93,17 +91,9 @@ export function DisplayShell({
 
           <div className="flex items-center gap-1.5">
             {canEdit && (
-              <button
-                onClick={() => onEditModeChange?.(!editMode)}
-                aria-pressed={editMode}
-                title={t('display.editBoard')}
-                className={cn(
-                  'flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-bold transition-all hover:scale-105 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400',
-                  editMode ? 'bg-gold-400 text-navy-900 shadow-sm' : 'bg-white/10 text-white hover:bg-white/20'
-                )}
-              >
-                <Pencil className="h-4 w-4" /> <span className="hidden lg:inline">{t('display.editBoard')}</span>
-              </button>
+              <span className="flex items-center gap-1.5 rounded-xl bg-gold-400 px-3 py-2 text-sm font-bold text-navy-900">
+                <Pencil className="h-4 w-4" /><span className="hidden lg:inline">{lang === 'th' ? 'คลิกข้อความเพื่อแก้ไข' : 'Click text to edit'}</span>
+              </span>
             )}
             <button
               onClick={() => setLang(lang === 'en' ? 'th' : 'en')}

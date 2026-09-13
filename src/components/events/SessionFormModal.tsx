@@ -135,6 +135,8 @@ export function SessionFormModal({
 
   return (
     <Modal
+      onConfirm={handleSubmit(onSubmit)}
+      confirmDisabled={uploading || createSession.isPending || updateSession.isPending || createTasks.isPending || formState.isSubmitting}
       open={open}
       onClose={onClose}
       title={title}

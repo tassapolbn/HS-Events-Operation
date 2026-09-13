@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { showAttachment } from './AttachmentViewer';
 import { useLanguage } from '../../i18n';
-import { RichTextViewer } from '../editor/RichTextViewer';
+import { BoardEditableText } from './BoardEditableText';
 import { cn, extractDate, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
 import type { DisplayAttachment, DisplayEvent } from '../../types';
 
@@ -129,6 +129,7 @@ interface Milestone {
   label: string;
   value: string | null;
   note: string;
+  field: 'setup_start_note' | 'venue_ready_note' | 'event_start_note' | 'event_finish_note' | 'breakdown_start_note' | 'breakdown_deadline_note';
   icon: LucideIcon;
 }
 
@@ -148,9 +149,9 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
   // so the last thing staff read is when the event ends and pack down starts.
   const milestones = (
     [
-      { label: t('timeline.setupBegins'), value: event.setup_start, note: event.setup_start_note, icon: Hammer },
-      { label: t('timeline.venueReady'), value: event.venue_ready, note: event.venue_ready_note, icon: DoorOpen },
-      { label: t('timeline.eventStarts'), value: event.event_start, note: event.event_start_note, icon: PlayCircle }
+      { label: t('timeline.setupBegins'), value: event.setup_start, note: event.setup_start_note, field: 'setup_start_note', icon: Hammer },
+      { label: t('timeline.venueReady'), value: event.venue_ready, note: event.venue_ready_note, field: 'venue_ready_note', icon: DoorOpen },
+      { label: t('timeline.eventStarts'), value: event.event_start, note: event.event_start_note, field: 'event_start_note', icon: PlayCircle }
     ] as Milestone[]
   ).filter((m) => Boolean(m.value) || Boolean(m.note));
 
@@ -161,7 +162,7 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
   return (
     <div className="space-y-4">
       {!isRichTextEmpty(event.description) && (
-        <RichTextViewer html={event.description} className="max-w-4xl text-[0.95rem] text-slate-600 dark:text-slate-300" />
+        <BoardEditableText entity="event" id={event.id} eventId={event.id} field="description" value={event.description} label={t('common.description')} rich className="max-w-4xl text-[0.95rem] text-slate-600 dark:text-slate-300" />
       )}
 
       {/*
@@ -207,7 +208,7 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
                     {/* Free text timing, e.g. "after school time" */}
                     {m.note && (
                       <span className="mt-0.5 block text-sm font-semibold text-slate-600 dark:text-slate-300">
-                        {m.note}
+                        <BoardEditableText entity="event" id={event.id} eventId={event.id} field={m.field} value={m.note} label={m.label} />
                       </span>
                     )}
                   </span>
@@ -245,7 +246,7 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
           </span>
           <div className="min-w-0">
             <p className={cn(LABEL, 'text-slate-400')}>{t('common.location')}</p>
-            <p className="truncate text-lg font-extrabold text-slate-900 dark:text-slate-100">{event.location || '-'}</p>
+            <p className="truncate text-lg font-extrabold text-slate-900 dark:text-slate-100"><BoardEditableText entity="event" id={event.id} eventId={event.id} field="location" value={event.location} label={t('common.location')} /></p>
           </div>
         </div>
 
@@ -287,8 +288,7 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
           <StickyNote className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
           <div className="min-w-0">
             <p className={cn(LABEL, 'text-slate-500 dark:text-slate-400')}>{t('events.additionalNotes')}</p>
-            <RichTextViewer
-              html={event.additional_notes}
+            <BoardEditableText entity="event" id={event.id} eventId={event.id} field="additional_notes" value={event.additional_notes} label={t('events.additionalNotes')} rich
               className="mt-1 text-[0.95rem] text-slate-700 dark:text-slate-200"
             />
           </div>
@@ -308,12 +308,12 @@ export function EventClosingBar({ event }: { event: DisplayEvent }) {
 
   const items = (
     [
-      { label: t('timeline.eventEnds'), value: event.event_finish, note: event.event_finish_note, icon: Flag },
-      { label: t('timeline.breakdownBegins'), value: event.breakdown_start, note: event.breakdown_start_note, icon: PackageOpen },
+      { label: t('timeline.eventEnds'), value: event.event_finish, note: event.event_finish_note, field: 'event_finish_note', icon: Flag },
+      { label: t('timeline.breakdownBegins'), value: event.breakdown_start, note: event.breakdown_start_note, field: 'breakdown_start_note', icon: PackageOpen },
       {
         label: t('timeline.breakdownComplete'),
         value: event.breakdown_deadline,
-        note: event.breakdown_deadline_note,
+        note: event.breakdown_deadline_note, field: 'breakdown_deadline_note',
         icon: PackageCheck
       }
     ] as Milestone[]
@@ -350,7 +350,7 @@ export function EventClosingBar({ event }: { event: DisplayEvent }) {
               )}
               {/* Free text timing, e.g. "anytime on that day" */}
               {m.note && (
-                <p className="truncate text-sm font-semibold text-slate-600 dark:text-slate-300">{m.note}</p>
+                <p className="truncate text-sm font-semibold text-slate-600 dark:text-slate-300"><BoardEditableText entity="event" id={event.id} eventId={event.id} field={m.field} value={m.note} label={m.label} /></p>
               )}
             </div>
           </div>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Bell, CalendarDays, Clock, CopyPlus, Import, LayoutTemplate, Layers, MapPin, Pencil, Plus,
   Table2, Trash2, Eye, LayoutGrid
@@ -51,6 +51,7 @@ function readViewMode(fallback: ViewMode): ViewMode {
 export function EventDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { t, deptName, lang } = useLanguage();
   const { toast } = useToast();
   const { isEventsTeam, profile } = useAuth();
@@ -88,6 +89,16 @@ export function EventDetailPage() {
       // ignore
     }
   }, [viewMode]);
+
+  useEffect(() => {
+    const taskId = searchParams.get('task');
+    if (!taskId || !event) return;
+    const task = event.event_tasks.find(item => item.id === taskId);
+    if (task) setViewingTask(task);
+    const next = new URLSearchParams(searchParams);
+    next.delete('task');
+    setSearchParams(next, { replace: true });
+  }, [event, searchParams, setSearchParams]);
 
   const sortedDepartments = departments ?? [];
 

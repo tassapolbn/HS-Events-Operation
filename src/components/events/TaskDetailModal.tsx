@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { TaskNotifyPanel } from './TaskNotifyPanel';
+import { useEffect, useRef, useState } from 'react';
 import { MapPin, Clock, User, Pencil, Trash2, Plus, X } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -36,6 +37,8 @@ export function TaskDetailModal({ open, onClose, task, department, eventId, onEd
   const [newItem, setNewItem] = useState('');
   const [notesDraft, setNotesDraft] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const savingNotes = useRef(false);
+  useEffect(() => { setNotesDraft(null); setNewItem(''); }, [task?.id, open]);
 
   if (!task) return null;
 
@@ -51,14 +54,15 @@ export function TaskDetailModal({ open, onClose, task, department, eventId, onEd
   };
 
   const saveNotes = async () => {
-    if (notesDraft === null) return;
+    if (notesDraft === null || savingNotes.current) return;
+    savingNotes.current = true;
     try {
       await updateTask.mutateAsync({ id: task.id, notes: notesDraft });
       setNotesDraft(null);
       toast(t('common.savedSuccess'));
     } catch {
       toast(t('common.errorGeneric'), 'error');
-    }
+    } finally { savingNotes.current = false; }
   };
 
   const addChecklistItem = async () => {
@@ -104,6 +108,7 @@ export function TaskDetailModal({ open, onClose, task, department, eventId, onEd
         }
       >
         <div className="space-y-5">
+          <TaskNotifyPanel taskId={task.id} title={task.title} department={deptName(department)} disabled={notesDraft !== null || updateTask.isPending} />
           <div className="flex flex-wrap items-center gap-2">
             <PriorityBadge priority={task.priority} />
             <TaskStatusBadge status={task.status} />
@@ -207,7 +212,9 @@ export function TaskDetailModal({ open, onClose, task, department, eventId, onEd
               {t('tasks.departmentNotes')}
             </h4>
             {canUpdate ? (
-              <div className="space-y-2">
+              <div className="space-y-2" onKeyDownCapture={e => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229 && !e.repeat && !(e.target instanceof HTMLElement && e.target.closest('button'))) { e.preventDefault(); void saveNotes(); }
+              }}>
                 <RichTextEditor
                   value={notesDraft ?? task.notes}
                   onChange={(html) => setNotesDraft(html)}

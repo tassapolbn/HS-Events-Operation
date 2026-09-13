@@ -15,7 +15,6 @@ import { CAMPUS_NAMES } from '../lib/constants';
 import type { Campus, DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask, EventSession } from '../types';
 
 const SCALE_KEY = 'eventops.display.scale';
-const EDIT_KEY = 'eventops.display.editMode';
 const SCALE_FONT: Record<DisplayScale, string> = {
   small: '13px',
   medium: '16px',
@@ -78,13 +77,9 @@ export function DisplayBoardPage({
   });
 
   // Live editing, only ever active for a signed-in events-team member
-  const [editMode, setEditMode] = useState(() => localStorage.getItem(EDIT_KEY) === '1');
   const [editing, setEditing] = useState<EditTarget | null>(null);
   const closeEditor = () => setEditing(null);
 
-  useEffect(() => {
-    localStorage.setItem(EDIT_KEY, editMode ? '1' : '0');
-  }, [editMode]);
 
   // The whole board is sized in rem units, so scaling the root font size
   // scales text, cards, icons, badges and spacing together.
@@ -104,7 +99,7 @@ export function DisplayBoardPage({
   const active = tab === 'events' ? eventsQuery : requestsQuery;
 
   const canEdit = isEventsTeam;
-  const boardEditMode = canEdit && editMode;
+  const boardEditMode = canEdit;
   const editProps = {
     editMode: boardEditMode,
     onEditEvent: (event: DisplayEvent) => setEditing({ kind: 'event', event }),
@@ -139,8 +134,6 @@ export function DisplayBoardPage({
       refreshing={active.isFetching}
       updatedAt={active.dataUpdatedAt ? new Date(active.dataUpdatedAt) : null}
       canEdit={canEdit}
-      editMode={editMode}
-      onEditModeChange={setEditMode}
       campusName={campus ? CAMPUS_NAMES[campus] : undefined}
     >
       {combined ? (
