@@ -126,6 +126,18 @@ export function darkenColor(hex: string, factor = 0.72): string {
   return `#${parts.join('')}`;
 }
 
+/** Lighten a hex color by mixing it toward white. Used for dark mode labels. */
+export function lightenColor(hex: string, amount = 0.5): string {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return hex;
+  const parts = [0, 2, 4].map((i) => {
+    const channel = parseInt(clean.slice(i, i + 2), 16);
+    const mixed = Math.round(channel + (255 - channel) * amount);
+    return Math.max(0, Math.min(255, mixed)).toString(16).padStart(2, '0');
+  });
+  return `#${parts.join('')}`;
+}
+
 /** Pick dark-navy or white text for good contrast on a solid hex background. */
 export function readableTextColor(hex: string): string {
   const clean = hex.replace('#', '');

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { FloorPlanPreview } from './FloorPlanPreview';
 import {
   Clock, DoorOpen, FileText, Flag, Hammer, Map as MapIcon, MapPin, Maximize2,
@@ -96,6 +97,66 @@ export function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
 }
 
 /**
+ * The single way a place or a time is shown on the board. These carry the facts
+ * staff act on, so they stand out by contrast and colour rather than by being
+ * set larger than everything around them.
+ */
+export type ChipTone = 'strong' | 'quiet' | 'plain';
+
+export function FactChip({
+  icon: Icon,
+  tone = 'plain',
+  title,
+  children
+}: {
+  icon: LucideIcon;
+  tone?: ChipTone;
+  title?: string;
+  children: ReactNode;
+}) {
+  const tones: Record<ChipTone, string> = {
+    strong: 'bg-white text-navy-900 shadow-sm ring-1 ring-black/5',
+    quiet: 'bg-white/15 text-white ring-1 ring-inset ring-white/25',
+    plain: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-100'
+  };
+  const icons: Record<ChipTone, string> = {
+    strong: 'text-teal-600',
+    quiet: 'text-white/70',
+    plain: 'text-slate-500 dark:text-slate-400'
+  };
+  return (
+    <span
+      title={title}
+      className={cn(
+        'inline-flex max-w-full items-center gap-2 rounded-xl px-3 py-1.5 text-base font-extrabold',
+        tones[tone]
+      )}
+    >
+      <Icon className={cn('h-5 w-5 shrink-0', icons[tone])} />
+      <span className="min-w-0 break-words">{children}</span>
+    </span>
+  );
+}
+
+/**
+ * The x of y counter. One neutral pill everywhere, turning green only when the
+ * work is done, so a colour on this board always means the same thing.
+ */
+export function CountPill({ done, total }: { done: number; total: number }) {
+  const complete = total > 0 && done === total;
+  return (
+    <span
+      className={cn(
+        'shrink-0 rounded-full px-3 py-1 text-sm font-extrabold tabular-nums shadow-sm',
+        complete ? 'bg-emerald-500 text-white' : 'bg-white text-navy-900 ring-1 ring-black/5'
+      )}
+    >
+      {done}/{total}
+    </span>
+  );
+}
+
+/**
  * A milestone date reads quietly when it falls on the event day, and is
  * highlighted when it does not, so nobody turns up on the wrong day.
  */
@@ -183,8 +244,8 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
                 <li
                   key={m.label}
                   className={cn(
-                    'flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 px-4 py-3 first:border-t-0 dark:border-slate-800',
-                    isNext && 'bg-gold-50 dark:bg-gold-950/30',
+                    'flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-l-4 border-slate-100 border-l-transparent px-4 py-3 first:border-t-0 dark:border-slate-800',
+                    isNext && 'border-l-gold-400 bg-gold-50/70 dark:bg-gold-950/30',
                     !isNext && isPast && 'bg-slate-50/70 dark:bg-slate-800/40'
                   )}
                 >
@@ -218,8 +279,8 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
                       <DateChip value={m.value} eventDate={event.event_date} />
                       <span
                         className={cn(
-                          'min-w-[5.5rem] rounded-lg bg-gold-100 px-2 py-1 text-right text-2xl font-black tabular-nums dark:bg-gold-950/50',
-                          isNext ? 'text-gold-900 dark:text-gold-200' : 'text-slate-900 dark:text-slate-100'
+                          'min-w-[5rem] text-right text-xl font-black tabular-nums tracking-tight',
+                          isPast && !isNext ? 'text-slate-400 dark:text-slate-500' : 'text-navy-800 dark:text-slate-100'
                         )}
                       >
                         {formatTime(m.value, lang)}
@@ -240,20 +301,25 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
           milestones.length > 0 ? 'xl:col-span-2 xl:grid-cols-1' : 'xl:grid-cols-3'
         )}
       >
-        <div className={cn('flex items-center gap-3 border-2 !border-teal-300 !bg-teal-50 px-4 py-4 dark:!border-teal-800 dark:!bg-teal-950/30', CARD)}>
-          <span className={cn(TILE, 'bg-navy-50 text-navy-700 dark:bg-navy-900/60 dark:text-navy-200')}>
+        <div className={cn('flex items-center gap-3 border-l-4 border-l-teal-600 px-4 py-3.5', CARD)}>
+          <span className={cn(TILE, 'bg-teal-600 text-white')}>
             <MapPin className="h-5 w-5" />
           </span>
           <div className="min-w-0">
-            <p className={cn(LABEL, 'text-slate-400')}>{t('common.location')}</p>
-            <p className="break-words text-2xl font-black text-navy-950 dark:text-white"><BoardEditableText entity="event" id={event.id} eventId={event.id} field="location" value={event.location} label={t('common.location')} /></p>
+            <p className={cn(LABEL, 'text-teal-700 dark:text-teal-300')}>{t('common.location')}</p>
+            <p className="break-words text-lg font-extrabold text-slate-900 dark:text-slate-100">
+              <BoardEditableText entity="event" id={event.id} eventId={event.id} field="location" value={event.location} label={t('common.location')} />
+            </p>
           </div>
         </div>
 
         {plans.length > 0 && (
           <button
             onClick={() => openAttachment(plans[0], plans)}
-            className="group flex items-center gap-3 rounded-2xl border-2 border-gold-400 bg-gold-50 px-4 py-3.5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:bg-gold-100 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 dark:border-gold-600 dark:bg-gold-950/40"
+            className={cn(
+              'group flex items-center gap-3 border-l-4 border-l-gold-400 px-4 py-3.5 text-left transition-shadow duration-200 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
+              CARD
+            )}
           >
             <span className={cn(TILE, 'bg-gold-400 text-navy-900')}>
               <MapIcon className="h-5 w-5" />
@@ -263,9 +329,9 @@ export function EventBriefing({ event }: { event: DisplayEvent }) {
                 {t('display.floorPlan')}
                 {plans.length > 1 && ` (${plans.length})`}
               </p>
-              <p className="truncate text-lg font-extrabold text-gold-900 dark:text-gold-200">{t('display.viewFloorPlan')}</p>
+              <p className="truncate text-lg font-extrabold text-slate-900 dark:text-slate-100">{t('display.viewFloorPlan')}</p>
             </div>
-            <Maximize2 className="h-5 w-5 shrink-0 text-gold-600 transition-transform duration-200 group-hover:scale-110" />
+            <Maximize2 className="h-5 w-5 shrink-0 text-slate-400 transition-transform duration-200 group-hover:scale-110" />
           </button>
         )}
 

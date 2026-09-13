@@ -10,11 +10,15 @@ import {
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { useLanguage } from '../../i18n';
 import { EmptyState } from '../ui/EmptyState';
-import { AttachmentChips, EventBriefing, EventClosingBar, StatusBadge, boardStatus, openAttachment } from './EventBriefing';
+import {
+  AttachmentChips, CountPill, EventBriefing, EventClosingBar, FactChip, StatusBadge, boardStatus, openAttachment
+} from './EventBriefing';
 import { BoardSkeleton } from './BoardSkeleton';
 import { AskQuestionModal } from './AskQuestionModal';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
-import { cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty, readableTextColor } from '../../lib/utils';
+import {
+  cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty, lightenColor, readableTextColor
+} from '../../lib/utils';
 import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
 
 /**
@@ -153,28 +157,40 @@ export function EventsBoard({
           return (
             <div
               key={dept.id}
-              className="flex flex-col overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-[0_6px_18px_-8px_rgba(15,23,42,0.25)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-600 dark:bg-slate-900"
+              className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow duration-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
+              style={{ borderLeft: `5px solid ${dept.color}` }}
             >
+              {/* A tint of the department colour rather than a block of it: four of
+                  these side by side used to shout louder than the work itself. The
+                  label colour is set per theme so it stays readable either way. */}
               <div
-                className="flex items-center gap-2.5 px-4 py-3"
-                style={{
-                  background: `linear-gradient(120deg, ${dept.color} 0%, ${darkenColor(dept.color, 0.72)} 100%)`,
-                  color: deptText
-                }}
+                className="flex items-center gap-2.5 border-b bg-[color:var(--dept-tint)] px-4 py-2.5 dark:bg-[color:var(--dept-tint-dark)]"
+                style={
+                  {
+                    borderBottomColor: `${dept.color}33`,
+                    '--dept-tint': `${dept.color}12`,
+                    '--dept-tint-dark': `${dept.color}24`,
+                    '--dept-ink': darkenColor(dept.color, 0.78),
+                    '--dept-ink-dark': lightenColor(dept.color, 0.55)
+                  } as React.CSSProperties
+                }
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl" style={{ backgroundColor: `${deptText}2b` }}>
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: dept.color, color: deptText }}
+                >
                   <Icon className="h-5 w-5" />
                 </span>
-                <h3 className="flex-1 truncate text-[0.95rem] font-extrabold" style={{ color: deptText }}>
+                <h3 className="flex-1 truncate text-[0.95rem] font-extrabold text-[color:var(--dept-ink)] dark:text-[color:var(--dept-ink-dark)]">
                   {deptName(dept)}
                 </h3>
                 <span
-                  className="rounded-full px-2.5 py-1 text-xs font-extrabold shadow-sm"
-                  style={
+                  className={cn(
+                    'shrink-0 rounded-full px-2.5 py-1 text-xs font-extrabold tabular-nums',
                     allDone
-                      ? { backgroundColor: '#10b981', color: '#ffffff' }
-                      : { backgroundColor: `${deptText}2b`, color: deptText }
-                  }
+                      ? 'bg-emerald-500 text-white shadow-sm'
+                      : 'bg-white text-[color:var(--dept-ink)] shadow-sm dark:bg-slate-900 dark:text-[color:var(--dept-ink-dark)]'
+                  )}
                 >
                   {done}/{deptTasks.length}
                 </span>
@@ -284,7 +300,7 @@ export function EventsBoard({
         style={{ backgroundImage: barGradient }}
       >
         <span className="flex h-12 w-12 shrink-0 flex-col overflow-hidden rounded-lg bg-white shadow ring-1 ring-black/10">
-          <span className="flex h-[1.1rem] items-center justify-center bg-gold-400 text-[0.55rem] font-extrabold uppercase tracking-wide text-navy-900">
+          <span className="flex h-[1.1rem] items-center justify-center bg-navy-800 text-[0.55rem] font-extrabold uppercase tracking-wide text-white">
             {formatDate(session.session_date, lang, 'MMM')}
           </span>
           <span className="flex flex-1 items-center justify-center text-xl font-extrabold leading-none text-navy-900">
@@ -295,25 +311,45 @@ export function EventsBoard({
           <div className="text-lg font-extrabold tracking-tight">
             <BoardEditableText entity="session" id={session.id} eventId={evt.id} field="title" value={session.title} placeholder={formatDate(session.session_date, lang, 'EEEE d MMMM')} label={t('sessions.title')} />
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1 text-sm font-bold">
-              <CalendarDays className="h-4 w-4 text-gold-400" /> {formatDate(session.session_date, lang)}
-            </span>
+          {/* The full date is already spelled out in the block on the left, so it
+              stays quiet here and the place and the time carry the solid chips. */}
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <FactChip icon={CalendarDays} tone="quiet">{formatDate(session.session_date, lang)}</FactChip>
             {session.location && (
-              <span className="inline-flex max-w-full items-center gap-2.5 rounded-xl bg-white px-3.5 py-2.5 text-navy-950 shadow-sm ring-1 ring-white/80">
-                <MapPin className="h-6 w-6 shrink-0 text-teal-700" />
-                <span className="min-w-0"><span className="block text-[0.6rem] font-extrabold uppercase tracking-wider text-teal-700">{t('common.location')}</span>
-                <span className="break-words text-lg font-black sm:text-xl"><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="location" value={session.location} label={t('common.location')} /></span></span>
-              </span>
+              <FactChip icon={MapPin} tone="strong">
+                <BoardEditableText
+                  entity="session"
+                  id={session.id}
+                  eventId={evt.id}
+                  field="location"
+                  value={session.location}
+                  label={t('common.location')}
+                />
+              </FactChip>
             )}
             {(session.start_time || session.end_time || session.time_note) && (
-              <span className="inline-flex max-w-full items-center gap-2.5 rounded-xl bg-gold-400 px-3.5 py-2.5 text-navy-950 shadow-sm ring-1 ring-gold-200">
-                <Clock className="h-6 w-6 shrink-0" />
-                <span className="min-w-0"><span className="block text-[0.6rem] font-extrabold uppercase tracking-wider">{lang === 'th' ? 'เวลาปฏิบัติงาน' : 'Session time'}</span>
-                {(session.start_time || session.end_time) && <span className="block text-xl font-black tabular-nums sm:text-2xl">{session.start_time ? formatTime(session.start_time, lang) : '—'}{session.end_time && <> – {formatTime(session.end_time, lang)}</>}</span>}
-                {session.time_note && <span className="block break-words text-base font-bold"><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="time_note" value={session.time_note} label={t('common.notes')} /></span>}
+              <FactChip icon={Clock} tone="strong">
+                <span className="flex flex-wrap items-baseline gap-x-2">
+                  {(session.start_time || session.end_time) && (
+                    <span className="tabular-nums tracking-tight">
+                      {session.start_time ? formatTime(session.start_time, lang) : '—'}
+                      {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
+                    </span>
+                  )}
+                  {session.time_note && (
+                    <span className="font-bold text-navy-600">
+                      <BoardEditableText
+                        entity="session"
+                        id={session.id}
+                        eventId={evt.id}
+                        field="time_note"
+                        value={session.time_note}
+                        label={t('common.notes')}
+                      />
+                    </span>
+                  )}
                 </span>
-              </span>
+              </FactChip>
             )}
           </div>
         </div>
@@ -328,14 +364,7 @@ export function EventsBoard({
               <Pencil className="h-4 w-4" />
             </button>
           )}
-          <span
-            className={cn(
-              'rounded-full px-3 py-1 text-sm font-extrabold shadow-sm',
-              done === tasks.length && tasks.length > 0 ? 'bg-emerald-500 text-white' : 'bg-gold-400 text-navy-900'
-            )}
-          >
-            {done}/{tasks.length}
-          </span>
+          <CountPill done={done} total={tasks.length} />
         </div>
       </div>
     );
@@ -477,7 +506,7 @@ export function EventsBoard({
               <button
                 onClick={() => openAttachment(plans[0], plans)}
                 title={t('display.viewFloorPlan')}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-gold-400 px-3 py-1.5 text-sm font-extrabold text-navy-900 transition-all hover:bg-gold-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-sm font-extrabold text-navy-800 shadow-sm ring-1 ring-black/5 transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
               >
                 <MapIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('display.floorPlan')}</span>
@@ -511,9 +540,16 @@ export function EventsBoard({
                   </span>
                 </div>
               )}
-              {(block.session?.floor_plan ? [block.session.floor_plan] : plans).map(file => (
-                <FloorPlanPreview key={file.id} file={file} label={block.session?.title ? `${t('display.floorPlan')} · ${block.session.title}` : t('display.floorPlan')} />
-              ))}
+              {/* Only a plan that belongs to this session is shown here. The plan for
+                  the whole event is one tap away on the header, and is shown in full
+                  inside the event card, so a long day no longer repeats the same
+                  drawing under every session. */}
+              {block.session?.floor_plan && (
+                <FloorPlanPreview
+                  file={block.session.floor_plan}
+                  label={block.session.title ? `${t('display.floorPlan')} · ${block.session.title}` : t('display.floorPlan')}
+                />
+              )}
               {renderPanels(block.tasks, evt)}
             </div>
           ))}
@@ -606,7 +642,7 @@ export function EventsBoard({
                       {formatTime(task.start_time, lang)}
                     </span>
                     {soon && (
-                      <span className="animate-pulse rounded-full bg-gold-400 px-2 py-0.5 text-[0.65rem] font-extrabold text-navy-900">
+                      <span className="animate-pulse rounded-full bg-amber-500 px-2 py-0.5 text-[0.65rem] font-extrabold text-white shadow-sm">
                         {soon}
                       </span>
                     )}
@@ -755,7 +791,7 @@ export function EventsBoard({
 
             {/* A longer event can have another event slipped between its days */}
             {overlaps.length > 0 && (
-              <div className="flex flex-wrap items-start gap-3 border-b border-amber-200 bg-amber-50 px-5 py-3 dark:border-amber-900 dark:bg-amber-950/40 lg:px-7">
+              <div className="flex flex-wrap items-start gap-3 border-b border-l-4 border-slate-100 border-l-amber-400 bg-amber-50/50 px-5 py-3 dark:border-slate-800 dark:border-l-amber-500 dark:bg-amber-950/30 lg:px-7">
                 <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
                 <div className="min-w-0 flex-1">
                   <div className="text-sm font-extrabold text-amber-800 dark:text-amber-200">
