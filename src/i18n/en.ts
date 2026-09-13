@@ -18,6 +18,7 @@ export const en = {
     cancel: 'Cancel',
     delete: 'Delete',
     edit: 'Edit',
+    copy: 'copy',
     create: 'Create',
     close: 'Close',
     search: 'Search',
@@ -200,7 +201,10 @@ export const en = {
     taskDetails: 'Task Details',
     departmentNotes: 'Department Notes',
     notesHint: 'Notes from the department team',
-    progress: 'Progress'
+    progress: 'Progress',
+    copyTask: 'Duplicate task',
+    copiedTask: 'Task duplicated',
+    pastedTasks: '{count} tasks pasted'
   },
   sessions: {
     title: 'Sessions',
@@ -213,7 +217,8 @@ export const en = {
     generalTasks: 'Whole event tasks',
     whole: 'Whole event',
     sessionNote: 'Session note',
-    sessionNoteHint: 'Optional. Shown on the board under this session, for OT, reminders or venue notes.'
+    sessionNoteHint: 'Optional. Shown on the board under this session, for OT, reminders or venue notes.',
+    copySession: 'Duplicate session'
   },
   campus: {
     label: 'Campus',

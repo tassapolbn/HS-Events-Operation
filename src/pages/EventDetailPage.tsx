@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Bell, CalendarDays, Clock, LayoutTemplate, Layers, MapPin, Pencil, Plus, Trash2, Eye, LayoutGrid
+  ArrowLeft, Bell, CalendarDays, Clock, Copy, LayoutTemplate, Layers, MapPin, Pencil, Plus, Trash2, Eye, LayoutGrid
 } from 'lucide-react';
 import { useEvent, useEventMutations } from '../hooks/useEvents';
 import { useDepartments } from '../hooks/useDepartments';
@@ -55,6 +55,7 @@ export function EventDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [sessionFormOpen, setSessionFormOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<EventSession | null>(null);
+  const [copyingSession, setCopyingSession] = useState<EventSession | null>(null);
   const [deletingSession, setDeletingSession] = useState<EventSession | null>(null);
   const [deletingTask, setDeletingTask] = useState<EventTask | null>(null);
   const [notifyDeptIds, setNotifyDeptIds] = useState<string[] | null>(null);
@@ -132,6 +133,18 @@ export function EventDetailPage() {
               created_by: profile?.id ?? null
             });
           }}
+          onBulkAdd={async (departmentId, titles) => {
+            for (const [index, title] of titles.entries()) {
+              await createTask.mutateAsync({ event_id: event.id, department_id: departmentId, session_id: sessionId, title, sort_order: tasks.length + index, created_by: profile?.id ?? null });
+            }
+            toast(t('tasks.pastedTasks').replace('{count}', String(titles.length)));
+          }}
+          onRenameTask={async (task, title) => { await updateTask.mutateAsync({ id: task.id, title }); }}
+          onCopyTask={async (task) => {
+            const { id: _id, created_at: _created, updated_at: _updated, deleted_at: _deleted, ...copy } = task;
+            await createTask.mutateAsync({ ...copy, title: `${task.title} (${t('common.copy')})`, status: 'not_started', sort_order: task.sort_order + 1, created_by: profile?.id ?? null });
+            toast(t('tasks.copiedTask'));
+          }}
           onEditTask={openEditTask}
           onDeleteTask={(task) => setDeletingTask(task)}
           onNotify={(departmentId) => {
@@ -177,6 +190,11 @@ export function EventDetailPage() {
         </span>
         {isEventsTeam && (
           <span className="flex items-center gap-0.5">
+            <button
+              onClick={() => { setCopyingSession(session); setEditingSession(null); setSessionFormOpen(true); }}
+              className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+              title={t('sessions.copySession')}
+            ><Copy className="h-3.5 w-3.5" /></button>
             <button
               onClick={() => { setEditingSession(session); setSessionFormOpen(true); }}
               className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/15 hover:text-white"
@@ -396,10 +414,12 @@ export function EventDetailPage() {
       {sessionFormOpen && (
         <SessionFormModal
           open={sessionFormOpen}
-          onClose={() => { setSessionFormOpen(false); setEditingSession(null); }}
+          onClose={() => { setSessionFormOpen(false); setEditingSession(null); setCopyingSession(null); }}
           eventId={event.id}
           eventDate={event.event_date}
           session={editingSession}
+          copySource={copyingSession}
+          sourceTasks={copyingSession ? event.event_tasks.filter((task) => task.session_id === copyingSession.id) : []}
           nextSortOrder={sessions.length}
         />
       )}

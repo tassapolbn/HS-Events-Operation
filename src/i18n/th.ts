@@ -20,6 +20,7 @@ export const th: Dict = {
     cancel: 'ยกเลิก',
     delete: 'ลบ',
     edit: 'แก้ไข',
+    copy: 'สำเนา',
     create: 'สร้าง',
     close: 'ปิด',
     search: 'ค้นหา',
@@ -202,7 +203,10 @@ export const th: Dict = {
     taskDetails: 'รายละเอียดงาน',
     departmentNotes: 'บันทึกจากแผนก',
     notesHint: 'หมายเหตุจากทีมของแผนก',
-    progress: 'ความคืบหน้า'
+    progress: 'ความคืบหน้า',
+    copyTask: 'ทำสำเนางาน',
+    copiedTask: 'ทำสำเนางานแล้ว',
+    pastedTasks: 'วางงานแล้ว {count} รายการ'
   },
   sessions: {
     title: 'ช่วงงาน (Session)',
@@ -215,7 +219,8 @@ export const th: Dict = {
     generalTasks: 'งานรวมของทั้งกิจกรรม',
     whole: 'ทั้งกิจกรรม',
     sessionNote: 'หมายเหตุของ Session',
-    sessionNoteHint: 'ไม่บังคับ แสดงบนบอร์ดใต้ Session นี้ สำหรับ OT การแจ้งเตือน หรือหมายเหตุสถานที่'
+    sessionNoteHint: 'ไม่บังคับ แสดงบนบอร์ดใต้ Session นี้ สำหรับ OT การแจ้งเตือน หรือหมายเหตุสถานที่',
+    copySession: 'ทำสำเนา Session'
   },
   campus: {
     label: 'วิทยาเขต',
