@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import { combineDateTime, extractTime } from '../lib/utils';
+import { combineDateTime, dayDiff, extractTime, shiftDate } from '../lib/utils';
 import type { Attachment, Department, EventTemplate, EventWithTasks, TemplateData } from '../types';
 
 export function useTemplates() {
@@ -36,6 +36,8 @@ export function useTemplateMutations() {
   const saveTemplate = useMutation({
     mutationFn: async (args: SaveTemplateArgs) => {
       const deptCode = (id: string) => args.departments.find((d) => d.id === id)?.code ?? '';
+      const sessions = args.event.event_sessions ?? [];
+      const sessionIndexById = new Map(sessions.map((session, index) => [session.id, index]));
       const data: TemplateData = {
         event: {
           name: args.event.name,
@@ -54,6 +56,16 @@ export function useTemplateMutations() {
             breakdown_deadline: extractTime(args.event.breakdown_deadline)
           }
         },
+        sessions: sessions.map((session) => ({
+          title: session.title,
+          day_offset: dayDiff(args.event.event_date, session.session_date),
+          location: session.location,
+          start_time: extractTime(session.start_time),
+          end_time: extractTime(session.end_time),
+          time_note: session.time_note ?? '',
+          note: session.note ?? '',
+          sort_order: session.sort_order
+        })),
         tasks: args.event.event_tasks.map((task) => ({
           department_code: deptCode(task.department_id),
           title: task.title,
@@ -65,7 +77,9 @@ export function useTemplateMutations() {
           priority: task.priority,
           start_time: extractTime(task.start_time),
           completion_time: extractTime(task.completion_time),
-          checklist: args.checklistsByTask[task.id] ?? []
+          checklist: args.checklistsByTask[task.id] ?? [],
+          session_index: task.session_id != null ? sessionIndexById.get(task.session_id) ?? null : null,
+          notes: task.notes
         })),
         attachments: args.includeAttachments
           ? args.attachments.map((a) => ({
@@ -137,6 +151,29 @@ export function useTemplateMutations() {
       if (eventError) throw eventError;
       const eventId = eventRow.id as string;
 
+      // Recreate the sessions first, keeping their day offsets, so tasks can be grouped again
+      const sessionIds: string[] = [];
+      for (const session of d.sessions ?? []) {
+        const sessionDate = shiftDate(eventDate, session.day_offset ?? 0);
+        const { data: sessionRow, error: sessionError } = await supabase
+          .from('event_sessions')
+          .insert({
+            event_id: eventId,
+            title: session.title,
+            session_date: sessionDate,
+            location: session.location,
+            start_time: combineDateTime(sessionDate, session.start_time ?? null),
+            end_time: combineDateTime(sessionDate, session.end_time ?? null),
+            time_note: session.time_note ?? '',
+            note: session.note ?? '',
+            sort_order: session.sort_order
+          })
+          .select('id')
+          .single();
+        if (sessionError) throw sessionError;
+        sessionIds.push(sessionRow.id as string);
+      }
+
       for (const [index, task] of d.tasks.entries()) {
         const dept = departments.find((x) => x.code === task.department_code);
         if (!dept) continue;
@@ -154,6 +191,11 @@ export function useTemplateMutations() {
             priority: task.priority,
             start_time: combineDateTime(eventDate, task.start_time),
             completion_time: combineDateTime(eventDate, task.completion_time),
+            notes: task.notes ?? '',
+            session_id:
+              task.session_index != null && task.session_index >= 0
+                ? sessionIds[task.session_index] ?? null
+                : null,
             sort_order: index,
             created_by: userId
           })

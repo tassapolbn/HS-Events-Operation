@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft, Bell, CalendarDays, Clock, LayoutTemplate, Layers, MapPin, Pencil, Plus, Trash2, Eye, LayoutGrid
+  ArrowLeft, Bell, CalendarDays, Clock, CopyPlus, Import, LayoutTemplate, Layers, MapPin, Pencil, Plus,
+  Table2, Trash2, Eye, LayoutGrid
 } from 'lucide-react';
 import { useEvent, useEventMutations } from '../hooks/useEvents';
 import { useDepartments } from '../hooks/useDepartments';
@@ -19,15 +20,33 @@ import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { RichTextViewer } from '../components/editor/RichTextViewer';
 import { EventTimeline } from '../components/events/EventTimeline';
 import { DepartmentSection } from '../components/events/DepartmentSection';
+import { TaskGrid } from '../components/events/TaskGrid';
 import { TaskFormModal } from '../components/events/TaskFormModal';
 import { TaskDetailModal } from '../components/events/TaskDetailModal';
 import { NotifyModal } from '../components/events/NotifyModal';
 import { SaveTemplateModal } from '../components/events/SaveTemplateModal';
 import { SessionFormModal } from '../components/events/SessionFormModal';
+import { SessionImportModal } from '../components/events/SessionImportModal';
 import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
-import { cn, formatDate, formatTime, isRichTextEmpty } from '../lib/utils';
+import { cn, combineDateTime, formatDate, formatTime, isRichTextEmpty } from '../lib/utils';
+import { normalizeTimeInput } from '../lib/grid';
+import { copyTasks, getTaskClipboard, taskToClipboardItem } from '../lib/taskClipboard';
 import type { EventSession, EventTask } from '../types';
+
+type ViewMode = 'grid' | 'overview' | 'department';
+
+const VIEW_MODE_KEY = 'eventops.eventViewMode';
+
+function readViewMode(fallback: ViewMode): ViewMode {
+  try {
+    const saved = localStorage.getItem(VIEW_MODE_KEY);
+    if (saved === 'grid' || saved === 'overview' || saved === 'department') return saved;
+  } catch {
+    // Storage can be blocked; the default is fine
+  }
+  return fallback;
+}
 
 export function EventDetailPage() {
   const { id } = useParams();
@@ -40,10 +59,10 @@ export function EventDetailPage() {
   const { data: departments } = useDepartments();
   const { data: attachments } = useAttachments('event', id);
   const { deleteEvent, updateEvent } = useEventMutations();
-  const { createTask, updateTask, deleteTask } = useTaskMutations(id);
+  const { createTask, createTasks, updateTask, deleteTask } = useTaskMutations(id);
   const { deleteSession } = useSessionMutations(id ?? '');
 
-  const [viewMode, setViewMode] = useState<'overview' | 'department'>('overview');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => readViewMode(isEventsTeam ? 'grid' : 'overview'));
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
   const [taskFormOpen, setTaskFormOpen] = useState(false);
   const [taskFormDeptId, setTaskFormDeptId] = useState<string | undefined>();
@@ -53,11 +72,22 @@ export function EventDetailPage() {
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [sessionFormOpen, setSessionFormOpen] = useState(false);
-  const [editingSession, setEditingSession] = useState<EventSession | null>(null);
+  const [sessionModal, setSessionModal] = useState<{
+    mode: 'create' | 'edit' | 'duplicate';
+    session: EventSession | null;
+  } | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [deletingSession, setDeletingSession] = useState<EventSession | null>(null);
   const [deletingTask, setDeletingTask] = useState<EventTask | null>(null);
   const [notifyDeptIds, setNotifyDeptIds] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, viewMode);
+    } catch {
+      // ignore
+    }
+  }, [viewMode]);
 
   const sortedDepartments = departments ?? [];
 
@@ -86,6 +116,12 @@ export function EventDetailPage() {
     event.event_tasks.some((task) => task.department_id === d.id)
   );
 
+  /** Next free position inside one department of one session */
+  const nextSortOrder = (sessionId: string | null, departmentId: string) =>
+    event.event_tasks
+      .filter((task) => (task.session_id ?? null) === sessionId && task.department_id === departmentId)
+      .reduce((max, task) => Math.max(max, task.sort_order), -1) + 1;
+
   const openAddTask = (departmentId: string, sessionId: string | null) => {
     setEditingTask(null);
     setTaskFormDeptId(departmentId);
@@ -105,6 +141,97 @@ export function EventDetailPage() {
     await deleteEvent.mutateAsync(event.id);
     toast(t('common.deletedSuccess'));
     navigate('/events');
+  };
+
+  /** Put a task on the app clipboard so it can be pasted into any department, session or event */
+  const handleCopyTask = (task: EventTask) => {
+    copyTasks([taskToClipboardItem(task)], task.title);
+    toast(t('tasks.copiedOne'));
+  };
+
+  const handleDuplicateTask = async (task: EventTask) => {
+    try {
+      await createTask.mutateAsync({
+        event_id: event.id,
+        department_id: task.department_id,
+        session_id: task.session_id,
+        title: task.title,
+        description: task.description,
+        instructions: task.instructions,
+        work_location: task.work_location,
+        setup_location: task.setup_location,
+        assigned_staff: task.assigned_staff,
+        start_time: task.start_time,
+        completion_time: task.completion_time,
+        priority: task.priority,
+        status: 'not_started',
+        notes: task.notes,
+        sort_order: nextSortOrder(task.session_id, task.department_id),
+        created_by: profile?.id ?? null
+      });
+      toast(t('grid.duplicated'));
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    }
+  };
+
+  const handlePasteTasks = async (departmentId: string, sessionId: string | null) => {
+    const clip = getTaskClipboard();
+    if (!clip) return;
+    const start = nextSortOrder(sessionId, departmentId);
+    try {
+      await createTasks.mutateAsync(
+        clip.items.map((item, index) => ({
+          event_id: event.id,
+          department_id: departmentId,
+          session_id: sessionId,
+          title: item.title,
+          description: item.description,
+          instructions: item.instructions,
+          work_location: item.work_location,
+          setup_location: item.setup_location,
+          assigned_staff: item.assigned_staff,
+          start_time: combineDateTime(event.event_date, item.start_time),
+          completion_time: combineDateTime(event.event_date, item.completion_time),
+          priority: item.priority,
+          status: 'not_started' as const,
+          notes: item.notes,
+          sort_order: start + index,
+          created_by: profile?.id ?? null
+        }))
+      );
+      toast(`${t('grid.pasted')} ${clip.items.length}`);
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    }
+  };
+
+  /**
+   * A block pasted into Quick Add becomes one task per line.
+   * Extra tab separated columns fill staff, work location and start time.
+   */
+  const handleQuickAddMany = async (departmentId: string, sessionId: string | null, rows: string[][]) => {
+    const start = nextSortOrder(sessionId, departmentId);
+    const inputs = rows
+      .map((cells, index) => ({
+        event_id: event.id,
+        department_id: departmentId,
+        session_id: sessionId,
+        title: (cells[0] ?? '').trim(),
+        assigned_staff: (cells[1] ?? '').trim(),
+        work_location: (cells[2] ?? '').trim(),
+        start_time: combineDateTime(event.event_date, normalizeTimeInput(cells[3] ?? '') || null),
+        sort_order: start + index,
+        created_by: profile?.id ?? null
+      }))
+      .filter((input) => input.title !== '');
+    if (inputs.length === 0) return;
+    try {
+      await createTasks.mutateAsync(inputs);
+      toast(`${t('grid.rowsAdded')} ${inputs.length}`);
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    }
   };
 
   const renderDepartmentGrid = (tasks: EventTask[], sessionId: string | null) => (
@@ -128,12 +255,16 @@ export function EventDetailPage() {
               department_id: departmentId,
               session_id: sessionId,
               title,
-              sort_order: tasks.filter((task) => task.department_id === departmentId).length,
+              sort_order: nextSortOrder(sessionId, departmentId),
               created_by: profile?.id ?? null
             });
           }}
+          onQuickAddMany={(departmentId, rows) => handleQuickAddMany(departmentId, sessionId, rows)}
           onEditTask={openEditTask}
           onDeleteTask={(task) => setDeletingTask(task)}
+          onCopyTask={handleCopyTask}
+          onDuplicateTask={handleDuplicateTask}
+          onPasteTasks={(departmentId) => handlePasteTasks(departmentId, sessionId)}
           onNotify={(departmentId) => {
             setNotifyDeptIds([departmentId]);
             setNotifyOpen(true);
@@ -178,7 +309,14 @@ export function EventDetailPage() {
         {isEventsTeam && (
           <span className="flex items-center gap-0.5">
             <button
-              onClick={() => { setEditingSession(session); setSessionFormOpen(true); }}
+              onClick={() => setSessionModal({ mode: 'duplicate', session })}
+              className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+              title={t('sessions.duplicateSession')}
+            >
+              <CopyPlus className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={() => setSessionModal({ mode: 'edit', session })}
               className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/15 hover:text-white"
               title={t('sessions.editSession')}
             >
@@ -196,6 +334,20 @@ export function EventDetailPage() {
       </div>
     );
   };
+
+  const viewModeButton = (mode: ViewMode, icon: React.ReactNode, label: string) => (
+    <button
+      onClick={() => setViewMode(mode)}
+      className={cn(
+        'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+        viewMode === mode
+          ? 'bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900'
+          : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+      )}
+    >
+      {icon} {label}
+    </button>
+  );
 
   return (
     <div className="animate-fade-in space-y-5">
@@ -302,33 +454,23 @@ export function EventDetailPage() {
         </CardBody>
       </Card>
 
-      {/* Department tasks header: view mode + add session */}
+      {/* Department tasks header: view mode, add session, copy sessions */}
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="mr-auto text-lg font-bold text-navy-800 dark:text-white">{t('events.departmentTasks')}</h2>
         {isEventsTeam && (
-          <Button variant="outline" size="sm" onClick={() => { setEditingSession(null); setSessionFormOpen(true); }}>
-            <Plus className="h-4 w-4" /> {t('sessions.addSession')}
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={() => setSessionModal({ mode: 'create', session: null })}>
+              <Plus className="h-4 w-4" /> {t('sessions.addSession')}
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} title={t('sessions.importTitle')}>
+              <Import className="h-4 w-4" /> <span className="hidden sm:inline">{t('sessions.copyFromEvent')}</span>
+            </Button>
+          </>
         )}
         <div className="flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900">
-          <button
-            onClick={() => setViewMode('overview')}
-            className={cn(
-              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-              viewMode === 'overview' ? 'bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            )}
-          >
-            <LayoutGrid className="h-3.5 w-3.5" /> {t('events.viewModeOverview')}
-          </button>
-          <button
-            onClick={() => setViewMode('department')}
-            className={cn(
-              'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-              viewMode === 'department' ? 'bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
-            )}
-          >
-            <Eye className="h-3.5 w-3.5" /> {t('events.viewModeDepartment')}
-          </button>
+          {viewModeButton('grid', <Table2 className="h-3.5 w-3.5" />, t('events.viewModeGrid'))}
+          {viewModeButton('overview', <LayoutGrid className="h-3.5 w-3.5" />, t('events.viewModeOverview'))}
+          {viewModeButton('department', <Eye className="h-3.5 w-3.5" />, t('events.viewModeDepartment'))}
         </div>
         {viewMode === 'department' && (
           <select
@@ -343,8 +485,19 @@ export function EventDetailPage() {
         )}
       </div>
 
-      {/* Task groups: sessions (day / venue / time slot) or whole event */}
-      {sessions.length === 0 ? (
+      {/* Tasks: one spreadsheet, or cards grouped by session */}
+      {viewMode === 'grid' ? (
+        <TaskGrid
+          eventId={event.id}
+          eventDate={event.event_date}
+          tasks={event.event_tasks}
+          departments={sortedDepartments}
+          sessions={sessions}
+          canEdit={isEventsTeam}
+          onOpenTask={(task) => setViewingTask(task)}
+          onEditTask={openEditTask}
+        />
+      ) : sessions.length === 0 ? (
         renderDepartmentGrid(event.event_tasks, null)
       ) : (
         <div className="space-y-6">
@@ -361,6 +514,44 @@ export function EventDetailPage() {
             <div key={session.id} className="space-y-3">
               {sessionHeader(session)}
               {renderDepartmentGrid(event.event_tasks.filter((task) => task.session_id === session.id), session.id)}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Sessions are managed from the grid view too */}
+      {viewMode === 'grid' && sessions.length > 0 && isEventsTeam && (
+        <div className="flex flex-wrap gap-2">
+          {sessions.map((session) => (
+            <div
+              key={session.id}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+            >
+              <Layers className="h-3.5 w-3.5 text-slate-400" />
+              <span className="font-semibold text-slate-700 dark:text-slate-200">
+                {session.title || formatDate(session.session_date, lang, 'd MMM')}
+              </span>
+              <button
+                onClick={() => setSessionModal({ mode: 'duplicate', session })}
+                title={t('sessions.duplicateSession')}
+                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-navy-700 dark:hover:bg-slate-800 dark:hover:text-gold-300"
+              >
+                <CopyPlus className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => setSessionModal({ mode: 'edit', session })}
+                title={t('sessions.editSession')}
+                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-navy-700 dark:hover:bg-slate-800 dark:hover:text-gold-300"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                onClick={() => setDeletingSession(session)}
+                title={t('sessions.deleteSession')}
+                className="rounded-md p-1 text-slate-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950/50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
             </div>
           ))}
         </div>
@@ -393,13 +584,28 @@ export function EventDetailPage() {
         eventId={event.id}
         onEdit={openEditTask}
       />
-      {sessionFormOpen && (
+      {sessionModal && (
         <SessionFormModal
-          open={sessionFormOpen}
-          onClose={() => { setSessionFormOpen(false); setEditingSession(null); }}
+          open
+          onClose={() => setSessionModal(null)}
           eventId={event.id}
           eventDate={event.event_date}
-          session={editingSession}
+          session={sessionModal.mode === 'edit' ? sessionModal.session : null}
+          duplicateFrom={sessionModal.mode === 'duplicate' ? sessionModal.session : null}
+          sourceTasks={
+            sessionModal.mode === 'duplicate' && sessionModal.session
+              ? event.event_tasks.filter((task) => task.session_id === sessionModal.session?.id)
+              : []
+          }
+          nextSortOrder={sessions.length}
+        />
+      )}
+      {importOpen && (
+        <SessionImportModal
+          open={importOpen}
+          onClose={() => setImportOpen(false)}
+          eventId={event.id}
+          eventDate={event.event_date}
           nextSortOrder={sessions.length}
         />
       )}

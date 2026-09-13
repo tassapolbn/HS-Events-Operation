@@ -1,5 +1,5 @@
 import { clsx, type ClassValue } from 'clsx';
-import { format, parseISO } from 'date-fns';
+import { addDays, differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { enGB } from 'date-fns/locale/en-GB';
 import { th } from 'date-fns/locale/th';
 import DOMPurify from 'dompurify';
@@ -53,6 +53,19 @@ export function combineDateTime(date: string, time: string | null): string | nul
 export function extractTime(value: string | null): string | null {
   if (!value) return null;
   return format(parseISO(value), 'HH:mm');
+}
+
+/** Whole days between two yyyy-MM-dd dates (to minus from) */
+export function dayDiff(from: string, to: string): number {
+  if (!from || !to) return 0;
+  return differenceInCalendarDays(parseISO(to), parseISO(from));
+}
+
+/** Move a yyyy-MM-dd date by a number of days */
+export function shiftDate(date: string, days: number): string {
+  if (!date) return date;
+  if (days === 0) return date;
+  return format(addDays(parseISO(date), days), 'yyyy-MM-dd');
 }
 
 /** Extract the local yyyy-MM-dd date from an ISO string */

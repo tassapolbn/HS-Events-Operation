@@ -93,6 +93,8 @@ export function SaveTemplateModal({ open, onClose, event, departments, attachmen
         </label>
         <p className="text-xs text-slate-400">
           {event.event_tasks.length} {t('templates.tasksIncluded')}
+          {event.event_sessions.length > 0 &&
+            ` - ${event.event_sessions.length} ${t('templates.sessionsIncluded')}`}
         </p>
       </div>
     </Modal>

@@ -1,8 +1,12 @@
 import { useState } from 'react';
-import { Bell, ChevronDown, Clock, ListPlus, Pencil, Plus, Trash2 } from 'lucide-react';
+import {
+  Bell, ChevronDown, ClipboardPaste, Clock, Copy, CopyPlus, ListPlus, Pencil, Plus, Trash2
+} from 'lucide-react';
 import { departmentIcon, TASK_STATUS_DOTS } from '../../lib/constants';
 import { useLanguage } from '../../i18n';
 import { cn, formatTime } from '../../lib/utils';
+import { parseClipboardTable } from '../../lib/grid';
+import { useTaskClipboard } from '../../lib/taskClipboard';
 import type { Department, EventTask } from '../../types';
 
 interface DepartmentSectionProps {
@@ -14,9 +18,17 @@ interface DepartmentSectionProps {
   onOpenTask: (task: EventTask) => void;
   /** Creates a task instantly from a single line of text */
   onQuickAdd: (departmentId: string, title: string) => Promise<void>;
+  /** Creates several tasks from a block pasted out of a spreadsheet */
+  onQuickAddMany: (departmentId: string, rows: string[][]) => Promise<void>;
   /** Quick actions on a task row */
   onEditTask: (task: EventTask) => void;
   onDeleteTask: (task: EventTask) => void;
+  /** Puts the task on the app clipboard, ready to paste into another department or event */
+  onCopyTask: (task: EventTask) => void;
+  /** Creates a copy of the task in this same department */
+  onDuplicateTask: (task: EventTask) => Promise<void>;
+  /** Drops the copied tasks into this department */
+  onPasteTasks: (departmentId: string) => Promise<void>;
   /** Notify only this department */
   onNotify: (departmentId: string) => void;
   /** A task was dropped onto this section (move it here) */
@@ -24,9 +36,11 @@ interface DepartmentSectionProps {
 }
 
 export function DepartmentSection({
-  department, tasks, canEdit, onAddTask, onOpenTask, onQuickAdd, onEditTask, onDeleteTask, onNotify, onDropTask
+  department, tasks, canEdit, onAddTask, onOpenTask, onQuickAdd, onQuickAddMany, onEditTask, onDeleteTask,
+  onCopyTask, onDuplicateTask, onPasteTasks, onNotify, onDropTask
 }: DepartmentSectionProps) {
   const { t, deptName, lang } = useLanguage();
+  const clipboard = useTaskClipboard();
   const [collapsed, setCollapsed] = useState(false);
   const [quickTitle, setQuickTitle] = useState('');
   const [adding, setAdding] = useState(false);
@@ -47,6 +61,25 @@ export function DepartmentSection({
       setAdding(false);
     }
   };
+
+  /** A block pasted from Google Sheets becomes one task per line */
+  const handleQuickPaste = async (event: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = event.clipboardData.getData('text/plain');
+    if (!text || !/[\t\n]/.test(text)) return;
+    const rows = parseClipboardTable(text).filter((row) => row.some((cell) => cell.trim() !== ''));
+    if (rows.length === 0) return;
+    event.preventDefault();
+    setAdding(true);
+    try {
+      await onQuickAddMany(department.id, rows);
+      setQuickTitle('');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const rowAction =
+    'rounded-md p-1 text-slate-400 transition-colors hover:bg-slate-200 hover:text-navy-700 dark:hover:bg-slate-700 dark:hover:text-gold-300';
 
   return (
     <section
@@ -176,10 +209,30 @@ export function DepartmentSection({
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          onCopyTask(task);
+                        }}
+                        title={t('tasks.copyTask')}
+                        className={rowAction}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void onDuplicateTask(task);
+                        }}
+                        title={t('tasks.duplicateTask')}
+                        className={rowAction}
+                      >
+                        <CopyPlus className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                           onEditTask(task);
                         }}
                         title={t('common.edit')}
-                        className="rounded-md p-1 text-slate-400 hover:bg-slate-200 hover:text-navy-700 dark:hover:bg-slate-700 dark:hover:text-gold-300"
+                        className={rowAction}
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
@@ -210,6 +263,7 @@ export function DepartmentSection({
               <input
                 value={quickTitle}
                 onChange={(e) => setQuickTitle(e.target.value)}
+                onPaste={(e) => void handleQuickPaste(e)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     e.preventDefault();
@@ -217,13 +271,24 @@ export function DepartmentSection({
                   }
                 }}
                 placeholder={t('tasks.quickAddPlaceholder')}
+                title={t('tasks.quickAddPasteHint')}
                 disabled={adding}
                 className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[13px] placeholder:text-slate-400 focus:border-navy-500 focus:bg-white focus:outline-none dark:border-slate-700 dark:bg-slate-800 dark:focus:border-gold-400 dark:focus:bg-slate-900"
               />
+              {clipboard && (
+                <button
+                  onClick={() => void onPasteTasks(department.id)}
+                  title={t('tasks.pasteHere')}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 px-2 py-1.5 text-[11px] font-semibold text-slate-500 transition-colors hover:bg-slate-50 hover:text-navy-700 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-gold-300"
+                >
+                  <ClipboardPaste className="h-3.5 w-3.5" />
+                  {clipboard.items.length}
+                </button>
+              )}
               <button
                 onClick={submitQuickAdd}
                 disabled={adding || !quickTitle.trim()}
-                className="rounded-lg p-1.5 text-white transition-all hover:scale-105 disabled:opacity-40"
+                className="shrink-0 rounded-lg p-1.5 text-white transition-all hover:scale-105 disabled:opacity-40"
                 style={{ backgroundColor: department.color }}
                 aria-label={t('common.add')}
               >

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
@@ -6,8 +6,10 @@ import { Input, Textarea } from '../ui/Input';
 import { useLanguage } from '../../i18n';
 import { useToast } from '../ui/Toast';
 import { useSessionMutations } from '../../hooks/useSessions';
+import { useTaskMutations } from '../../hooks/useTasks';
+import { useAuth } from '../../contexts/AuthContext';
 import { combineDateTime, extractTime } from '../../lib/utils';
-import type { EventSession } from '../../types';
+import type { EventSession, EventTask } from '../../types';
 
 interface SessionFormValues {
   title: string;
@@ -27,13 +29,26 @@ interface SessionFormModalProps {
   eventId: string;
   eventDate: string;
   session?: EventSession | null;
+  /** When set the modal saves a copy of this session instead of editing it */
+  duplicateFrom?: EventSession | null;
+  /** Tasks that belong to the session being duplicated */
+  sourceTasks?: EventTask[];
   nextSortOrder: number;
 }
 
-export function SessionFormModal({ open, onClose, eventId, eventDate, session, nextSortOrder }: SessionFormModalProps) {
+export function SessionFormModal({
+  open, onClose, eventId, eventDate, session, duplicateFrom, sourceTasks = [], nextSortOrder
+}: SessionFormModalProps) {
   const { t } = useLanguage();
   const { toast } = useToast();
+  const { profile } = useAuth();
   const { createSession, updateSession } = useSessionMutations(eventId);
+  const { createTasks } = useTaskMutations(eventId);
+
+  const duplicating = !!duplicateFrom;
+  const source = duplicateFrom ?? session ?? null;
+  const [copyTasks, setCopyTasks] = useState(true);
+  const [resetStatus, setResetStatus] = useState(true);
 
   const { register, handleSubmit, reset, formState } = useForm<SessionFormValues>({
     defaultValues: { title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' }
@@ -41,20 +56,22 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
 
   useEffect(() => {
     if (!open) return;
-    if (session) {
+    setCopyTasks(true);
+    setResetStatus(true);
+    if (source) {
       reset({
-        title: session.title,
-        session_date: session.session_date,
-        location: session.location,
-        start_time: extractTime(session.start_time) ?? '',
-        end_time: extractTime(session.end_time) ?? '',
-        time_note: session.time_note ?? '',
-        note: session.note ?? ''
+        title: source.title,
+        session_date: source.session_date,
+        location: source.location,
+        start_time: extractTime(source.start_time) ?? '',
+        end_time: extractTime(source.end_time) ?? '',
+        time_note: source.time_note ?? '',
+        note: source.note ?? ''
       });
     } else {
       reset({ title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' });
     }
-  }, [open, session, eventDate, reset]);
+  }, [open, source, eventDate, reset]);
 
   const onSubmit = async (values: SessionFormValues) => {
     const payload = {
@@ -67,28 +84,63 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
       note: values.note.trim()
     };
     try {
-      if (session) {
+      if (duplicating) {
+        const created = await createSession.mutateAsync({ ...payload, sort_order: nextSortOrder });
+        if (copyTasks && sourceTasks.length > 0) {
+          await createTasks.mutateAsync(
+            sourceTasks.map((task) => ({
+              event_id: eventId,
+              department_id: task.department_id,
+              session_id: created.id,
+              title: task.title,
+              description: task.description,
+              instructions: task.instructions,
+              work_location: task.work_location,
+              setup_location: task.setup_location,
+              assigned_staff: task.assigned_staff,
+              start_time: combineDateTime(eventDate, extractTime(task.start_time)),
+              completion_time: combineDateTime(eventDate, extractTime(task.completion_time)),
+              priority: task.priority,
+              status: resetStatus ? 'not_started' : task.status,
+              notes: task.notes,
+              sort_order: task.sort_order,
+              created_by: profile?.id ?? null
+            }))
+          );
+        }
+        toast(t('sessions.duplicated'));
+      } else if (session) {
         await updateSession.mutateAsync({ id: session.id, ...payload });
+        toast(t('common.savedSuccess'));
       } else {
         await createSession.mutateAsync({ ...payload, sort_order: nextSortOrder });
+        toast(t('common.savedSuccess'));
       }
-      toast(t('common.savedSuccess'));
       onClose();
     } catch {
       toast(t('common.errorGeneric'), 'error');
     }
   };
 
+  const title = duplicating
+    ? t('sessions.duplicateSession')
+    : session
+      ? t('sessions.editSession')
+      : t('sessions.addSession');
+
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={session ? t('sessions.editSession') : t('sessions.addSession')}
-      subtitle={t('sessions.hint')}
+      title={title}
+      subtitle={duplicating ? t('sessions.duplicateHint') : t('sessions.hint')}
       footer={
         <>
           <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
-          <Button onClick={handleSubmit(onSubmit)} loading={createSession.isPending || updateSession.isPending}>
+          <Button
+            onClick={handleSubmit(onSubmit)}
+            loading={createSession.isPending || updateSession.isPending || createTasks.isPending}
+          >
             {t('common.save')}
           </Button>
         </>
@@ -120,6 +172,31 @@ export function SessionFormModal({ open, onClose, eventId, eventDate, session, n
           className="sm:col-span-2"
           {...register('note')}
         />
+
+        {duplicating && sourceTasks.length > 0 && (
+          <div className="space-y-2 rounded-xl border border-gold-200 bg-gold-50/60 p-3 sm:col-span-2 dark:border-gold-900 dark:bg-gold-950/20">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+              <input
+                type="checkbox"
+                checked={copyTasks}
+                onChange={(event) => setCopyTasks(event.target.checked)}
+                className="h-4 w-4 rounded accent-navy-700 dark:accent-gold-400"
+              />
+              {t('sessions.copyTasksToo')} ({sourceTasks.length})
+            </label>
+            {copyTasks && (
+              <label className="flex cursor-pointer items-center gap-2 pl-6 text-xs text-slate-500 dark:text-slate-400">
+                <input
+                  type="checkbox"
+                  checked={resetStatus}
+                  onChange={(event) => setResetStatus(event.target.checked)}
+                  className="h-4 w-4 rounded accent-navy-700 dark:accent-gold-400"
+                />
+                {t('sessions.resetStatus')}
+              </label>
+            )}
+          </div>
+        )}
       </form>
     </Modal>
   );

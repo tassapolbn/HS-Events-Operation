@@ -3,6 +3,14 @@ import { supabase } from '../lib/supabase';
 import type { ChecklistItem, EventTask } from '../types';
 
 export type TaskInput = Partial<Omit<EventTask, 'id' | 'created_at' | 'updated_at' | 'deleted_at'>>;
+export type TaskPatch = TaskInput & { id: string };
+
+/** Run promises a few at a time so a large paste does not open 40 sockets at once. */
+async function inChunks<T>(items: T[], size: number, run: (item: T) => Promise<void>) {
+  for (let i = 0; i < items.length; i += size) {
+    await Promise.all(items.slice(i, i + size).map(run));
+  }
+}
 
 export function useTaskMutations(eventId?: string) {
   const queryClient = useQueryClient();
@@ -23,11 +31,33 @@ export function useTaskMutations(eventId?: string) {
     onSuccess: invalidate
   });
 
+  /** Insert several tasks in one round trip (paste, duplicate, import). */
+  const createTasks = useMutation({
+    mutationFn: async (inputs: TaskInput[]): Promise<EventTask[]> => {
+      if (inputs.length === 0) return [];
+      const { data, error } = await supabase.from('event_tasks').insert(inputs).select();
+      if (error) throw error;
+      return (data ?? []) as EventTask[];
+    },
+    onSuccess: invalidate
+  });
+
   const updateTask = useMutation({
-    mutationFn: async ({ id, ...input }: TaskInput & { id: string }): Promise<EventTask> => {
+    mutationFn: async ({ id, ...input }: TaskPatch): Promise<EventTask> => {
       const { data, error } = await supabase.from('event_tasks').update(input).eq('id', id).select().single();
       if (error) throw error;
       return data as EventTask;
+    },
+    onSuccess: invalidate
+  });
+
+  /** Apply a different patch to each task (one grid edit, paste or fill). */
+  const updateTasks = useMutation({
+    mutationFn: async (patches: TaskPatch[]) => {
+      await inChunks(patches, 6, async ({ id, ...input }) => {
+        const { error } = await supabase.from('event_tasks').update(input).eq('id', id);
+        if (error) throw error;
+      });
     },
     onSuccess: invalidate
   });
@@ -43,7 +73,29 @@ export function useTaskMutations(eventId?: string) {
     onSuccess: invalidate
   });
 
-  return { createTask, updateTask, deleteTask };
+  const deleteTasks = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const { error } = await supabase
+        .from('event_tasks')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: invalidate
+  });
+
+  /** Bring soft deleted tasks back, so a grid delete can be undone. */
+  const restoreTasks = useMutation({
+    mutationFn: async (ids: string[]) => {
+      if (ids.length === 0) return;
+      const { error } = await supabase.from('event_tasks').update({ deleted_at: null }).in('id', ids);
+      if (error) throw error;
+    },
+    onSuccess: invalidate
+  });
+
+  return { createTask, createTasks, updateTask, updateTasks, deleteTask, deleteTasks, restoreTasks };
 }
 
 export function useChecklist(taskId: string | undefined) {

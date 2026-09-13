@@ -1,6 +1,6 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
-import type { EventSession } from '../types';
+import type { Campus, EventSession } from '../types';
 
 export type SessionInput = Partial<Omit<EventSession, 'id'>>;
 
@@ -10,6 +10,7 @@ export function useSessionMutations(eventId: string) {
     queryClient.invalidateQueries({ queryKey: ['events', 'detail', eventId] });
     queryClient.invalidateQueries({ queryKey: ['events'] });
     queryClient.invalidateQueries({ queryKey: ['display'] });
+    queryClient.invalidateQueries({ queryKey: ['session-sources'] });
   };
 
   const createSession = useMutation({
@@ -44,4 +45,46 @@ export function useSessionMutations(eventId: string) {
   });
 
   return { createSession, updateSession, deleteSession };
+}
+
+/** One event that already has sessions, used as a source to copy sessions from. */
+export interface SessionSourceEvent {
+  id: string;
+  name: string;
+  event_date: string;
+  campus: Campus;
+  event_sessions: EventSession[];
+  event_tasks: Array<{ id: string; session_id: string | null; deleted_at: string | null }>;
+}
+
+/**
+ * Recent events that have at least one session, so a session and its tasks can be
+ * copied into the event being planned. Task rows are ids only: the full task bodies
+ * are loaded with useEvent once a source event is picked.
+ */
+export function useSessionSourceEvents(excludeEventId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ['session-sources', excludeEventId ?? 'all'],
+    enabled,
+    queryFn: async (): Promise<SessionSourceEvent[]> => {
+      let query = supabase
+        .from('events')
+        .select('id, name, event_date, campus, event_sessions(*), event_tasks(id, session_id, deleted_at)')
+        .is('deleted_at', null)
+        .order('event_date', { ascending: false })
+        .limit(80);
+      if (excludeEventId) query = query.neq('id', excludeEventId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return ((data ?? []) as SessionSourceEvent[])
+        .map((row) => ({
+          ...row,
+          event_sessions: [...(row.event_sessions ?? [])].sort(
+            (a, b) => a.session_date.localeCompare(b.session_date) || a.sort_order - b.sort_order
+          ),
+          event_tasks: (row.event_tasks ?? []).filter((task) => !task.deleted_at)
+        }))
+        .filter((row) => row.event_sessions.length > 0);
+    }
+  });
 }

@@ -80,7 +80,11 @@ export function TemplatesPage() {
                     <p className="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{template.description}</p>
                   )}
                   <p className="mt-2 text-xs text-slate-400">
-                    {template.data.tasks.length} {t('templates.tasksIncluded')} - {formatDate(template.created_at, lang, 'd MMM yyyy')}
+                    {template.data.tasks.length} {t('templates.tasksIncluded')}
+                    {(template.data.sessions?.length ?? 0) > 0 &&
+                      ` - ${template.data.sessions?.length} ${t('templates.sessionsIncluded')}`}
+                    {' - '}
+                    {formatDate(template.created_at, lang, 'd MMM yyyy')}
                   </p>
                 </div>
                 <Button variant="gold" size="sm" onClick={() => { setUseTarget(template); setNewDate(''); }}>
