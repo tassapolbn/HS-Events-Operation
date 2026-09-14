@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { CalendarDays, Check, Inbox, MapPin, Paperclip, User } from 'lucide-react';
+import { CalendarDays, Check, CircleCheckBig, Inbox, MapPin, Paperclip, User } from 'lucide-react';
+import { inScope, requestIsDone, type BoardScope } from '../../lib/boardScope';
 import { useSetDisplayRequestStatus } from '../../hooks/usePublicDisplay';
 import { showAttachment } from './AttachmentViewer';
 import { useLanguage } from '../../i18n';
@@ -16,6 +17,8 @@ interface RequestsBoardProps {
   departments: DisplayDepartment[];
   selectedDept: string;
   isLoading: boolean;
+  /** 'active' keeps finished requests out of the way; 'done' shows only those */
+  scope?: BoardScope;
   /**
    * 'grid'  = square cards in a multi-column grid (the full Requests tab).
    * 'list'  = one card per row, stacked in line (the side-by-side department view,
@@ -32,7 +35,7 @@ function byDueDate(a: DisplayRequest, b: DisplayRequest): number {
   return 0;
 }
 
-export function RequestsBoard({ requests, departments, selectedDept, isLoading, layout = 'grid' }: RequestsBoardProps) {
+export function RequestsBoard({ requests, departments, selectedDept, isLoading, scope = 'active', layout = 'grid' }: RequestsBoardProps) {
   const { t, deptName, lang } = useLanguage();
   const setStatus = useSetDisplayRequestStatus();
   // The name typed on each card, used when a status is set from the board.
@@ -45,12 +48,17 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading, 
   // Show the requests with the soonest deadline first, not the submission date.
   const visible = (requests ?? [])
     .filter((request) => !selectedDept || request.department_id === selectedDept)
+    // A finished or cancelled request moves to Done, so the board shows live work only
+    .filter((request) => inScope(requestIsDone(request), scope))
     .slice()
     .sort(byDueDate);
   if (visible.length === 0) {
     return (
       <div className="mx-auto max-w-xl py-16">
-        <EmptyState icon={Inbox} message={t('display.noRequests')} />
+        <EmptyState
+          icon={scope === 'done' ? CircleCheckBig : Inbox}
+          message={scope === 'done' ? t('display.doneRequestsEmpty') : t('display.noRequests')}
+        />
       </div>
     );
   }

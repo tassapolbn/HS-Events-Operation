@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, Bell, CalendarDays, Clock, CopyPlus, Import, LayoutTemplate, Layers, MapPin, Pencil, Plus,
+  ArrowLeft, Bell, CalendarDays, Clock, Import, LayoutTemplate, Layers, MapPin, Pencil, Plus,
   Table2, Trash2, Eye, LayoutGrid
 } from 'lucide-react';
 import { useEvent, useEventMutations } from '../hooks/useEvents';
@@ -26,11 +26,13 @@ import { TaskDetailModal } from '../components/events/TaskDetailModal';
 import { NotifyModal } from '../components/events/NotifyModal';
 import { SaveTemplateModal } from '../components/events/SaveTemplateModal';
 import { SessionFormModal } from '../components/events/SessionFormModal';
+import { HiddenSessionBadge, SessionControls } from '../components/events/SessionControls';
 import { SessionImportModal } from '../components/events/SessionImportModal';
 import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
 import { cn, combineDateTime, formatDate, formatTime, isRichTextEmpty } from '../lib/utils';
 import { normalizeTimeInput } from '../lib/grid';
+import { sessionColor } from '../lib/sessionColors';
 import { copyTasks, getTaskClipboard, taskToClipboardItem } from '../lib/taskClipboard';
 import type { EventSession, EventTask } from '../types';
 
@@ -314,33 +316,19 @@ export function EventDetailPage() {
             {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
           </span>
         )}
+        {session.is_hidden && <HiddenSessionBadge tone="dark" />}
         <span className="ml-auto rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-bold">
           {done}/{sessionTasks.length}
         </span>
         {isEventsTeam && (
-          <span className="flex items-center gap-0.5">
-            <button
-              onClick={() => setSessionModal({ mode: 'duplicate', session })}
-              className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/15 hover:text-white"
-              title={t('sessions.duplicateSession')}
-            >
-              <CopyPlus className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => setSessionModal({ mode: 'edit', session })}
-              className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-white/15 hover:text-white"
-              title={t('sessions.editSession')}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </button>
-            <button
-              onClick={() => setDeletingSession(session)}
-              className="rounded-lg p-1.5 text-white/70 transition-colors hover:bg-red-500/40 hover:text-white"
-              title={t('sessions.deleteSession')}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </button>
-          </span>
+          <SessionControls
+            session={session}
+            sessions={sessions}
+            tone="dark"
+            onDuplicate={() => setSessionModal({ mode: 'duplicate', session })}
+            onEdit={() => setSessionModal({ mode: 'edit', session })}
+            onDelete={() => setDeletingSession(session)}
+          />
         )}
       </div>
     );
@@ -507,6 +495,7 @@ export function EventDetailPage() {
           canEdit={isEventsTeam}
           onOpenTask={(task) => setViewingTask(task)}
           onEditTask={openEditTask}
+          onAddSession={() => setSessionModal({ mode: 'create', session: null })}
         />
       ) : sessions.length === 0 ? (
         renderDepartmentGrid(event.event_tasks, null)
@@ -536,35 +525,30 @@ export function EventDetailPage() {
           {sessions.map((session) => (
             <div
               key={session.id}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-xs dark:border-slate-700 dark:bg-slate-900"
+              className={cn(
+                'flex items-center gap-1.5 rounded-xl border bg-white px-2.5 py-1.5 text-xs dark:bg-slate-900',
+                session.is_hidden
+                  ? 'border-amber-300 dark:border-amber-700'
+                  : 'border-slate-200 dark:border-slate-700'
+              )}
+              style={{ borderLeft: `4px solid ${sessionColor(sessions, session.id)}` }}
             >
-              <Layers className="h-3.5 w-3.5 text-slate-400" />
+              <Layers className="h-3.5 w-3.5" style={{ color: sessionColor(sessions, session.id) }} />
               <span className="font-semibold text-slate-700 dark:text-slate-200">
                 {session.title || formatDate(session.session_date, lang, 'd MMM')}
               </span>
-              <button
-                onClick={() => setSessionModal({ mode: 'duplicate', session })}
-                title={t('sessions.duplicateSession')}
-                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-navy-700 dark:hover:bg-slate-800 dark:hover:text-gold-300"
-              >
-                <CopyPlus className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={() => setSessionModal({ mode: 'edit', session })}
-                title={t('sessions.editSession')}
-                className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-navy-700 dark:hover:bg-slate-800 dark:hover:text-gold-300"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-              <button
-                onClick={() => setDeletingSession(session)}
-                title={t('sessions.deleteSession')}
-                className="rounded-md p-1 text-slate-400 hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-950/50"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              {session.is_hidden && <HiddenSessionBadge tone="light" />}
+              <SessionControls
+                session={session}
+                sessions={sessions}
+                tone="light"
+                onDuplicate={() => setSessionModal({ mode: 'duplicate', session })}
+                onEdit={() => setSessionModal({ mode: 'edit', session })}
+                onDelete={() => setDeletingSession(session)}
+              />
             </div>
           ))}
+          <p className="basis-full text-xs text-slate-400">{t('sessions.reorderHint')}</p>
         </div>
       )}
 

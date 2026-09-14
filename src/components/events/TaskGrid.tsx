@@ -2,7 +2,8 @@ import { ContextMenu, type ContextAction } from '../ui/ContextMenu';
 import { inverseGridEntry, type GridHistoryEntry } from '../../lib/gridHistory';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDownToLine, Check, ClipboardPaste, Columns3, Copy, CopyPlus, Keyboard, Maximize2, Plus, Trash2, Undo2, Redo2, MoreHorizontal, Search, Table2, ChevronDown, Pencil, Loader2
+  ArrowDownToLine, Check, ClipboardPaste, Columns3, Copy, CopyPlus, EyeOff, GripVertical, Keyboard, Layers,
+  Maximize2, Plus, Replace, Trash2, Undo2, Redo2, MoreHorizontal, Search, Table2, ChevronDown, Pencil, Loader2, X
 } from 'lucide-react';
 import { en } from '../../i18n/en';
 import { th } from '../../i18n/th';
@@ -10,8 +11,10 @@ import { useLanguage, type TKey } from '../../i18n';
 import { useToast } from '../ui/Toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTaskMutations, type TaskInput, type TaskPatch } from '../../hooks/useTasks';
+import { useSessionMutations } from '../../hooks/useSessions';
+import { sessionColor, WHOLE_EVENT_COLOR } from '../../lib/sessionColors';
 import { PRIORITIES, TASK_STATUSES, TASK_STATUS_DOTS } from '../../lib/constants';
-import { cn, combineDateTime, extractTime, formatDate } from '../../lib/utils';
+import { cn, combineDateTime, darkenColor, extractTime, formatDate, lightenColor } from '../../lib/utils';
 import { matchOption, normalizeTimeInput, parseClipboardTable, toClipboardTable } from '../../lib/grid';
 import { copyTasks, getTaskClipboard, taskToClipboardItem, useTaskClipboard } from '../../lib/taskClipboard';
 import type { Department, EventSession, EventTask, Priority, TaskStatus } from '../../types';
@@ -67,6 +70,21 @@ function readHiddenColumns(): GridField[] {
     return parsed.filter((value): value is GridField => typeof value === 'string' && allowed.has(value));
   } catch {
     return [];
+  }
+}
+
+/** Replace every occurrence of a plain string, optionally ignoring case. */
+function replaceEvery(value: string, find: string, replacement: string, matchCase: boolean): string {
+  if (!find) return value;
+  const hay = matchCase ? value : value.toLocaleLowerCase();
+  const needle = matchCase ? find : find.toLocaleLowerCase();
+  let out = '';
+  let from = 0;
+  for (;;) {
+    const at = hay.indexOf(needle, from);
+    if (at === -1) return out + value.slice(from);
+    out += value.slice(from, at) + replacement;
+    from = at + needle.length;
   }
 }
 
@@ -130,15 +148,18 @@ interface TaskGridProps {
   onOpenTask: (task: EventTask) => void;
   /** Opens the full form, for description, instructions and attachments */
   onEditTask: (task: EventTask) => void;
+  /** Opens the session form, so a session can be added without leaving the sheet */
+  onAddSession?: () => void;
 }
 
 export function TaskGrid({
-  eventId, eventDate, tasks, departments, sessions, canEdit, onOpenTask, onEditTask
+  eventId, eventDate, tasks, departments, sessions, canEdit, onOpenTask, onEditTask, onAddSession
 }: TaskGridProps) {
   const { t, deptName, lang } = useLanguage();
   const { toast } = useToast();
   const { profile } = useAuth();
   const { createTasks, insertTaskRows, updateTasks, deleteTasks, restoreTasks } = useTaskMutations(eventId);
+  const { createSession } = useSessionMutations(eventId);
   const clipboard = useTaskClipboard();
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -167,6 +188,15 @@ export function TaskGrid({
   const [pending, setPending] = useState<Record<string, Partial<RowValues>>>({});
   const [fillTo, setFillTo] = useState<number | null>(null);
   const [undoDepth, setUndoDepth] = useState(0);
+  // Find and replace, over the whole sheet or just the selected cells
+  const [replaceOpen, setReplaceOpen] = useState(false);
+  const [findText, setFindText] = useState('');
+  const [replaceText, setReplaceText] = useState('');
+  const [matchCase, setMatchCase] = useState(false);
+  const [replaceInSelection, setReplaceInSelection] = useState(false);
+  // Dragging a row by its number to a new place in the sheet
+  const [dragRows, setDragRows] = useState<{ top: number; bottom: number } | null>(null);
+  const [dropAt, setDropAt] = useState<{ index: number; below: boolean } | null>(null);
 
   const columns = useMemo(
     () => COLUMNS.filter((column) => column.fixed || !hiddenColumns.includes(column.field)),
@@ -221,17 +251,19 @@ export function TaskGrid({
       groupKey: groupOf(task)
     }));
 
-    const labels = new Map<number, string>();
+    const labels = new Map<number, { label: string; color: string; session: EventSession | null }>();
     let previous: string | null = null;
     built.forEach((row, index) => {
       if (row.groupKey === previous) return;
       previous = row.groupKey;
       if (!row.groupKey) {
-        if (sessions.length > 0) labels.set(index, t('sessions.generalTasks'));
+        if (sessions.length > 0) {
+          labels.set(index, { label: t('sessions.generalTasks'), color: WHOLE_EVENT_COLOR, session: null });
+        }
         return;
       }
       const session = sessions.find((item) => item.id === row.groupKey);
-      if (session) labels.set(index, sessionLabel(session));
+      if (session) labels.set(index, { label: sessionLabel(session), color: sessionColor(sessions, session.id), session });
     });
 
     return { rows: built, bands: labels };
@@ -242,6 +274,12 @@ export function TaskGrid({
   useEffect(() => { setContext(null); }, [visibleIds, hiddenColumns]);
 
   const rowById = useMemo(() => new Map(rows.map((row) => [row.task.id, row])), [rows]);
+
+  /** The session colour a row carries down its left edge */
+  const rowColor = useCallback(
+    (row: GridRow) => sessionColor(sessions, row.groupKey || null),
+    [sessions]
+  );
 
   // Drop optimistic values once the server confirms them
   useEffect(() => {
@@ -323,15 +361,19 @@ export function TaskGrid({
 
   // Escape closes the toolbar menus
   useEffect(() => {
-    if (!columnMenuOpen && !helpOpen) return;
+    if (!columnMenuOpen && !helpOpen && !replaceOpen) return;
     const onEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       setColumnMenuOpen(false);
       setHelpOpen(false);
+      setReplaceOpen(false);
     };
     document.addEventListener('keydown', onEscape);
     return () => document.removeEventListener('keydown', onEscape);
-  }, [columnMenuOpen, helpOpen]);
+  }, [columnMenuOpen, helpOpen, replaceOpen]);
+
+  // A drag never survives the rows changing under it
+  useEffect(() => { setDragRows(null); setDropAt(null); }, [visibleIds]);
 
   // ---------- option lists, matched in both languages when pasting ----------
 
@@ -889,6 +931,141 @@ export function TaskGrid({
     finally { actionBusy.current = false; }
   };
 
+  /**
+   * Turn a typed row into a session, the way a divider works in a spreadsheet.
+   * The row supplies the name, the venue and the times; the rows under it that
+   * belong to the same group follow it into the new session, and the row itself
+   * is used up. Adding a session no longer means leaving the sheet.
+   */
+  const rowToSession = async () => {
+    if (!canEdit || busy || actionBusy.current || !sel) return;
+    const row = rows[sel.r];
+    if (!row) return;
+    const title = row.values.title.trim();
+    if (!title) {
+      toast(t('grid.rowToSessionNeedsTitle'), 'error');
+      return;
+    }
+    const currentSession = sessions.find((item) => item.id === row.values.session_id);
+    const date = currentSession?.session_date ?? eventDate;
+    // Rows are grouped, so everything that follows in the same band is contiguous
+    const followers: GridRow[] = [];
+    for (let index = sel.r + 1; index < rows.length; index += 1) {
+      if (rows[index].groupKey !== row.groupKey) break;
+      followers.push(rows[index]);
+    }
+    actionBusy.current = true;
+    try {
+      const created = await createSession.mutateAsync({
+        title,
+        session_date: date,
+        location: row.values.work_location || row.values.setup_location || '',
+        start_time: combineDateTime(date, row.values.start_time || null),
+        end_time: combineDateTime(date, row.values.completion_time || null),
+        time_note: '',
+        note: '',
+        sort_order: sessions.filter((item) => item.session_date === date).length
+      });
+      if (followers.length > 0) {
+        await updateTasks.mutateAsync(
+          followers.map((follower) => ({ id: follower.task.id, session_id: created.id }))
+        );
+      }
+      await deleteTasks.mutateAsync([row.task.id]);
+      toast(
+        followers.length > 0
+          ? `${t('grid.sessionCreated')} · ${followers.length} ${t('grid.rowsMovedIn')}`
+          : t('grid.sessionCreated')
+      );
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    } finally {
+      actionBusy.current = false;
+    }
+  };
+
+  /**
+   * Drop a block of rows at a new place in the sheet. Rows read in session, then
+   * department, then their own order, so a row that lands in another group joins
+   * that group; the whole group is then renumbered from the top.
+   */
+  const moveRowsTo = async (from: { top: number; bottom: number }, toIndex: number, below: boolean) => {
+    if (!canEdit || busy || actionBusy.current) return;
+    const target = rows[toIndex];
+    const moving = rows.slice(from.top, from.bottom + 1);
+    if (!target || moving.length === 0) return;
+    if (toIndex >= from.top && toIndex <= from.bottom) return;
+
+    const sessionId = target.values.session_id;
+    const departmentId = target.values.department_id;
+    const movingIds = new Set(moving.map((row) => row.task.id));
+    const group = rows.filter(
+      (row) =>
+        !movingIds.has(row.task.id) &&
+        row.values.session_id === sessionId &&
+        row.values.department_id === departmentId
+    );
+    const anchor = group.findIndex((row) => row.task.id === target.task.id);
+    const insertAt = anchor === -1 ? group.length : anchor + (below ? 1 : 0);
+    const ordered = [...group.slice(0, insertAt), ...moving, ...group.slice(insertAt)];
+
+    const patches: TaskPatch[] = [];
+    ordered.forEach((row, order) => {
+      const moved = movingIds.has(row.task.id);
+      const groupChanged = moved && (row.values.session_id !== sessionId || row.values.department_id !== departmentId);
+      if (row.task.sort_order === order && !groupChanged) return;
+      patches.push({
+        id: row.task.id,
+        sort_order: order,
+        ...(groupChanged ? { session_id: sessionId || null, department_id: departmentId } : {})
+      });
+    });
+    if (patches.length === 0) return;
+
+    actionBusy.current = true;
+    try {
+      await updateTasks.mutateAsync(patches);
+      toast(`${t('grid.rowsReordered')} · ${moving.length}`);
+    } catch {
+      setSaveFailed(true);
+      toast(t('common.errorGeneric'), 'error');
+    } finally {
+      actionBusy.current = false;
+    }
+  };
+
+  /**
+   * Replace text across the sheet, or just inside the selection. Only the free
+   * text columns are touched: a department, a status or a time is chosen from a
+   * list, so replacing inside them would only ever produce an invalid cell.
+   */
+  const replaceAll = async () => {
+    if (!canEdit || busy || !findText) return;
+    const scopeRows = replaceInSelection && bounds ? rows.slice(bounds.top, bounds.bottom + 1) : rows;
+    const scopeColumns = columns.filter((column, index) =>
+      column.type === 'text' && (!replaceInSelection || !bounds || (index >= bounds.left && index <= bounds.right))
+    );
+    const needle = matchCase ? findText : findText.toLocaleLowerCase();
+    const changes: Array<{ id: string; values: Partial<RowValues> }> = [];
+    for (const row of scopeRows) {
+      const values: Partial<RowValues> = {};
+      for (const column of scopeColumns) {
+        const value = row.values[column.field];
+        if (!value) continue;
+        const hay = matchCase ? value : value.toLocaleLowerCase();
+        if (!hay.includes(needle)) continue;
+        values[column.field] = replaceEvery(value, findText, replaceText, matchCase);
+      }
+      if (Object.keys(values).length > 0) changes.push({ id: row.task.id, values });
+    }
+    if (changes.length === 0) {
+      toast(t('grid.noMatches'), 'error');
+      return;
+    }
+    const cells = changes.reduce((total, change) => total + Object.keys(change.values).length, 0);
+    if (await commitUpdates(changes)) toast(`${cells} ${t('grid.replacedCount')}`);
+  };
+
   const copyCells = async () => {
     const text = toClipboardTable(selectionAsTable());
     if (!text) return;
@@ -925,6 +1102,7 @@ export function TaskGrid({
     if (key === 'ContextMenu' || (event.shiftKey && key === 'F10')) { event.preventDefault(); openKeyboardMenu(); return; }
     if (mod && key.toLowerCase() === 'f') { event.preventDefault(); searchRef.current?.focus(); return; }
     if (mod && key === '/') { event.preventDefault(); setHelpOpen(open => !open); return; }
+    if (mod && key.toLowerCase() === 'h') { event.preventDefault(); setReplaceInSelection(!!bounds && bounds.top !== bounds.bottom); setReplaceOpen(true); return; }
     if (event.altKey && key === 'Enter' && sel && rows[sel.r]) { event.preventDefault(); onOpenTask(rows[sel.r].task); return; }
     if (mod && ['Home','End'].includes(key)) { event.preventDefault(); if (rows.length) selectCell(key === 'Home' ? 0 : rows.length-1, key === 'Home' ? 0 : columns.length-1, event.shiftKey); return; }
     if (event.shiftKey && key === ' ' && sel) { event.preventDefault(); setSel({...sel,c:0,c2:columns.length-1}); return; }
@@ -1068,6 +1246,8 @@ export function TaskGrid({
     {label:text('แทรกแถวด้านล่าง','Insert row below'), shortcut:'Ctrl+Alt+↓', disabled:!canEdit || busy, onSelect:()=>void insertRows('below')},
     {label:text(`แทรก ${rowsToAdd} แถวด้านล่าง`,`Insert ${rowsToAdd} rows below`), disabled:!canEdit || busy, onSelect:()=>void insertRows('below',rowsToAdd)},
     {label:text('ทำสำเนาแถวที่เลือก','Duplicate selected rows'), shortcut:'Ctrl+Shift+D', disabled:!canEdit || busy, onSelect:()=>void duplicateRows()},
+    {label:t('grid.rowToSession'), divider:true, disabled:!canEdit || busy || !sel, onSelect:()=>void rowToSession()},
+    {label:t('grid.findReplace'), shortcut:'Ctrl+H', disabled:!canEdit || busy, onSelect:()=>{setReplaceInSelection(!!bounds && bounds.top !== bounds.bottom); setReplaceOpen(true);}},
     {label:text('ลบแถวที่เลือก','Delete selected rows'), shortcut:'Ctrl+Alt+⌫', danger:true, disabled:!canEdit || busy, onSelect:()=>void removeRows()},
     {label:text('ย้อนกลับ','Undo'), shortcut:'Ctrl+Z', divider:true, disabled:!canEdit || !undoDepth || busy, onSelect:()=>void undo()},
     {label:text('ทำซ้ำอีกครั้ง','Redo'), shortcut:'Ctrl+Y', disabled:!canEdit || !redoDepth || busy, onSelect:()=>void travelHistory(true)}
@@ -1098,6 +1278,19 @@ export function TaskGrid({
           <>
             <button className={toolbarButton} onClick={() => void addRows(1)} disabled={busy}>
               <Plus className="h-3.5 w-3.5" /> {t('grid.addRow')}
+            </button>
+            {onAddSession && (
+              <button className={toolbarButton} onClick={onAddSession} disabled={busy}>
+                <Layers className="h-3.5 w-3.5" /> {t('grid.addSession')}
+              </button>
+            )}
+            <button
+              className={toolbarButton}
+              onClick={() => void rowToSession()}
+              disabled={!sel || busy}
+              title={t('grid.rowToSessionHint')}
+            >
+              <Layers className="h-3.5 w-3.5" /> {t('grid.rowToSession')}
             </button>
             <button className={toolbarButton} onClick={() => void duplicateRows()} disabled={!bounds || busy}>
               <CopyPlus className="h-3.5 w-3.5" /> {t('grid.duplicateRow')}
@@ -1148,6 +1341,15 @@ export function TaskGrid({
         )}
 
         {canEdit && <button className={toolbarButton} disabled={!redoDepth || busy} onClick={() => void travelHistory(true)}><Redo2 className="h-3.5 w-3.5" />{lang === 'th' ? 'ทำซ้ำอีกครั้ง' : 'Redo'}</button>}
+        {canEdit && (
+          <button
+            className={cn(toolbarButton, replaceOpen && 'border-navy-500 text-navy-700 dark:border-gold-400')}
+            aria-expanded={replaceOpen}
+            onClick={() => { setReplaceInSelection(!!bounds && bounds.top !== bounds.bottom); setReplaceOpen(open => !open); }}
+          >
+            <Replace className="h-3.5 w-3.5" /> {t('grid.findReplace')}
+          </button>
+        )}
         <button className={toolbarButton} disabled={!sel || busy} onClick={openKeyboardMenu}><MoreHorizontal className="h-4 w-4" />{lang === 'th' ? 'แอคชั่น' : 'Actions'}</button>
         <div className="ml-auto flex items-center gap-1.5">
           <div className="relative">
@@ -1219,13 +1421,62 @@ export function TaskGrid({
                   <p>Ctrl+Alt+Backspace: {lang === 'th' ? 'ลบแถว' : 'Delete rows'}</p>
                   <p>Ctrl+Home / End: {lang === 'th' ? 'ไปต้น / ท้ายตาราง' : 'First / last cell'}</p>
                   <p>Alt+Enter: {lang === 'th' ? 'รายละเอียดงาน' : 'Task details'} · Shift+F10: {lang === 'th' ? 'เมนูแอคชั่น' : 'Actions menu'}</p>
-                  <p>Ctrl+F: {lang === 'th' ? 'ค้นหาในตาราง' : 'Search worksheet'}</p>
+                  <p>Ctrl+F: {lang === 'th' ? 'ค้นหาในตาราง' : 'Search worksheet'} · Ctrl+H: {t('grid.findReplace')}</p>
+                  <p>{lang === 'th' ? 'คลิกหัวคอลัมน์เพื่อเลือกทั้งคอลัมน์ คลิกช่อง # มุมซ้ายบนเพื่อเลือกทุกเซลล์' : 'Click a column header to select the column, click the # corner to select every cell'}</p>
+                  <p>{lang === 'th' ? 'ลากหมายเลขแถวเพื่อย้ายแถว (ปิดการค้นหาก่อน)' : 'Drag a row by its number to move it (clear the search first)'}</p>
+                  <p>{t('grid.sessionColours')}</p>
                 </div>
               </>
             )}
           </div>
         </div>
       </div>
+
+      {canEdit && replaceOpen && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60">
+          <input
+            autoFocus
+            value={findText}
+            onChange={(event) => setFindText(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void replaceAll(); } }}
+            placeholder={t('grid.findWhat')}
+            aria-label={t('grid.findWhat')}
+            className="w-44 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-navy-500 dark:border-slate-700 dark:bg-slate-900"
+          />
+          <input
+            value={replaceText}
+            onChange={(event) => setReplaceText(event.target.value)}
+            onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); void replaceAll(); } }}
+            placeholder={t('grid.replaceWith')}
+            aria-label={t('grid.replaceWith')}
+            className="w-44 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm outline-none focus:border-navy-500 dark:border-slate-700 dark:bg-slate-900"
+          />
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={matchCase} onChange={(event) => setMatchCase(event.target.checked)} className="h-3.5 w-3.5" />
+            {t('grid.matchCase')}
+          </label>
+          <label className={cn('flex items-center gap-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300', !bounds && 'opacity-40')}>
+            <input
+              type="checkbox"
+              disabled={!bounds}
+              checked={replaceInSelection && !!bounds}
+              onChange={(event) => setReplaceInSelection(event.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            {t('grid.onlySelection')}
+          </label>
+          <button className={toolbarButton} disabled={!findText || busy} onClick={() => void replaceAll()}>
+            <Replace className="h-3.5 w-3.5" /> {t('grid.replaceAll')}
+          </button>
+          <button
+            className={cn(toolbarButton, 'ml-auto')}
+            onClick={() => { setReplaceOpen(false); containerRef.current?.focus(); }}
+            aria-label={t('common.close')}
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
 
       <div className="flex min-h-11 items-center gap-3 border-y border-slate-200 bg-slate-50 px-3 text-sm dark:border-slate-700 dark:bg-slate-800">
         <span className="w-14 shrink-0 border-r border-slate-200 font-mono text-xs font-bold text-teal-700">{sel ? `${String.fromCharCode(65 + sel.c)}${sel.r + 1}` : '—'}</span>
@@ -1256,48 +1507,135 @@ export function TaskGrid({
             </colgroup>
             <thead>
               <tr>
-                <th className="sticky left-0 top-0 z-20 border-b border-r border-slate-200 bg-slate-100 px-1 py-2 text-[11px] font-semibold text-slate-400 dark:border-slate-700 dark:bg-slate-800">
+                <th
+                  onClick={() => { containerRef.current?.focus(); if (rows.length) setSel({ r: 0, c: 0, r2: rows.length - 1, c2: columns.length - 1 }); }}
+                  title={t('grid.selectAllCells')}
+                  className="sticky left-0 top-0 z-20 cursor-pointer border-b border-r border-slate-200 bg-slate-100 px-1 py-2 text-[11px] font-semibold text-slate-400 hover:bg-navy-100 dark:border-slate-700 dark:bg-slate-800 dark:hover:bg-navy-900"
+                >
                   #
                 </th>
-                {columns.map((column, index) => (
-                  <th
-                    key={column.field}
-                    className={cn(
-                      'sticky top-0 border-b border-r border-slate-200 bg-slate-100 px-2 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
-                      index === 0 ? 'left-[46px] z-20' : 'z-10'
-                    )}
-                  >
-                    <span className="mr-2 text-[10px] font-normal text-slate-400">{String.fromCharCode(65 + index)}</span>{t(column.labelKey)}
-                  </th>
-                ))}
+                {columns.map((column, index) => {
+                  const columnSelected = !!bounds && bounds.top === 0 && bounds.bottom === rows.length - 1 && index >= bounds.left && index <= bounds.right;
+                  return (
+                    <th
+                      key={column.field}
+                      onClick={(event) => {
+                        containerRef.current?.focus();
+                        if (rows.length === 0) return;
+                        // Shift widens the block of columns, exactly like a spreadsheet
+                        setSel((previous) =>
+                          event.shiftKey && previous
+                            ? { ...previous, r: 0, r2: rows.length - 1, c2: index }
+                            : { r: 0, c: index, r2: rows.length - 1, c2: index }
+                        );
+                      }}
+                      title={t('grid.selectColumn')}
+                      className={cn(
+                        'sticky top-0 cursor-pointer border-b border-r border-slate-200 px-2 py-2 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500 hover:bg-navy-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-navy-900',
+                        columnSelected ? 'bg-navy-100 text-navy-800 dark:bg-navy-800 dark:text-gold-300' : 'bg-slate-100 dark:bg-slate-800',
+                        index === 0 ? 'left-[46px] z-20' : 'z-10'
+                      )}
+                    >
+                      <span className="mr-2 text-[10px] font-normal text-slate-400">{String.fromCharCode(65 + index)}</span>{t(column.labelKey)}
+                    </th>
+                  );
+                })}
                 <th className="sticky top-0 z-10 border-b border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800" />
               </tr>
             </thead>
             <tbody>
               {rows.map((row, r) => (
                 <Fragment key={row.task.id}>
-                  {bands.get(r) && (
-                    <tr>
-                      <td
-                        colSpan={columns.length + 2}
-                        className="border-b border-slate-200 bg-navy-50 p-0 text-[11px] font-extrabold uppercase tracking-wide text-navy-700 dark:border-slate-700 dark:bg-navy-900/60 dark:text-gold-300"
-                      >
-                        <div className="sticky left-0 w-max px-3 py-1.5">{bands.get(r)}</div>
-                      </td>
-                    </tr>
-                  )}
-                  <tr className="group">
+                  {(() => {
+                    const band = bands.get(r);
+                    if (!band) return null;
+                    return (
+                      <tr>
+                        <td
+                          colSpan={columns.length + 2}
+                          className="border-b border-slate-200 bg-[color:var(--band-tint)] p-0 text-[11px] font-extrabold uppercase tracking-wide dark:border-slate-700 dark:bg-[color:var(--band-tint-dark)]"
+                          style={
+                            {
+                              '--band-tint': lightenColor(band.color, 0.88),
+                              '--band-tint-dark': darkenColor(band.color, 0.34),
+                              '--band-ink': darkenColor(band.color, 0.72),
+                              '--band-ink-dark': lightenColor(band.color, 0.6),
+                              borderLeft: `4px solid ${band.color}`
+                            } as React.CSSProperties
+                          }
+                        >
+                          <div className="sticky left-0 flex w-max items-center gap-2 px-3 py-1.5 text-[color:var(--band-ink)] dark:text-[color:var(--band-ink-dark)]">
+                            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: band.color }} />
+                            {band.label}
+                            {band.session?.is_hidden && (
+                              <span
+                                title={t('sessions.hiddenHint')}
+                                className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[0.65rem] text-amber-800 dark:bg-amber-900/60 dark:text-amber-200"
+                              >
+                                <EyeOff className="h-3 w-3" /> {t('sessions.hiddenOnBoard')}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })()}
+                  <tr
+                    className={cn(
+                      'group',
+                      dragRows && r >= dragRows.top && r <= dragRows.bottom && 'opacity-40',
+                      dropAt?.index === r && (dropAt.below
+                        ? 'shadow-[inset_0_-3px_0_0_theme(colors.navy.600)]'
+                        : 'shadow-[inset_0_3px_0_0_theme(colors.navy.600)]')
+                    )}
+                  >
                     <td
+                      draggable={canEdit && !search.trim() && !busy}
+                      onDragStart={(event) => {
+                        // Dragging inside the selection moves the whole block
+                        const block = bounds && r >= bounds.top && r <= bounds.bottom
+                          ? { top: bounds.top, bottom: bounds.bottom }
+                          : { top: r, bottom: r };
+                        setDragRows(block);
+                        setSel({ r: block.top, c: 0, r2: block.bottom, c2: columns.length - 1 });
+                        event.dataTransfer.effectAllowed = 'move';
+                        event.dataTransfer.setData('text/plain', String(r));
+                      }}
+                      onDragOver={(event) => {
+                        if (!dragRows) return;
+                        event.preventDefault();
+                        event.dataTransfer.dropEffect = 'move';
+                        const box = event.currentTarget.getBoundingClientRect();
+                        setDropAt({ index: r, below: event.clientY > box.top + box.height / 2 });
+                      }}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        const block = dragRows;
+                        const below = dropAt?.index === r ? dropAt.below : false;
+                        setDragRows(null);
+                        setDropAt(null);
+                        if (block) void moveRowsTo(block, r, below);
+                      }}
+                      onDragEnd={() => { setDragRows(null); setDropAt(null); }}
                       onContextMenu={event => openContext(event, r, 0, true)}
                       onClick={event => { containerRef.current?.focus(); setSel(previous => ({r: event.shiftKey && previous ? previous.r : r,c:0,r2:r,c2:columns.length-1})); }}
+                      title={canEdit && !search.trim() ? t('grid.dragRowHint') : undefined}
                       className={cn(
-                        'sticky left-0 z-[2] cursor-pointer border-b border-r border-slate-100 px-1 py-0 text-center text-[11px] font-bold dark:border-slate-800',
+                        'group/num sticky left-0 z-[2] border-b border-r border-slate-100 px-1 py-0 text-center text-[11px] font-bold dark:border-slate-800',
+                        canEdit && !search.trim() ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer',
                         bounds && r >= bounds.top && r <= bounds.bottom
                           ? 'bg-navy-100 text-navy-700 dark:bg-navy-800 dark:text-gold-300'
                           : 'bg-slate-50 text-slate-400 dark:bg-slate-800'
                       )}
+                      // The session colour runs down the edge of every row it owns
+                      style={{ boxShadow: `inset 3px 0 0 0 ${rowColor(row)}` }}
                     >
-                      {r + 1}
+                      <span className="flex items-center justify-center gap-0.5">
+                        {canEdit && !search.trim() && (
+                          <GripVertical className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover/num:opacity-60" />
+                        )}
+                        {r + 1}
+                      </span>
                     </td>
                     {columns.map((column, c) => {
                       const selected = inSelection(r, c);
@@ -1361,6 +1699,12 @@ export function TaskGrid({
                               )}
                             >
                               {column.type === 'select' && <ChevronDown className="order-last ml-auto h-3 w-3 shrink-0 text-slate-400" />}
+                              {column.field === 'session_id' && (
+                                <span
+                                  className="h-2.5 w-2.5 shrink-0 rounded-full"
+                                  style={{ backgroundColor: rowColor(row) }}
+                                />
+                              )}
                               {column.field === 'status' && (
                                 <span
                                   className="h-2 w-2 shrink-0 rounded-full"
@@ -1414,7 +1758,7 @@ export function TaskGrid({
 
       {context && <ContextMenu x={context.x} y={context.y} title={`${selectedRowCount} ${lang === 'th' ? 'แถวที่เลือก' : 'rows selected'}`} actions={contextActions} onClose={closeContext} />}
       <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400 dark:border-slate-800">
-        {lang === 'th' ? 'คลิกขวาเพื่อเปิดแอคชั่น · ' : 'Right-click for actions · '}<span className="mr-4 font-semibold text-teal-700 dark:text-teal-300">{rows.length}/{tasks.length} {t('grid.tasksWord')}{selectedRowCount > 0 && ` · ${selectedRowCount} ${lang === 'th' ? 'แถวที่เลือก' : 'rows selected'}`}</span>{t('grid.footerHint')}
+        {lang === 'th' ? 'คลิกขวาเพื่อเปิดแอคชั่น · ลากเลขแถวเพื่อย้ายแถว · ' : 'Right-click for actions · Drag a row number to move it · '}<span className="mr-4 font-semibold text-teal-700 dark:text-teal-300">{rows.length}/{tasks.length} {t('grid.tasksWord')}{selectedRowCount > 0 && ` · ${selectedRowCount} ${lang === 'th' ? 'แถวที่เลือก' : 'rows selected'}`}</span>{t('grid.footerHint')}
       </p>
     </section>
   );

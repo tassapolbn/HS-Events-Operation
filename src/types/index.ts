@@ -72,6 +72,8 @@ export interface EventRow {
 
 export interface EventSession {
   floor_plan_attachment_id?: string | null;
+  /** Taken off the public display board without being deleted */
+  is_hidden?: boolean;
   id: string;
   event_id: string;
   title: string;
@@ -269,6 +271,8 @@ export interface DisplayAttachment {
 
 export interface DisplaySession {
   floor_plan_attachment_id?: string | null;
+  /** Hidden sessions never reach the board, so this is false whenever it is set */
+  is_hidden?: boolean;
   floor_plan?: DisplayAttachment | null;
   id: string;
   title: string;

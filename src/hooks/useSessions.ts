@@ -35,6 +35,33 @@ export function useSessionMutations(eventId: string) {
     onSuccess: invalidate
   });
 
+  /**
+   * Write a new order for the sessions of one day. The rows come from
+   * reorderWithinDay, which only ever reshuffles sessions that share a date,
+   * so an earlier date can never be pushed below a later one.
+   */
+  const reorderSessions = useMutation({
+    mutationFn: async (rows: Array<{ id: string; sort_order: number }>) => {
+      for (const row of rows) {
+        const { error } = await supabase
+          .from('event_sessions')
+          .update({ sort_order: row.sort_order })
+          .eq('id', row.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: invalidate
+  });
+
+  /** Take a session off the public display board, or put it back on it. */
+  const setSessionHidden = useMutation({
+    mutationFn: async ({ id, hidden }: { id: string; hidden: boolean }) => {
+      const { error } = await supabase.from('event_sessions').update({ is_hidden: hidden }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate
+  });
+
   const deleteSession = useMutation({
     mutationFn: async (id: string) => {
       // Tasks in this session are kept and moved to the whole-event group
@@ -44,7 +71,7 @@ export function useSessionMutations(eventId: string) {
     onSuccess: invalidate
   });
 
-  return { createSession, updateSession, deleteSession };
+  return { createSession, updateSession, reorderSessions, setSessionHidden, deleteSession };
 }
 
 /** One event that already has sessions, used as a source to copy sessions from. */

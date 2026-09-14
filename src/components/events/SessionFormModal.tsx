@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { EyeOff } from 'lucide-react';
 import { SessionFloorPlanPicker } from './SessionFloorPlanPicker';
 import { useForm } from 'react-hook-form';
 import { Modal } from '../ui/Modal';
@@ -23,6 +24,8 @@ interface SessionFormValues {
   time_note: string;
   /** Optional multi line operational note (OT, reminders, venue notes) */
   note: string;
+  /** Kept off the public display board until the events team is ready */
+  is_hidden: boolean;
 }
 
 interface SessionFormModalProps {
@@ -54,7 +57,7 @@ export function SessionFormModal({
   const [resetStatus, setResetStatus] = useState(true);
 
   const { register, handleSubmit, reset, formState, watch, setValue } = useForm<SessionFormValues>({
-    defaultValues: { floor_plan_attachment_id: '', title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' }
+    defaultValues: { floor_plan_attachment_id: '', title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '', is_hidden: false }
   });
 
   useEffect(() => {
@@ -70,10 +73,11 @@ export function SessionFormModal({
         start_time: extractTime(source.start_time) ?? '',
         end_time: extractTime(source.end_time) ?? '',
         time_note: source.time_note ?? '',
-        note: source.note ?? ''
+        note: source.note ?? '',
+        is_hidden: source.is_hidden === true
       });
     } else {
-      reset({ floor_plan_attachment_id: '', title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '' });
+      reset({ floor_plan_attachment_id: '', title: '', session_date: eventDate, location: '', start_time: '', end_time: '', time_note: '', note: '', is_hidden: false });
     }
   }, [open, source, eventDate, reset]);
 
@@ -86,7 +90,8 @@ export function SessionFormModal({
       start_time: combineDateTime(values.session_date, values.start_time || null),
       end_time: combineDateTime(values.session_date, values.end_time || null),
       time_note: values.time_note.trim(),
-      note: values.note.trim()
+      note: values.note.trim(),
+      is_hidden: values.is_hidden
     };
     try {
       if (duplicating) {
@@ -182,6 +187,22 @@ export function SessionFormModal({
         />
 
         <SessionFloorPlanPicker eventId={eventId} value={watch('floor_plan_attachment_id')} onChange={id => setValue('floor_plan_attachment_id', id, { shouldDirty: true })} onUploading={setUploading} />
+
+        {/* Off the board, still in the plan: for a cancelled session, or one that
+            is not finished being edited yet. */}
+        <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:col-span-2 dark:border-slate-700 dark:bg-slate-800/60">
+          <input
+            type="checkbox"
+            {...register('is_hidden')}
+            className="mt-0.5 h-4 w-4 rounded accent-navy-700 dark:accent-gold-400"
+          />
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              <EyeOff className="h-4 w-4 shrink-0 text-slate-400" /> {t('sessions.hideFromBoard')}
+            </span>
+            <span className="mt-0.5 block text-xs text-slate-500 dark:text-slate-400">{t('sessions.hiddenHint')}</span>
+          </span>
+        </label>
 
         {duplicating && sourceTasks.length > 0 && (
           <div className="space-y-2 rounded-xl border border-gold-200 bg-gold-50/60 p-3 sm:col-span-2 dark:border-gold-900 dark:bg-gold-950/20">

@@ -4,6 +4,9 @@ import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../
 import { DisplayShell, type DisplayScale, type DisplayTab } from '../components/display/DisplayShell';
 import { EventsBoard } from '../components/display/EventsBoard';
 import { RequestsBoard } from '../components/display/RequestsBoard';
+import { BoardScopeToggle } from '../components/display/BoardScopeToggle';
+import { BOARD_SCOPE_KEY, blockIsDone, readBoardScope, requestIsDone, type BoardScope } from '../lib/boardScope';
+import { sessionTimeline } from '../lib/sessionTimeline';
 import { AttachmentViewer } from '../components/display/AttachmentViewer';
 import { EventEditModal } from '../components/display/EventEditModal';
 import { TaskEditModal } from '../components/display/TaskEditModal';
@@ -71,10 +74,20 @@ export function DisplayBoardPage({
   const { isEventsTeam } = useAuth();
   const [tab, setTab] = useState<DisplayTab>(initialTab);
   const [selectedDept, setSelectedDept] = useState('');
+  // Active / Done splits finished work away from work that still has to happen
+  const [scope, setScope] = useState<BoardScope>(readBoardScope);
   const [scale, setScale] = useState<DisplayScale>(() => {
     const saved = localStorage.getItem(SCALE_KEY);
     return saved === 'small' || saved === 'large' || saved === 'xlarge' ? saved : 'medium';
   });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(BOARD_SCOPE_KEY, scope);
+    } catch {
+      // Storage can be blocked on a shared display; the choice just lasts this visit
+    }
+  }, [scope]);
 
   // Live editing, only ever active for a signed-in events-team member
   const [editing, setEditing] = useState<EditTarget | null>(null);
@@ -118,6 +131,37 @@ export function DisplayBoardPage({
   const sessionForModal: EventSession | null =
     editing?.kind === 'session' ? { ...editing.session, event_id: editing.event.id } : null;
 
+  // How much sits on each side of the Active / Done switch right now
+  const scopeCounts = (() => {
+    const now = Date.now();
+    let active = 0;
+    let done = 0;
+    if (tab === 'events' || combined) {
+      for (const entry of sessionTimeline(eventsQuery.data ?? [], selectedDept)) {
+        const isDone = blockIsDone(
+          entry.block.session,
+          entry.block.session?.session_date ?? entry.date,
+          entry.block.tasks,
+          now
+        );
+        if (isDone) done += 1;
+        else active += 1;
+      }
+    }
+    if (tab === 'requests' || combined) {
+      for (const request of requestsQuery.data ?? []) {
+        if (selectedDept && request.department_id !== selectedDept) continue;
+        if (requestIsDone(request)) done += 1;
+        else active += 1;
+      }
+    }
+    return { active, done };
+  })();
+
+  const scopeToggle = (
+    <BoardScopeToggle scope={scope} onChange={setScope} activeCount={scopeCounts.active} doneCount={scopeCounts.done} />
+  );
+
   return (
     <DisplayShell
       tab={tab}
@@ -138,6 +182,7 @@ export function DisplayBoardPage({
     >
       {combined ? (
         <div className="space-y-4">
+          {scopeToggle}
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('display.combinedHint')}</p>
           <div className="grid gap-6 xl:grid-cols-5">
             <section className="min-w-0 xl:col-span-3">
@@ -148,6 +193,7 @@ export function DisplayBoardPage({
                   departments={departmentList}
                   selectedDept={selectedDept}
                   isLoading={eventsQuery.isLoading}
+                  scope={scope}
                   {...editProps}
                 />
               ) : (
@@ -161,26 +207,35 @@ export function DisplayBoardPage({
                 departments={departmentList}
                 selectedDept={selectedDept}
                 isLoading={requestsQuery.isLoading}
+                scope={scope}
                 layout="list"
               />
             </section>
           </div>
         </div>
       ) : tab === 'events' ? (
-        <EventsBoard
-          events={eventsQuery.data}
-          departments={departmentList}
-          selectedDept={selectedDept}
-          isLoading={eventsQuery.isLoading}
-          {...editProps}
-        />
+        <div className="space-y-5">
+          {scopeToggle}
+          <EventsBoard
+            events={eventsQuery.data}
+            departments={departmentList}
+            selectedDept={selectedDept}
+            isLoading={eventsQuery.isLoading}
+            scope={scope}
+            {...editProps}
+          />
+        </div>
       ) : (
-        <RequestsBoard
-          requests={requestsQuery.data}
-          departments={departmentList}
-          selectedDept={selectedDept}
-          isLoading={requestsQuery.isLoading}
-        />
+        <div className="space-y-5">
+          {scopeToggle}
+          <RequestsBoard
+            requests={requestsQuery.data}
+            departments={departmentList}
+            selectedDept={selectedDept}
+            isLoading={requestsQuery.isLoading}
+            scope={scope}
+          />
+        </div>
       )}
 
       {/* Live editing dialogs, only reachable by a signed-in events-team member */}
