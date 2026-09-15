@@ -212,6 +212,11 @@ export const th: Dict = {
     quickAddPasteHint: 'วางหลายบรรทัดเพื่อเพิ่มหลายงานพร้อมกัน'
   },
   grid: {
+    listLayout: 'รายการ',
+    boardLayout: 'แยกตามแผนก',
+    boardHint: 'คลิกช่องแล้วพิมพ์ กด Enter เพื่อบันทึกและเลื่อนลง วางรายการหลายบรรทัดเพื่อเพิ่มงานทีเดียวหลายรายการ',
+    typeToAdd: 'พิมพ์เพื่อเพิ่มงาน',
+    addSessionBelow: 'เพิ่ม session',
     addSession: 'เพิ่ม session',
     rowToSession: 'เปลี่ยนแถวนี้เป็น session',
     rowToSessionHint: 'พิมพ์ชื่อ session ในช่องชื่องาน ใส่สถานที่ในช่องสถานที่ทำงาน และใส่เวลา จากนั้นเปลี่ยนแถวนี้เป็น session',

@@ -70,7 +70,7 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading, 
         layout === 'list' ? 'grid-cols-1' : 'lg:grid-cols-2 2xl:grid-cols-3 2xl:gap-4'
       )}
     >
-      {visible.map((request) => {
+      {visible.map((request, order) => {
         const dept = departments.find((d) => d.id === request.department_id);
         const Icon = departmentIcon(dept?.icon ?? 'users');
         const completed = request.status === 'completed';
@@ -80,10 +80,13 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading, 
           <article
             key={request.id}
             className={cn(
-              'animate-slide-up overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-700 dark:bg-slate-900',
+              'animate-rise-in overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-700 dark:bg-slate-900',
               completed && 'opacity-70'
             )}
-            style={{ borderLeft: `6px solid ${dept?.color ?? '#1a3c5e'}` }}
+            style={{
+              borderLeft: `6px solid ${dept?.color ?? '#1a3c5e'}`,
+              animationDelay: `${Math.min(order, 8) * 60}ms`
+            }}
           >
             <div className="p-4 2xl:p-6">
               <div className="flex flex-wrap items-start gap-3">

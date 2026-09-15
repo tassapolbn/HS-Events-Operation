@@ -37,7 +37,7 @@ export function BoardScopeToggle({
             onClick={() => onChange(value)}
             aria-pressed={scope === value}
             className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500',
+              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 active:scale-95',
               scope === value
                 ? value === 'done'
                   ? 'bg-emerald-600 text-white'

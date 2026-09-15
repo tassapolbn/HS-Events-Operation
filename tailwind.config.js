@@ -45,12 +45,36 @@ export default {
         'scale-in': {
           from: { opacity: '0', transform: 'scale(0.96)' },
           to: { opacity: '1', transform: 'scale(1)' }
+        },
+        /* Display board motion: enough to feel alive on a wall screen,
+           never enough to pull the eye away from the work itself. */
+        'rise-in': {
+          from: { opacity: '0', transform: 'translateY(14px) scale(0.985)' },
+          to: { opacity: '1', transform: 'none' }
+        },
+        'tick-pop': {
+          '0%': { transform: 'scale(0.55)' },
+          '60%': { transform: 'scale(1.18)' },
+          '100%': { transform: 'scale(1)' }
+        },
+        'live-ring': {
+          '0%': { boxShadow: '0 0 0 0 rgba(16,185,129,0.55)' },
+          '70%': { boxShadow: '0 0 0 9px rgba(16,185,129,0)' },
+          '100%': { boxShadow: '0 0 0 0 rgba(16,185,129,0)' }
+        },
+        sheen: {
+          '0%': { transform: 'translateX(-130%)' },
+          '55%,100%': { transform: 'translateX(240%)' }
         }
       },
       animation: {
         'fade-in': 'fade-in 0.2s ease-out',
         'slide-up': 'slide-up 0.25s ease-out',
-        'scale-in': 'scale-in 0.15s ease-out'
+        'scale-in': 'scale-in 0.15s ease-out',
+        'rise-in': 'rise-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both',
+        'tick-pop': 'tick-pop 0.28s ease-out',
+        'live-ring': 'live-ring 2.4s ease-out infinite',
+        sheen: 'sheen 3.2s ease-in-out infinite'
       }
     }
   },

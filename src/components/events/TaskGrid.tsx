@@ -1,9 +1,11 @@
 import { ContextMenu, type ContextAction } from '../ui/ContextMenu';
+import { TaskBoardGrid } from './TaskBoardGrid';
 import { inverseGridEntry, type GridHistoryEntry } from '../../lib/gridHistory';
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownToLine, Check, ClipboardPaste, Columns3, Copy, CopyPlus, EyeOff, GripVertical, Keyboard, Layers,
-  Maximize2, Plus, Replace, Trash2, Undo2, Redo2, MoreHorizontal, Search, Table2, ChevronDown, Pencil, Loader2, X
+  LayoutGrid, List, Maximize2, Plus, Replace, Trash2, Undo2, Redo2, MoreHorizontal, Search, Table2, ChevronDown,
+  Pencil, Loader2, X
 } from 'lucide-react';
 import { en } from '../../i18n/en';
 import { th } from '../../i18n/th';
@@ -59,6 +61,23 @@ const COLUMNS: ColumnDef[] = [
 ];
 
 const HIDDEN_COLUMNS_KEY = 'eventops.gridHiddenColumns';
+
+/**
+ * Two ways to read the same worksheet. 'list' is the spreadsheet with one row
+ * per job; 'board' is the layout the team has always used on paper, with a
+ * column per department and the session written across the top of its block.
+ */
+type GridLayout = 'list' | 'board';
+
+const LAYOUT_KEY = 'eventops.gridLayout';
+
+function readLayout(): GridLayout {
+  try {
+    return localStorage.getItem(LAYOUT_KEY) === 'board' ? 'board' : 'list';
+  } catch {
+    return 'list';
+  }
+}
 
 function readHiddenColumns(): GridField[] {
   try {
@@ -181,6 +200,7 @@ export function TaskGrid({
   const [comfortable, setComfortable] = useState(true);
   const [saveFailed, setSaveFailed] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<GridField[]>(readHiddenColumns);
+  const [layout, setLayout] = useState<GridLayout>(readLayout);
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [sel, setSel] = useState<Selection | null>(null);
@@ -210,6 +230,14 @@ export function TaskGrid({
       // Storage can be blocked; the grid still works for this visit
     }
   }, [hiddenColumns]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAYOUT_KEY, layout);
+    } catch {
+      // Storage can be blocked; the choice just lasts this visit
+    }
+  }, [layout]);
 
   // ---------- rows, ordered the way the board reads: session, department, then task order ----------
 
@@ -1270,10 +1298,46 @@ export function TaskGrid({
         <label className="flex min-w-48 flex-1 items-center gap-2 rounded-xl border border-slate-200 px-3 dark:border-slate-700"><Search className="h-4 w-4 text-slate-400" /><input ref={searchRef} aria-label={lang === 'th' ? 'ค้นหาในตาราง' : 'Search worksheet'} placeholder={lang === 'th' ? 'ค้นหางาน ผู้รับผิดชอบ สถานที่…' : 'Search tasks, people, locations…'} value={search} onChange={event => setSearch(event.target.value)} className="w-full bg-transparent py-2 text-sm outline-none" /></label>
         <select aria-label={t('common.department')} value={departmentFilter} onChange={event => setDepartmentFilter(event.target.value)} className="rounded-xl border border-slate-200 bg-transparent p-2 text-sm dark:border-slate-700"><option value="">{lang === 'th' ? 'ทุกแผนก' : 'All departments'}</option>{departments.map(dept => <option key={dept.id} value={dept.id}>{deptName(dept)}</option>)}</select>
         <select aria-label={t('sessions.title')} value={sessionFilter} onChange={event => setSessionFilter(event.target.value)} className="max-w-64 rounded-xl border border-slate-200 bg-transparent p-2 text-sm dark:border-slate-700"><option value="all">{lang === 'th' ? 'ทุก session' : 'All sessions'}</option><option value="">{t('sessions.whole')}</option>{sessions.map(session => <option key={session.id} value={session.id}>{sessionLabel(session)}</option>)}</select>
-        <button type="button" onClick={() => setComfortable(value => !value)} className={toolbarButton}>{comfortable ? (lang === 'th' ? 'แถวกระชับ' : 'Compact rows') : (lang === 'th' ? 'แถวอ่านง่าย' : 'Comfortable rows')}</button>
+        {layout === 'list' && <button type="button" onClick={() => setComfortable(value => !value)} className={toolbarButton}>{comfortable ? (lang === 'th' ? 'แถวกระชับ' : 'Compact rows') : (lang === 'th' ? 'แถวอ่านง่าย' : 'Comfortable rows')}</button>}
+        <div className="flex shrink-0 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900">
+          {([['list', List, t('grid.listLayout')], ['board', LayoutGrid, t('grid.boardLayout')]] as Array<[GridLayout, typeof List, string]>).map(([mode, Icon, label]) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setLayout(mode)}
+              aria-pressed={layout === mode}
+              className={cn(
+                'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors',
+                layout === mode
+                  ? 'bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
+              )}
+            >
+              <Icon className="h-3.5 w-3.5" /> {label}
+            </button>
+          ))}
+        </div>
       </div>
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-100 p-2 dark:border-slate-800">
+
+      {layout === 'board' ? (
+        <TaskBoardGrid
+          eventId={eventId}
+          eventDate={eventDate}
+          tasks={tasks}
+          departments={departments}
+          sessions={sessions}
+          canEdit={canEdit}
+          search={search}
+          departmentFilter={departmentFilter}
+          sessionFilter={sessionFilter}
+          onOpenTask={onOpenTask}
+          onEditTask={onEditTask}
+          onAddSession={onAddSession}
+        />
+      ) : (
+      <>
+      {/* Toolbar. Sticky, so the actions stay in reach down a long worksheet. */}
+      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-1.5 border-b border-slate-100 bg-white/95 p-2 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-slate-800 dark:bg-slate-900/95 dark:supports-[backdrop-filter]:bg-slate-900/80">
         {canEdit && (
           <>
             <button className={toolbarButton} onClick={() => void addRows(1)} disabled={busy}>
@@ -1757,8 +1821,39 @@ export function TaskGrid({
       )}
 
       {context && <ContextMenu x={context.x} y={context.y} title={`${selectedRowCount} ${lang === 'th' ? 'แถวที่เลือก' : 'rows selected'}`} actions={contextActions} onClose={closeContext} />}
+      </>
+      )}
+
+      {/* Always in reach at the foot of a long sheet, so adding a session never
+          means scrolling back to the top to find the button. */}
+      {canEdit && (
+        <div className="sticky bottom-0 z-20 flex flex-wrap items-center gap-2 border-t border-slate-200 bg-white/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-slate-700 dark:bg-slate-900/95 dark:supports-[backdrop-filter]:bg-slate-900/80">
+          {layout === 'list' && (
+            <button className={toolbarButton} onClick={() => void addRows(1)} disabled={busy}>
+              <Plus className="h-3.5 w-3.5" /> {t('grid.addRow')}
+            </button>
+          )}
+          {onAddSession && (
+            <button className={toolbarButton} onClick={onAddSession} disabled={busy}>
+              <Layers className="h-3.5 w-3.5" /> {t('grid.addSession')}
+            </button>
+          )}
+          <span className="ml-auto text-[11px] font-semibold text-slate-400">
+            {rows.length}/{tasks.length} {t('grid.tasksWord')}
+          </span>
+        </div>
+      )}
+
       <p className="border-t border-slate-100 px-3 py-2 text-[11px] text-slate-400 dark:border-slate-800">
-        {lang === 'th' ? 'คลิกขวาเพื่อเปิดแอคชั่น · ลากเลขแถวเพื่อย้ายแถว · ' : 'Right-click for actions · Drag a row number to move it · '}<span className="mr-4 font-semibold text-teal-700 dark:text-teal-300">{rows.length}/{tasks.length} {t('grid.tasksWord')}{selectedRowCount > 0 && ` · ${selectedRowCount} ${lang === 'th' ? 'แถวที่เลือก' : 'rows selected'}`}</span>{t('grid.footerHint')}
+        {lang === 'th' ? 'คลิกขวาเพื่อเปิดแอคชั่น · ' : 'Right-click for actions · '}
+        {layout === 'list' && (
+          <>
+            {lang === 'th' ? 'ลากเลขแถวเพื่อย้ายแถว · ' : 'Drag a row number to move it · '}
+            <span className="mr-4 font-semibold text-teal-700 dark:text-teal-300">{rows.length}/{tasks.length} {t('grid.tasksWord')}{selectedRowCount > 0 && ` · ${selectedRowCount} ${lang === 'th' ? 'แถวที่เลือก' : 'rows selected'}`}</span>
+            {t('grid.footerHint')}
+          </>
+        )}
+        {layout === 'board' && t('grid.boardHint')}
       </p>
     </section>
   );

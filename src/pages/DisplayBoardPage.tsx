@@ -13,6 +13,7 @@ import { TaskEditModal } from '../components/display/TaskEditModal';
 import { SessionFormModal } from '../components/events/SessionFormModal';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useAuth } from '../contexts/AuthContext';
+import { useLightModeOnly } from '../contexts/ThemeContext';
 import { useLanguage } from '../i18n';
 import { CAMPUS_NAMES } from '../lib/constants';
 import type { Campus, DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask, EventSession } from '../types';
@@ -72,6 +73,8 @@ export function DisplayBoardPage({
 }) {
   const { t } = useLanguage();
   const { isEventsTeam } = useAuth();
+  // The board is always read in light, whatever the device or the browser prefers
+  useLightModeOnly();
   const [tab, setTab] = useState<DisplayTab>(initialTab);
   const [selectedDept, setSelectedDept] = useState('');
   // Active / Done splits finished work away from work that still has to happen

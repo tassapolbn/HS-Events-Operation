@@ -150,7 +150,7 @@ export function EventsBoard({
 
     return (
       <div className={cn('grid items-start gap-4', colClass)}>
-        {visibleDepts.map((dept) => {
+        {visibleDepts.map((dept, deptIndex) => {
           const Icon = departmentIcon(dept.icon);
           const deptTasks = tasks.filter((task) => task.department_id === dept.id);
           const done = deptTasks.filter((task) => task.status === 'completed').length;
@@ -159,8 +159,8 @@ export function EventsBoard({
           return (
             <div
               key={dept.id}
-              className="flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow duration-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
-              style={{ borderLeft: `5px solid ${dept.color}` }}
+              className="flex animate-rise-in flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow duration-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
+              style={{ borderLeft: `5px solid ${dept.color}`, animationDelay: `${Math.min(deptIndex, 5) * 60}ms` }}
             >
               {/* A tint of the department colour rather than a block of it: four of
                   these side by side used to shout louder than the work itself. The
@@ -206,7 +206,7 @@ export function EventsBoard({
                     <li
                       key={task.id}
                       className={cn(
-                        'px-4 py-2.5 transition-colors',
+                        'px-4 py-2.5 transition-all duration-300',
                         completed
                           ? 'border-l-[3px] border-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/25'
                           : 'border-l-[3px] border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'
@@ -226,7 +226,7 @@ export function EventsBoard({
                           aria-label={t('display.tapToComplete')}
                           aria-pressed={completed}
                         >
-                          {completed && <Check className="h-4 w-4" strokeWidth={3} />}
+                          {completed && <Check className="h-4 w-4 animate-tick-pop" strokeWidth={3} />}
                         </button>
 
                         <div className="min-w-0 flex-1">
@@ -478,7 +478,7 @@ export function EventsBoard({
   };
 
   /** One event's work on one day, inside the date ordered view */
-  const renderTimelineGroup = (date: string, group: TimelineEventGroup): ReactNode => {
+  const renderTimelineGroup = (date: string, group: TimelineEventGroup, order = 0): ReactNode => {
     const evt = group.event;
     const openWork = followUpCount(group.blocks.flatMap((block) => block.tasks));
     const headerColor = evt.header_color || '#1a3c5e';
@@ -495,8 +495,13 @@ export function EventsBoard({
       <div
         key={group.blocks[0].key}
         data-timeline-event={evt.id}
-        className="overflow-hidden rounded-3xl border-2 bg-white shadow-[0_10px_28px_-16px_var(--event-glow)] dark:bg-slate-900"
-        style={{ '--event-glow': headerColor + '66', borderColor: headerColor + '80' } as React.CSSProperties}
+        className="animate-rise-in overflow-hidden rounded-3xl border-2 bg-white shadow-[0_10px_28px_-16px_var(--event-glow)] transition-shadow duration-300 hover:shadow-[0_18px_40px_-16px_var(--event-glow)] dark:bg-slate-900"
+        style={{
+          '--event-glow': headerColor + '66',
+          borderColor: headerColor + '80',
+          // Cards land in reading order. Capped so a long day never waits.
+          animationDelay: `${Math.min(order, 8) * 70}ms`
+        } as React.CSSProperties}
       >
         <div
           className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3"
@@ -610,7 +615,7 @@ export function EventsBoard({
     if (entries.length === 0) return scopeEmptyState;
     return (
       <div className="space-y-6">
-        {entries.map(({ date, event, block }) => renderTimelineGroup(date, { event, blocks: [block] }))}
+        {entries.map(({ date, event, block }, order) => renderTimelineGroup(date, { event, blocks: [block] }, order))}
       </div>
     );
   };
@@ -722,11 +727,14 @@ export function EventsBoard({
         </section>
       )}
 
+      {/* Keyed so a change of view or of scope plays the entrance again and the
+          board visibly answers the tap, instead of swapping content in silence. */}
+      <div key={`${viewMode}-${scope}-${selectedDept}`} className="animate-fade-in space-y-6">
       {viewMode === 'date' && renderTimeline()}
 
       {viewMode === 'event' && eventsInScope.length === 0 && scopeEmptyState}
 
-      {viewMode === 'event' && eventsInScope.map(({ event, scoped }) => {
+      {viewMode === 'event' && eventsInScope.map(({ event, scoped }, cardOrder) => {
         const isCollapsed = !expanded.has(event.id);
         const totalTasks = event.tasks.length;
         const doneTasks = event.tasks.filter((task) => task.status === 'completed').length;
@@ -751,10 +759,14 @@ export function EventsBoard({
             key={event.id}
             id={`event-${event.id}`}
             className={cn(
-              'animate-slide-up scroll-mt-4 overflow-hidden rounded-3xl border-2 bg-white transition-all duration-300 shadow-[0_12px_34px_-14px_var(--event-glow)] hover:shadow-[0_20px_48px_-14px_var(--event-glow)] dark:bg-slate-900',
+              'animate-rise-in scroll-mt-4 overflow-hidden rounded-3xl border-2 bg-white transition-all duration-300 shadow-[0_12px_34px_-14px_var(--event-glow)] hover:shadow-[0_20px_48px_-14px_var(--event-glow)] dark:bg-slate-900',
               highlighted === event.id && 'ring-4 ring-gold-400/80'
             )}
-            style={{ '--event-glow': `${headerColor}66`, borderColor: `${headerColor}80` } as React.CSSProperties}
+            style={{
+              '--event-glow': `${headerColor}66`,
+              borderColor: `${headerColor}80`,
+              animationDelay: `${Math.min(cardOrder, 8) * 70}ms`
+            } as React.CSSProperties}
           >
             <div className="h-2" style={{ backgroundColor: headerColor }} />
 
@@ -839,7 +851,7 @@ export function EventsBoard({
                   </span>
                   <span className="mt-1 block h-2 w-28 overflow-hidden rounded-full" style={{ backgroundColor: `${headerText}33` }}>
                     <span
-                      className="block h-full rounded-full transition-all"
+                      className="block h-full rounded-full transition-[width,background-color] duration-700 ease-out"
                       style={{ width: `${progress}%`, backgroundColor: progress === 100 ? '#34d399' : headerText }}
                     />
                   </span>
@@ -937,6 +949,8 @@ export function EventsBoard({
           </section>
         );
       })}
+
+      </div>
 
       <AskQuestionModal
         open={askEvent !== null}

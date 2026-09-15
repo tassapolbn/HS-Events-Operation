@@ -62,7 +62,15 @@ export function StatusBadge({ status }: { status: BoardStatus }) {
         STATUS_TEXT[status]
       )}
     >
-      <span className={cn('h-2.5 w-2.5 rounded-full', STATUS_DOT[status], status === 'live' && 'animate-pulse')} />
+      <span
+        className={cn(
+          'h-2.5 w-2.5 rounded-full',
+          STATUS_DOT[status],
+          // A running event keeps a soft ring going, so a glance at a wall
+          // screen from across the room lands on the event happening now.
+          status === 'live' && 'animate-live-ring'
+        )}
+      />
       {t(`boardStatus.${status}`)}
     </span>
   );

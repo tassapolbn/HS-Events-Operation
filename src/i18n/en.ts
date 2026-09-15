@@ -210,6 +210,11 @@ export const en = {
     quickAddPasteHint: 'Paste several lines to add several tasks at once'
   },
   grid: {
+    listLayout: 'List',
+    boardLayout: 'By department',
+    boardHint: 'Click a cell and type. Enter saves and moves down. Paste a list to add several jobs at once.',
+    typeToAdd: 'Type to add',
+    addSessionBelow: 'Add a session',
     addSession: 'Add session',
     rowToSession: 'Turn this row into a session',
     rowToSessionHint: 'Type the session name in the title cell, the venue in Work Location and the times, then turn the row into a session.',
