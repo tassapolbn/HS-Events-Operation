@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { useEffect, useState, type ComponentType } from 'react';
 import { CalendarDays, Inbox } from 'lucide-react';
 import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../hooks/usePublicDisplay';
@@ -71,7 +72,12 @@ export function DisplayBoardPage({
   initialTab?: DisplayTab;
   campus?: Campus;
 }) {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestId = searchParams.get('request') || '';
+  const eventId = requestId ? '' : searchParams.get('event') || '';
+  const taskId = eventId ? searchParams.get('task') || '' : '';
+  const focused = Boolean(requestId || eventId);
   const { isEventsTeam } = useAuth();
   // The board is always read in light, whatever the device or the browser prefers
   useLightModeOnly();
@@ -108,11 +114,15 @@ export function DisplayBoardPage({
   }, [scale]);
 
   const { data: departments } = useDisplayDepartments();
-  const eventsQuery = useDisplayEvents(campus);
+  const eventsQuery = useDisplayEvents(campus, eventId);
   const requestsQuery = useDisplayRequests(campus);
 
   const departmentList = departments ?? [];
-  const active = tab === 'events' ? eventsQuery : requestsQuery;
+  const active = requestId ? requestsQuery : eventId ? eventsQuery : tab === 'events' ? eventsQuery : requestsQuery;
+  const linkedEvent = eventsQuery.data?.find(event => event.id === eventId);
+  const linkedRequest = requestsQuery.data?.find(request => request.id === requestId);
+  const targetAvailable = requestId ? Boolean(linkedRequest) : Boolean(linkedEvent && (!taskId || linkedEvent.tasks.some(task => task.id === taskId)));
+  const exitFocus = () => { setSearchParams({}); setSelectedDept(''); setTab(requestId ? 'requests' : 'events'); };
 
   const canEdit = isEventsTeam;
   const boardEditMode = canEdit;
@@ -167,13 +177,13 @@ export function DisplayBoardPage({
 
   return (
     <DisplayShell
-      tab={tab}
-      onTabChange={setTab}
+      tab={requestId ? 'requests' : eventId ? 'events' : tab}
+      onTabChange={(next) => { if (focused) setSearchParams({}); setTab(next); }}
       scale={scale}
       onScaleChange={setScale}
       departments={departmentList}
-      selectedDepartmentId={selectedDept}
-      onSelectDepartment={setSelectedDept}
+      selectedDepartmentId={focused ? '' : selectedDept}
+      onSelectDepartment={(next) => { if (focused) setSearchParams({}); setSelectedDept(next); }}
       onRefresh={() => {
         eventsQuery.refetch();
         requestsQuery.refetch();
@@ -183,7 +193,23 @@ export function DisplayBoardPage({
       canEdit={canEdit}
       campusName={campus ? CAMPUS_NAMES[campus] : undefined}
     >
-      {combined ? (
+      {focused ? (
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gold-300 bg-gold-50 p-4">
+            <p className="font-semibold text-navy-900">{lang === 'th' ? 'งานจากอีเมลแจ้งเตือน' : 'Job from your notification'}</p>
+            <button className="rounded-lg bg-navy-900 px-4 py-2 font-semibold text-white" onClick={exitFocus}>{lang === 'th' ? 'ดูงานทั้งหมด' : 'View all work'}</button>
+          </div>
+          {active.isError ? (
+            <p role="alert">{lang === 'th' ? 'โหลดงานไม่สำเร็จ กรุณากดรีเฟรช' : 'Could not load this job. Please refresh.'}</p>
+          ) : !active.isLoading && !targetAvailable ? (
+            <p role="status" className="rounded-xl border bg-white p-6">{lang === 'th' ? 'งานนี้ไม่แสดงบนบอร์ดแล้ว อาจถูกซ่อน เก็บถาวร หรืออยู่นอกช่วงวันที่แสดง กรุณาติดต่อทีม Events' : 'This job is no longer available on this board. It may be hidden, archived or outside the display period. Please contact the Events Team.'}</p>
+          ) : requestId ? (
+            <RequestsBoard requests={linkedRequest ? [linkedRequest] : undefined} departments={departmentList} selectedDept="" isLoading={requestsQuery.isLoading} scope={linkedRequest && requestIsDone(linkedRequest) ? 'done' : 'active'} layout="list" />
+          ) : (
+            <EventsBoard key={`${eventId}:${taskId}`} events={linkedEvent ? [linkedEvent] : undefined} departments={departmentList} selectedDept="" isLoading={eventsQuery.isLoading} focusEventId={eventId} focusTaskId={taskId} {...editProps} />
+          )}
+        </div>
+      ) : combined ? (
         <div className="space-y-4">
           {scopeToggle}
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('display.combinedHint')}</p>
