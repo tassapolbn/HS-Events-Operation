@@ -62,6 +62,8 @@ interface EventsBoardProps {
   isLoading: boolean;
   /** 'active' hides finished work and days already gone; 'done' shows only those */
   scope?: BoardScope;
+  focusEventId?: string;
+  focusTaskId?: string;
   /** Live editing: pencils appear on events, sessions and tasks when true */
   editMode?: boolean;
   onEditEvent?: (event: DisplayEvent) => void;
@@ -75,6 +77,8 @@ export function EventsBoard({
   selectedDept,
   isLoading,
   scope = 'active',
+  focusEventId = '',
+  focusTaskId = '',
   editMode,
   onEditEvent,
   onEditSession,
@@ -84,21 +88,31 @@ export function EventsBoard({
   const toggleTask = useToggleDisplayTask();
   // Events open collapsed, so the board reads as a clean overview first and
   // staff expand only the event they are working on.
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(focusEventId ? [focusEventId] : []));
   const [boardNow, setBoardNow] = useState(Date.now);
   useEffect(() => { const timer = window.setInterval(() => setBoardNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   /** Which event the "Ask a question" dialog is open for */
   const [askEvent, setAskEvent] = useState<DisplayEvent | null>(null);
-  const [viewMode, setViewMode] = useState<BoardView>(readBoardView);
+  const [viewMode, setViewMode] = useState<BoardView>(() => focusEventId ? 'event' : readBoardView());
 
   useEffect(() => {
     try {
-      localStorage.setItem(BOARD_VIEW_KEY, viewMode);
+      if (!focusEventId) localStorage.setItem(BOARD_VIEW_KEY, viewMode);
     } catch {
       // Storage can be blocked on a shared display; the choice just lasts this visit
     }
-  }, [viewMode]);
+  }, [viewMode, focusEventId]);
+
+  useEffect(() => {
+    if (isLoading || !focusTaskId) return;
+    const timer = window.setTimeout(() => {
+      const element = document.getElementById(`task-${focusTaskId}`);
+      element?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element?.focus({ preventScroll: true });
+    }, 100);
+    return () => window.clearTimeout(timer);
+  }, [isLoading, focusTaskId]);
 
   /** Jump from an upcoming task card to its event: expand, scroll, flash */
   const goToEvent = (eventId: string) => {
@@ -205,8 +219,11 @@ export function EventsBoard({
                   return (
                     <li
                       key={task.id}
+                      id={`task-${task.id}`}
+                      tabIndex={focusTaskId === task.id ? -1 : undefined}
                       className={cn(
                         'px-4 py-2.5 transition-all duration-300',
+                        focusTaskId === task.id && 'ring-4 ring-inset ring-gold-400',
                         completed
                           ? 'border-l-[3px] border-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/25'
                           : 'border-l-[3px] border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'
@@ -441,9 +458,9 @@ export function EventsBoard({
     // With a department chosen, Done means that department's own work is done
     const mine = visibleTasks(evt);
     const general = mine.filter((task) => !task.session_id || !ids.has(task.session_id));
-    const generalShown = inScope(blockIsDone(null, evt.event_date, general, boardNow), scope);
+    const generalShown = evt.id === focusEventId || inScope(blockIsDone(null, evt.event_date, general, boardNow), scope);
     const sessions = all.filter((session) =>
-      inScope(
+      evt.id === focusEventId || inScope(
         blockIsDone(session, session.session_date, mine.filter((task) => task.session_id === session.id), boardNow),
         scope
       )
@@ -610,7 +627,7 @@ export function EventsBoard({
 
   const renderTimeline = (): ReactNode => {
     const entries = sessionTimeline(events, selectedDept).filter(({ date, event, block }) =>
-      inScope(blockIsDone(block.session, block.session?.session_date ?? date ?? event.event_date, block.tasks, boardNow), scope)
+      event.id === focusEventId || inScope(blockIsDone(block.session, block.session?.session_date ?? date ?? event.event_date, block.tasks, boardNow), scope)
     );
     if (entries.length === 0) return scopeEmptyState;
     return (

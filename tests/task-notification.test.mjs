@@ -16,10 +16,10 @@ async function run(payload, options = {}) {
       { id: 'chosen', event_id: 'event', department_id: 'hk', session_id: 'session', title: '<Chosen task>', description: '<p>Changed chairs</p>', deleted_at: null },
       { id: 'other', event_id: 'event', department_id: 'security', title: 'PRIVATE OTHER TASK', deleted_at: null }
     ],
-    events: [{ id: 'event', name: 'Open Day', event_date: '2026-09-14', deleted_at: null, priority: 'medium' }],
+    events: [{ id: 'event', campus: options.campus ?? 'HSC', name: 'Open Day', event_date: '2026-09-14', deleted_at: null, priority: 'medium' }],
     event_sessions: [{ id: 'session', event_id: 'event', title: 'Afternoon', session_date: '2026-09-15' }],
     departments: [{ id: 'hk', name_en: 'Housekeeping', emails: ['hk@example.test'] }, { id: 'security', name_en: 'Security', emails: ['security@example.test'] }],
-    department_requests: [{ id: 'request', title: 'Request', request_date: '2026-09-14', priority: 'medium' }]
+    department_requests: [{ id: 'request', campus: options.campus ?? 'HSC', description: '<p>Collect boards & chairs</p>', due_date: '2026-09-17', title: 'Request', request_date: '2026-09-14', priority: 'medium' }]
   };
   if (options.deletedTask) tables.event_tasks[0].deleted_at = '2026-09-13';
   if (options.deletedEvent) tables.events[0].deleted_at = '2026-09-13';
@@ -43,7 +43,7 @@ async function run(payload, options = {}) {
     return builder;
   }};
   vm.runInNewContext(script, {
-    Request, Response, console,
+    Request, Response, URL, console,
     Deno: { env: { get: key => ({ SUPABASE_URL: 'https://example.test', SUPABASE_ANON_KEY: 'anon', SUPABASE_SERVICE_ROLE_KEY: 'service', APPS_SCRIPT_URL: 'https://mail.example.test', APP_URL: 'https://app.example.test' })[key] }, serve: callback => { handler = callback; } },
     createClient: (_url, key) => key === 'anon' ? { auth: { getUser: async () => ({data:{user: options.signedOut ? null : {id:'user'}}}) } } : admin,
     fetch: async (_url, init) => { sent.push(JSON.parse(init.body)); return Response.json(options.emailError ? {ok:false,error:'transport unavailable'} : {ok:true}); }
@@ -58,8 +58,8 @@ test('task notification ignores supplied recipients, sends only chosen saved tas
   assert.deepEqual(result.sent[0].to,['hk@example.test']);
   assert.match(result.sent[0].subject,/Task updated/);
   assert.match(result.sent[0].html,/&lt;Chosen task&gt;/);
-  assert.match(result.sent[0].html,/2026-09-15/);
-  assert.match(result.sent[0].html,/\?task=chosen/);
+  assert.match(result.sent[0].html,/15 September 2026/);
+  assert.match(result.sent[0].html,/\?event=event&amp;task=chosen/);
   assert.doesNotMatch(result.sent[0].html,/PRIVATE OTHER TASK/);
   assert.equal(result.records[0].kind,'event');
   assert.equal(result.records[0].department_id,'hk');
@@ -93,4 +93,26 @@ test('existing event and request notification flows remain available', async () 
     assert.equal(result.sent.length,1);
     assert.equal(result.records[0].kind,type);
   }
+});
+
+ test('all notification types link to the saved campus public board', async () => {
+  for (const campus of ['HSC', 'HSN']) {
+    for (const [type,id] of [['event','event'],['request','request'],['task','chosen']]) {
+      const result = await run({type,id,changeKind:'updated',departmentIds:['hk']},{campus});
+      assert.equal(result.status,200);
+      const html = result.sent[0].html;
+      assert.ok(html.includes(`https://hs-opt.netlify.app/display/${campus.toLowerCase()}?${type === 'request' ? 'request=request' : 'event=event'}`));
+      assert.ok(html.includes(type === 'task' ? '&amp;task=chosen' : 'View job on Display Board'));
+      assert.doesNotMatch(html,/href="[^"]*\/(events|requests)\//);
+      if (type === 'request') {
+        assert.match(html,/Collect boards &amp; chairs/);
+        assert.match(html,/17 September 2026/);
+      }
+    }
+  }
+});
+ test('unknown campus never routes an email to the wrong board', async () => {
+  const result = await run({type:'request',id:'request',departmentIds:['hk']},{campus:'invalid'});
+  assert.equal(result.status,500);
+  assert.equal(result.sent.length,0);
 });

@@ -31,9 +31,9 @@ function eventLastDate(event: DisplayEvent): string {
   return last;
 }
 
-export function useDisplayEvents(campus?: Campus) {
+export function useDisplayEvents(campus?: Campus, focusEventId = '') {
   return useQuery({
-    queryKey: ['display', 'events', campus ?? 'all'],
+    queryKey: ['display', 'events', campus ?? 'all', focusEventId],
     refetchInterval: REFRESH_MS,
     refetchIntervalInBackground: true,
     queryFn: async (): Promise<DisplayEvent[]> => {
@@ -43,7 +43,7 @@ export function useDisplayEvents(campus?: Campus) {
       // Drop events once their last scheduled day has passed, so the board
       // only shows today's and upcoming events.
       const today = localToday();
-      return events.filter((event) => eventLastDate(event) >= today);
+      return events.filter((event) => event.id === focusEventId || eventLastDate(event) >= today);
     }
   });
 }

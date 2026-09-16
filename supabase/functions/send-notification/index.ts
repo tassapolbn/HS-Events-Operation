@@ -5,7 +5,7 @@
 // Required secrets (Supabase Dashboard -> Edge Functions -> Secrets):
 //   RESEND_API_KEY   - from https://resend.com
 //   NOTIFY_FROM      - e.g. "HeadStart Events <onboarding@resend.dev>"
-//   APP_URL          - e.g. https://your-site.netlify.app
+// Display links use the production board at https://hs-opt.netlify.app.
 
 import { createClient } from 'npm:@supabase/supabase-js@2.45.4';
 
@@ -29,44 +29,65 @@ function esc(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
+function displayLink(campus: string, type: 'event' | 'request' | 'task', id: string, eventId?: string): string {
+  const code = campus?.toLowerCase();
+  if (code !== 'hsc' && code !== 'hsn') throw new Error('Unknown campus for notification');
+  const url = new URL(`/display/${code}`, 'https://hs-opt.netlify.app');
+  url.searchParams.set(type === 'request' ? 'request' : 'event', eventId || id);
+  if (type === 'task') url.searchParams.set('task', id);
+  return url.toString();
+}
+
+function plainText(value: string | null | undefined): string {
+  return (value || '').replace(/<br\s*\/?\s*>/gi, '\n').replace(/<\/(p|div|li)>/gi, '\n').replace(/<[^>]*>/g, ' ').trim();
+}
+
+function readableDate(value: string | null | undefined): string {
+  if (!value) return 'Not specified';
+  const date = new Date(value.length === 10 ? `${value}T00:00:00+07:00` : value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Bangkok' });
+}
+
 function emailHtml(options: {
   heading: string;
   eventName: string;
   eventDate: string;
   departmentName: string;
+  campus: string;
+  description?: string;
   rows: { label: string; value: string }[];
   taskLines: string[];
   link: string;
 }): string {
-  const detailRows = options.rows
-    .map(
-      (r) =>
-        `<tr><td style="padding:6px 12px;color:#64748b;font-size:13px;white-space:nowrap;">${esc(r.label)}</td>` +
-        `<td style="padding:6px 12px;color:#0f172a;font-size:13px;">${esc(r.value)}</td></tr>`
-    )
-    .join('');
-  const tasks = options.taskLines
-    .map((t) => `<li style="margin:4px 0;color:#0f172a;font-size:14px;">${esc(t)}</li>`)
-    .join('');
+  const detailRows = options.rows.filter(r => r.value && r.value !== '-').map(r =>
+    `<tr><td width="35%" valign="top" style="padding:12px 16px;border-bottom:1px solid #E5EAF0;color:#526579;font-size:13px;">${esc(r.label)}</td><td valign="top" style="padding:12px 16px;border-bottom:1px solid #E5EAF0;color:#003057;font-size:14px;font-weight:bold;overflow-wrap:anywhere;white-space:pre-line;">${esc(r.value)}</td></tr>`
+  ).join('');
+  const tasks = options.taskLines.map(t => `<li style="margin:8px 0;">${esc(t)}</li>`).join('');
+  const campusName = options.campus === 'HSN' ? 'Cherngtalay Campus' : 'Chaofah City Campus';
   return `<!doctype html>
-<html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,'Sarabun',sans-serif;">
-<div style="max-width:600px;margin:0 auto;padding:24px 12px;">
-  <div style="background:#1a3c5e;border-radius:12px 12px 0 0;padding:24px;text-align:center;">
-    <div style="color:#F0B323;font-size:12px;letter-spacing:2px;text-transform:uppercase;">HeadStart International School</div>
-    <div style="color:#ffffff;font-size:22px;font-weight:bold;margin-top:6px;">${esc(options.heading)}</div>
-  </div>
-  <div style="background:#ffffff;border-radius:0 0 12px 12px;padding:24px;">
-    <div style="font-size:18px;font-weight:bold;color:#0f172a;">${esc(options.eventName)}</div>
-    <div style="color:#64748b;font-size:13px;margin-top:2px;">${esc(options.eventDate)} &bull; ${esc(options.departmentName)}</div>
-    <table style="width:100%;border-collapse:collapse;margin-top:16px;background:#f8fafc;border-radius:8px;">${detailRows}</table>
-    ${tasks ? `<div style="margin-top:16px;font-weight:bold;color:#1a3c5e;font-size:14px;">Task summary</div><ul style="padding-left:20px;margin:8px 0;">${tasks}</ul>` : ''}
-    <div style="text-align:center;margin-top:24px;">
-      <a href="${options.link}" style="background:#F0B323;color:#1a3c5e;font-weight:bold;text-decoration:none;padding:12px 28px;border-radius:8px;display:inline-block;font-size:14px;">Open in Event Operations</a>
-    </div>
-    <div style="color:#94a3b8;font-size:11px;text-align:center;margin-top:20px;">This is an automated notification from the Event Operations system.</div>
-  </div>
-</div>
-</body></html>`;
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#EDF2F7;font-family:Arial,Tahoma,sans-serif;color:#003057;">
+<div style="display:none;max-height:0;overflow:hidden;">${esc(options.heading)}: ${esc(options.eventName)} · ${esc(options.departmentName)}</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#EDF2F7;"><tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#FFFFFF;border:1px solid #DCE4EC;border-radius:16px;overflow:hidden;">
+<tr><td style="background:#003057;border-top:6px solid #F0B323;padding:28px 28px 24px;">
+<p style="margin:0 0 14px;color:#F0B323;font-size:12px;font-weight:bold;letter-spacing:1px;">HEADSTART INTERNATIONAL SCHOOL</p>
+<h1 style="margin:0;color:#FFFFFF;font-size:24px;line-height:1.4;">${esc(options.heading)}</h1>
+<p style="margin:10px 0 0;color:#FFFFFF;font-size:13px;">${esc(campusName)} · ${esc(options.campus)}</p>
+</td></tr>
+<tr><td style="padding:28px;">
+<p style="margin:0 0 8px;color:#526579;font-size:13px;">FOR ${esc(options.departmentName.toUpperCase())}</p>
+<h2 style="margin:0 0 10px;font-size:22px;line-height:1.5;color:#003057;overflow-wrap:anywhere;">${esc(options.eventName)}</h2>
+<p style="margin:0 0 22px;font-size:14px;color:#526579;">${esc(options.eventDate)}</p>
+${options.description ? `<div style="border-left:4px solid #F0B323;background:#FFFAEB;padding:16px;margin-bottom:22px;"><p style="margin:0 0 8px;font-size:12px;font-weight:bold;color:#003057;">JOB DETAILS / รายละเอียดงาน</p><div style="font-size:15px;line-height:1.8;white-space:pre-line;color:#243B53;">${esc(options.description)}</div></div>` : ''}
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F5F8FB;border-collapse:collapse;">${detailRows}</table>
+${tasks ? `<p style="margin:24px 0 8px;font-size:14px;font-weight:bold;">Assigned work / งานที่มอบหมาย</p><ul style="margin:0;padding-left:22px;font-size:15px;line-height:1.7;">${tasks}</ul>` : ''}
+<table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:28px auto 16px;"><tr><td bgcolor="#F0B323" style="border-radius:8px;text-align:center;"><a href="${esc(options.link)}" style="display:inline-block;padding:16px 24px;border:1px solid #F0B323;border-radius:8px;color:#003057;font-size:15px;font-weight:bold;text-decoration:none;">View job on Display Board / ดูงาน</a></td></tr></table>
+<p style="margin:0;text-align:center;color:#526579;font-size:12px;line-height:1.8;">Open the board to view the latest details and status.<br>ดูรายละเอียดและสถานะล่าสุดบน Display Board</p>
+<p style="margin:16px 0 0;color:#526579;font-size:11px;line-height:1.6;overflow-wrap:anywhere;">If the button does not open, use this link:<br><a href="${esc(options.link)}" style="color:#003057;word-break:break-all;">${esc(options.link)}</a></p>
+</td></tr>
+<tr><td style="padding:18px 28px;background:#F5F8FB;border-top:1px solid #E5EAF0;color:#526579;font-size:11px;line-height:1.7;text-align:center;">HeadStart Event Operations<br>Automated notification / การแจ้งเตือนอัตโนมัติ</td></tr>
+</table></td></tr></table></body></html>`;
 }
 
 Deno.serve(async (req: Request) => {
@@ -84,7 +105,6 @@ Deno.serve(async (req: Request) => {
     // Email transport 2 (optional): Resend (requires verified domain)
     const resendKey = Deno.env.get('RESEND_API_KEY') ?? '';
     const notifyFrom = Deno.env.get('NOTIFY_FROM') ?? 'HeadStart Events <onboarding@resend.dev>';
-    const appUrl = (Deno.env.get('APP_URL') ?? '').replace(/\/$/, '');
 
     // 1. Verify the caller is an authenticated Events Team member
     const authHeader = req.headers.get('Authorization') ?? '';
@@ -169,8 +189,9 @@ Deno.serve(async (req: Request) => {
         inAppBody = `${taskEvent.name} · ${taskSession?.title || taskSession?.session_date || taskEvent.event_date} · ${task.title}`;
         html = emailHtml({
           heading: action, eventName: taskEvent.name,
-          eventDate: taskSession?.session_date || taskEvent.event_date,
+          eventDate: readableDate(taskSession?.session_date || taskEvent.event_date),
           departmentName: dept.name_en,
+          campus: taskEvent.campus,
           rows: [
             { label: 'Session', value: taskSession?.title || '-' },
             { label: 'Location', value: task.work_location || taskSession?.location || taskEvent.location || '-' },
@@ -182,7 +203,7 @@ Deno.serve(async (req: Request) => {
             { label: 'Notes', value: plain(task.notes) || '-' }
           ],
           taskLines: [task.title],
-          link: `${appUrl}/events/${taskEvent.id}?task=${encodeURIComponent(task.id)}`
+          link: displayLink(taskEvent.campus, 'task', task.id, taskEvent.id)
         });
       } else if (payload.type === 'event') {
         const { data: event } = await admin
@@ -212,6 +233,7 @@ Deno.serve(async (req: Request) => {
             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
           }),
           departmentName: dept.name_en,
+          campus: event.campus,
           rows: [
             { label: 'Location', value: event.location || '-' },
             { label: 'Setup start', value: fmtTime(event.setup_start) },
@@ -221,7 +243,7 @@ Deno.serve(async (req: Request) => {
             { label: 'Priority', value: event.priority }
           ],
           taskLines: (tasks ?? []).map((t) => t.title),
-          link: `${appUrl}/events/${event.id}`
+          link: displayLink(event.campus, 'event', event.id)
         });
       } else {
         const { data: request } = await admin
@@ -241,14 +263,16 @@ Deno.serve(async (req: Request) => {
             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
           }),
           departmentName: dept.name_en,
+          campus: request.campus,
+          description: plainText(request.description),
           rows: [
             { label: 'Location', value: request.location || '-' },
-            { label: 'Due date', value: request.due_date ?? '-' },
-            { label: 'Priority', value: request.priority },
+            { label: 'Due date', value: readableDate(request.due_date) },
+            { label: 'Priority', value: request.priority.charAt(0).toUpperCase() + request.priority.slice(1) },
             { label: 'Reference', value: request.reference || '-' }
           ],
           taskLines: [],
-          link: `${appUrl}/requests/${request.id}`
+          link: displayLink(request.campus, 'request', request.id)
         });
       }
 
