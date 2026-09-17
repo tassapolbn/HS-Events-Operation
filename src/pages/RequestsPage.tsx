@@ -1,3 +1,4 @@
+import { scheduleLabel } from '../lib/requestSchedule';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CalendarDays, Inbox, MapPin, Plus, Search, SlidersHorizontal } from 'lucide-react';
@@ -15,7 +16,6 @@ import { CampusBadge } from '../components/ui/CampusBadge';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { PRIORITIES, REQUEST_STATUSES, departmentIcon } from '../lib/constants';
-import { formatDate } from '../lib/utils';
 
 export function RequestsPage() {
   const { t, deptName, lang } = useLanguage();
@@ -93,8 +93,8 @@ export function RequestsPage() {
               <option value="">{t('common.all')}</option>
               {PRIORITIES.map((p) => <option key={p} value={p}>{t(`priority.${p}`)}</option>)}
             </Select>
-            <Input label={t('events.dateFrom')} type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-            <Input label={t('events.dateTo')} type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+            <Input label={`${t('requests.requestDate')} · ${t('events.dateFrom')}`} type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+            <Input label={`${t('requests.requestDate')} · ${t('events.dateTo')}`} type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           </div>
         </Card>
       )}
@@ -125,10 +125,10 @@ export function RequestsPage() {
                     <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                       {dept && <span className="font-medium" style={{ color: dept.color }}>{deptName(dept)}</span>}
                       <span className="inline-flex items-center gap-1.5">
-                        <CalendarDays className="h-3.5 w-3.5" /> {formatDate(request.request_date, lang)}
+                        <CalendarDays className="h-3.5 w-3.5" /> {t('requests.setupTime')}: {scheduleLabel(request.setup_datetime, lang)}
                       </span>
-                      {request.due_date && (
-                        <span>{t('requests.dueDate')}: {formatDate(request.due_date, lang)}</span>
+                      {(request.due_at || request.due_date) && (
+                        <span>{t('requests.dueDate')}: {scheduleLabel(request.due_at || request.due_date, lang)}</span>
                       )}
                       {request.location && (
                         <span className="inline-flex items-center gap-1.5">

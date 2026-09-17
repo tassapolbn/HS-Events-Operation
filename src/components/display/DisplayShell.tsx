@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { CalendarDays, Globe, Inbox, Pencil, RefreshCw, Type } from 'lucide-react';
+import { CalendarDays, Globe, Inbox, RefreshCw, Search, Settings2, X } from 'lucide-react';
 import { useLanguage } from '../../i18n';
 import { departmentIcon } from '../../lib/constants';
 import { cn } from '../../lib/utils';
@@ -7,9 +7,7 @@ import type { DisplayDepartment } from '../../types';
 
 export type DisplayTab = 'events' | 'requests';
 export type DisplayScale = 'small' | 'medium' | 'large' | 'xlarge';
-
 const SCALES: DisplayScale[] = ['small', 'medium', 'large', 'xlarge'];
-
 interface DisplayShellProps {
   tab: DisplayTab;
   onTabChange: (tab: DisplayTab) => void;
@@ -21,162 +19,56 @@ interface DisplayShellProps {
   onRefresh: () => void;
   refreshing?: boolean;
   updatedAt?: Date | null;
-  /** Signed-in events team only: reveal the edit board toggle */
   canEdit?: boolean;
-  /** Campus name shown in the header, so a wall screen states which campus it is */
   campusName?: string;
+  search: string;
+  onSearch: (value: string) => void;
   children: ReactNode;
 }
 
-/** Light, modern frame for the public display board: TVs, monitors and tablets */
-export function DisplayShell({
-  tab, onTabChange, scale, onScaleChange, departments, selectedDepartmentId,
-  onSelectDepartment, onRefresh, refreshing, updatedAt, canEdit, campusName, children
-}: DisplayShellProps) {
+export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departments, selectedDepartmentId, onSelectDepartment, onRefresh, refreshing, updatedAt, campusName, search, onSearch, children }: DisplayShellProps) {
   const { t, lang, setLang, deptName } = useLanguage();
   const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const clock = now.toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-GB', {
-    hour: '2-digit', minute: '2-digit', second: '2-digit'
-  });
-  const dateLine = now.toLocaleDateString(lang === 'th' ? 'th-TH' : 'en-GB', {
-    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-  });
-
-  const tabs: { key: DisplayTab; label: string; icon: typeof CalendarDays }[] = [
-    { key: 'events', label: t('nav.events'), icon: CalendarDays },
-    { key: 'requests', label: t('nav.requests'), icon: Inbox }
-  ];
-
-  return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <header className="bg-gradient-to-r from-navy-950 via-navy-800 to-navy-600 shadow-md">
-        <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-x-5 gap-y-3 px-5 py-3.5 lg:px-8">
-          <img src="/logo-landscape-dark.png" alt="HeadStart International School" className="h-10 w-auto object-contain" />
-          <div className="min-w-0">
-            <p className="text-[0.65rem] font-bold uppercase tracking-[0.2em] text-gold-400">{t('app.school')}</p>
-            <h1 className="text-lg font-extrabold tracking-tight text-white">
-              {campusName || t('display.boardTitle')}
-            </h1>
+  const [settings, setSettings] = useState(false);
+  useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(timer); }, []);
+  const th = lang === 'th';
+  return <div className="support-board min-h-screen bg-[#f3f6fa] text-slate-800">
+    <header className="border-b-4 border-gold-400 bg-[#003057] text-white">
+      <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-5">
+          <img src="/logo-square-dark.png" alt="HeadStart" className="h-12 w-12 shrink-0 object-contain" />
+          <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-widest text-gold-400">{th ? 'บอร์ดปฏิบัติงาน' : 'Operations board'}</p><h1 className="text-lg font-bold leading-snug sm:text-2xl">{campusName || t('display.boardTitle')}</h1></div>
+        </div>
+        <div className="flex items-center gap-2">
+          <p className="mr-3 hidden text-right text-sm text-white/80 lg:block">{now.toLocaleDateString(th ? 'th-TH' : 'en-GB', {timeZone:'Asia/Bangkok',day:'numeric',month:'long',year:'numeric'})}<span className="mt-1 block text-xs">{th ? 'เวลาไทย' : 'Thailand time'}</span></p>
+          <button onClick={() => setLang(th ? 'en' : 'th')} className="flex min-h-11 items-center gap-2 rounded-xl bg-white/10 px-3 font-semibold hover:bg-white/20"><Globe className="h-4 w-4" />{th ? 'EN' : 'ไทย'}</button>
+          <button onClick={() => setSettings(!settings)} aria-expanded={settings} aria-label={th ? 'ขนาดตัวอักษร' : 'Text size'} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20"><Settings2 className="h-5 w-5" /></button>
+          <button onClick={onRefresh} disabled={refreshing} aria-label={t('display.refresh')} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-60"><RefreshCw className={cn('h-5 w-5', refreshing && 'animate-spin')} /></button>
+        </div>
+        {settings && <div className="flex w-full flex-wrap items-center gap-2 border-t border-white/15 pt-3"><span className="mr-2 text-sm">{th ? 'ขนาดตัวอักษร' : 'Text size'}</span>{SCALES.map(size => <button key={size} aria-pressed={scale === size} onClick={() => onScaleChange(size)} className={cn('min-h-11 rounded-lg px-4 text-sm font-bold',scale === size ? 'bg-gold-400 text-navy-900' : 'bg-white/10')}>{t(`displaySize.${size}`)}</button>)}</div>}
+      </div>
+    </header>
+    <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+      <div className="mx-auto max-w-[1600px] space-y-3 px-4 py-3 sm:px-6">
+        <div className="flex flex-col gap-3 md:flex-row">
+          <div className="flex shrink-0 gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label={t('display.chooseView')}>
+            {([{key:'events',icon:CalendarDays,label:t('nav.events')},{key:'requests',icon:Inbox,label:t('nav.requests')}] as const).map(({key,icon:Icon,label}) => <button key={key} aria-pressed={tab===key} onClick={() => onTabChange(key)} className={cn('flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg px-4 text-sm font-bold md:flex-none',tab===key ? 'bg-[#003057] text-white shadow-sm' : 'text-slate-600 hover:bg-white')}><Icon className="h-4 w-4" />{label}</button>)}
           </div>
-
-          <div className="ml-auto hidden text-right sm:block">
-            <p className="text-2xl font-extrabold tabular-nums tracking-tight text-white">{clock}</p>
-            <p className="text-xs capitalize text-white/70">{dateLine}</p>
-          </div>
-
-          {/* Display size */}
-          <div className="flex items-center gap-1 rounded-2xl bg-white/10 p-1 backdrop-blur" title={t('displaySize.label')}>
-            <Type className="ml-1.5 h-4 w-4 text-white/60" />
-            {SCALES.map((s) => (
-              <button
-                key={s}
-                onClick={() => onScaleChange(s)}
-                className={cn(
-                  'rounded-xl px-2.5 py-1.5 text-xs font-bold transition-all',
-                  scale === s
-                    ? 'bg-gold-400 text-navy-900 shadow-sm'
-                    : 'text-white/70 hover:bg-white/10 hover:text-white'
-                )}
-              >
-                {t(`displaySize.${s}`)}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            {canEdit && (
-              <span className="flex items-center gap-1.5 rounded-xl bg-gold-400 px-3 py-2 text-sm font-bold text-navy-900">
-                <Pencil className="h-4 w-4" /><span className="hidden lg:inline">{lang === 'th' ? 'คลิกข้อความเพื่อแก้ไข' : 'Click text to edit'}</span>
-              </span>
-            )}
-            <button
-              onClick={() => setLang(lang === 'en' ? 'th' : 'en')}
-              className="flex items-center gap-1.5 rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold text-white transition-all hover:scale-105 hover:bg-white/20"
-            >
-              <Globe className="h-4 w-4" /> {lang === 'en' ? 'ไทย' : 'EN'}
-            </button>
-            <button
-              onClick={onRefresh}
-              className="rounded-xl bg-white/10 px-3 py-2 text-white transition-all hover:scale-105 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-400"
-              title={t('display.refresh')}
-              aria-label={t('display.refresh')}
-            >
-              <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-            </button>
+          <div className="relative flex-1">
+            <Search aria-hidden className="pointer-events-none absolute left-3 top-3.5 h-5 w-5 text-slate-400" />
+            <input type="search" value={search} onChange={e => onSearch(e.target.value)} aria-label={th ? 'ค้นหางาน' : 'Search work'} placeholder={th ? 'ค้นหาชื่องาน สถานที่ ผู้รับผิดชอบ หรือแผนก' : 'Search jobs, locations, staff or departments'} className="min-h-12 w-full rounded-xl border border-slate-300 bg-slate-50 pl-10 pr-12 text-base outline-none focus:border-navy-600 focus:bg-white focus:ring-2 focus:ring-navy-100" />
+            {search && <button onClick={() => onSearch('')} aria-label={th ? 'ล้างคำค้น' : 'Clear search'} className="absolute right-1 top-1 flex h-10 w-10 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100"><X className="h-4 w-4" /></button>}
           </div>
         </div>
-
-        {/* Department filter chips */}
-        <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-2 px-5 pb-3.5 lg:px-8">
-          <button
-            onClick={() => onSelectDepartment('')}
-            className={cn(
-              'rounded-full px-4 py-1.5 text-sm font-bold transition-all duration-200 hover:-translate-y-0.5',
-              selectedDepartmentId === ''
-                ? 'bg-gradient-to-r from-gold-400 to-gold-300 text-navy-900 shadow-md'
-                : 'bg-white/10 text-white/85 hover:bg-white/20'
-            )}
-          >
-            {t('display.allDepartments')}
-          </button>
-          {departments.map((dept) => {
-            const Icon = departmentIcon(dept.icon);
-            const active = selectedDepartmentId === dept.id;
-            return (
-              <button
-                key={dept.id}
-                onClick={() => onSelectDepartment(active ? '' : dept.id)}
-                className={cn(
-                  'flex items-center gap-2 rounded-full px-4 py-1.5 text-sm font-bold transition-all duration-200 hover:-translate-y-0.5',
-                  active ? 'text-white shadow-md' : 'bg-white/10 text-white/85 hover:bg-white/20'
-                )}
-                style={active ? { backgroundColor: dept.color } : undefined}
-              >
-                <Icon className="h-4 w-4" /> {deptName(dept)}
-              </button>
-            );
-          })}
-          <span className="ml-auto hidden text-xs text-white/50 md:block">
-            {updatedAt && `${t('display.updated')} ${updatedAt.toLocaleTimeString(lang === 'th' ? 'th-TH' : 'en-GB')}`}
-          </span>
-        </div>
-        <div className="h-1 bg-gradient-to-r from-gold-400 via-gold-300/70 to-transparent" />
-      </header>
-
-      {/* Primary view switch on its own bright band, so staff notice it and
-          understand they can flip between Events and Department Requests. */}
-      <div className="border-b border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="mx-auto flex max-w-[1800px] flex-wrap items-center gap-x-4 gap-y-2 px-5 py-3 lg:px-8">
-          <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-            {t('display.chooseView')}
-          </span>
-          <div className="flex flex-1 gap-2 sm:flex-none">
-            {tabs.map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                onClick={() => onTabChange(key)}
-                aria-pressed={tab === key}
-                className={cn(
-                  'flex flex-1 items-center justify-center gap-2.5 rounded-xl px-6 py-3 text-base font-extrabold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 sm:flex-none sm:text-lg',
-                  tab === key
-                    ? 'bg-gradient-to-r from-navy-800 to-navy-600 text-white shadow-md'
-                    : 'bg-slate-100 text-slate-500 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700'
-                )}
-              >
-                <Icon className="h-5 w-5" /> {label}
-              </button>
-            ))}
-          </div>
+        <div className="flex gap-2 overflow-x-auto pb-1" aria-label={t('common.department')}>
+          <button aria-pressed={!selectedDepartmentId} onClick={() => onSelectDepartment('')} className={cn('min-h-11 shrink-0 rounded-xl border px-4 text-sm font-bold',!selectedDepartmentId ? 'border-gold-400 bg-gold-50 text-navy-900' : 'border-slate-200 bg-white text-slate-600')}>{t('display.allDepartments')}</button>
+          {departments.map(dept => {const Icon=departmentIcon(dept.icon);const active=selectedDepartmentId===dept.id;return <button key={dept.id} aria-pressed={active} onClick={() => onSelectDepartment(active ? '' : dept.id)} className={cn('flex min-h-11 shrink-0 items-center gap-2 rounded-xl border px-3 text-sm font-semibold',active ? 'border-navy-700 bg-navy-50 text-navy-900' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}><Icon className="h-4 w-4" style={{color:dept.color}} />{deptName(dept)}</button>;})}
         </div>
       </div>
-
-      <main className="mx-auto max-w-[1800px] px-5 py-5 lg:px-8">{children}</main>
     </div>
-  );
+    <main className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><p>{th ? 'เลือกแผนกเพื่อดูงานของทีม · แตะงานเพื่อดูรายละเอียด' : 'Choose your department · Open a job for details'}</p><span>{updatedAt ? `${t('display.updated')} ${updatedAt.toLocaleTimeString(th ? 'th-TH' : 'en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})}` : ''}</span></div>
+      {children}
+    </main>
+  </div>;
 }

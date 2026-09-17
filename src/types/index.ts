@@ -131,6 +131,7 @@ export interface DepartmentRequest {
   location: string;
   request_date: string;
   due_date: string | null;
+  due_at?: string | null;
   setup_datetime: string | null;
   teardown_datetime: string | null;
   priority: Priority;
@@ -337,6 +338,7 @@ export interface DisplayEvent {
 }
 
 export interface DisplayRequest {
+  created_at?: string;
   id: string;
   department_id: string;
   campus: Campus;
@@ -345,6 +347,7 @@ export interface DisplayRequest {
   location: string;
   request_date: string;
   due_date: string | null;
+  due_at?: string | null;
   setup_datetime: string | null;
   teardown_datetime: string | null;
   priority: Priority;

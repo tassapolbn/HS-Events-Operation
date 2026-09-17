@@ -1,3 +1,4 @@
+import { scheduleLabel } from '../lib/requestSchedule';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Bell, CalendarDays, Clock, MapPin, Pencil, Trash2, User } from 'lucide-react';
@@ -17,7 +18,7 @@ import { NotifyModal } from '../components/events/NotifyModal';
 import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
 import { departmentIcon, REQUEST_STATUSES } from '../lib/constants';
-import { formatDate, formatDateTime, isRichTextEmpty } from '../lib/utils';
+import { isRichTextEmpty } from '../lib/utils';
 import type { TaskStatus } from '../types';
 
 export function RequestDetailPage() {
@@ -103,19 +104,12 @@ export function RequestDetailPage() {
           </div>
 
           <div className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800/60 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-slate-400" />
-              <div>
-                <p className="text-xs text-slate-400">{t('requests.requestDate')}</p>
-                <p className="font-medium">{formatDate(request.request_date, lang)}</p>
-              </div>
-            </div>
-            {request.due_date && (
+            {(request.due_at || request.due_date) && (
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 text-slate-400" />
                 <div>
                   <p className="text-xs text-slate-400">{t('requests.dueDate')}</p>
-                  <p className="font-medium">{formatDate(request.due_date, lang)}</p>
+                  <p className="font-medium">{scheduleLabel(request.due_at || request.due_date, lang)}</p>
                 </div>
               </div>
             )}
@@ -133,7 +127,7 @@ export function RequestDetailPage() {
                 <Clock className="h-4 w-4 text-slate-400" />
                 <div>
                   <p className="text-xs text-slate-400">{t('requests.setupTime')}</p>
-                  <p className="font-medium">{formatDateTime(request.setup_datetime, lang)}</p>
+                  <p className="font-medium">{scheduleLabel(request.setup_datetime, lang)}</p>
                 </div>
               </div>
             )}
@@ -142,7 +136,7 @@ export function RequestDetailPage() {
                 <Clock className="h-4 w-4 text-slate-400" />
                 <div>
                   <p className="text-xs text-slate-400">{t('requests.teardownTime')}</p>
-                  <p className="font-medium">{formatDateTime(request.teardown_datetime, lang)}</p>
+                  <p className="font-medium">{scheduleLabel(request.teardown_datetime, lang)}</p>
                 </div>
               </div>
             )}
@@ -162,6 +156,8 @@ export function RequestDetailPage() {
               </div>
             )}
           </div>
+
+          <p className="text-xs text-slate-500">{t('requests.requestDate')}: {scheduleLabel(request.created_at, lang)} · {lang === 'th' ? 'บันทึกอัตโนมัติ' : 'Recorded automatically'}</p>
 
           {canUpdate && (
             <div className="flex items-center gap-2">

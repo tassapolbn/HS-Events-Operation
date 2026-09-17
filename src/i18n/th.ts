@@ -399,7 +399,7 @@ export const th: Dict = {
     requestTitle: 'หัวข้องาน',
     reference: 'อ้างอิง',
     headResponsible: 'หัวหน้าผู้รับผิดชอบ',
-    requestDate: 'วันที่แจ้งงาน',
+    requestDate: 'วันลงงาน',
     dueDate: 'กำหนดเสร็จ',
     selectDepartment: 'เลือกแผนก',
     noRequests: 'ไม่พบรายการแจ้งงาน',
@@ -412,7 +412,7 @@ export const th: Dict = {
     referencePhotosHint: 'เพิ่มรูปของสิ่งของหรือจุดที่ต้องการ เช่น อุปกรณ์ที่ชำรุด หรือเฟอร์นิเจอร์ที่ต้องย้าย',
     addPhotos: 'เพิ่มรูปภาพ',
     searchPlaceholder: 'ค้นหาจากหัวข้อ อ้างอิง หรือสถานที่...',
-    setupTime: 'เวลาเริ่มจัดเตรียม',
+    setupTime: 'วันเวลาเริ่มดำเนินการ',
     teardownTime: 'เวลาเก็บงาน',
     teardownAfterSetup: 'เวลาเก็บงานต้องอยู่หลังเวลาเริ่มจัดเตรียม'
   },

@@ -1,3 +1,4 @@
+import { bangkokInput, fromBangkokInput, deadlineBeforeWork, scheduleLabel } from '../lib/requestSchedule';
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -17,7 +18,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { CAMPUSES, CAMPUS_NAMES, PRIORITIES, REQUEST_STATUSES } from '../lib/constants';
 import { supabase } from '../lib/supabase';
 import { getSignedUrl } from '../hooks/useAttachments';
-import { MAX_FILE_SIZE, fromDateTimeLocal, randomId, toDateTimeLocal } from '../lib/utils';
+import { MAX_FILE_SIZE, randomId } from '../lib/utils';
 import type { Attachment, Campus, Priority, TaskStatus } from '../types';
 
 interface RequestFormValues {
@@ -26,8 +27,8 @@ interface RequestFormValues {
   title: string;
   reference: string;
   location: string;
-  request_date: string;
   due_date: string;
+  due_time: string;
   setup_datetime: string;
   teardown_datetime: string;
   priority: Priority;
@@ -71,7 +72,7 @@ export function RequestFormPage() {
   const { id } = useParams();
   const isEdit = !!id;
   const navigate = useNavigate();
-  const { t, deptName } = useLanguage();
+  const { t, deptName, lang } = useLanguage();
   const { toast } = useToast();
   const { profile } = useAuth();
   const { campusFilter } = useCampus();
@@ -96,8 +97,8 @@ export function RequestFormPage() {
       title: '',
       reference: '',
       location: '',
-      request_date: new Date().toISOString().slice(0, 10),
       due_date: '',
+      due_time: '',
       setup_datetime: '',
       teardown_datetime: '',
       priority: 'medium',
@@ -115,10 +116,10 @@ export function RequestFormPage() {
         title: existing.title,
         reference: existing.reference,
         location: existing.location,
-        request_date: existing.request_date,
-        due_date: existing.due_date ?? '',
-        setup_datetime: toDateTimeLocal(existing.setup_datetime),
-        teardown_datetime: toDateTimeLocal(existing.teardown_datetime),
+        due_date: existing.due_at ? bangkokInput(existing.due_at).slice(0, 10) : existing.due_date ?? '',
+        due_time: bangkokInput(existing.due_at).slice(11, 16),
+        setup_datetime: bangkokInput(existing.setup_datetime),
+        teardown_datetime: bangkokInput(existing.teardown_datetime),
         priority: existing.priority,
         status: existing.status,
         description: existing.description,
@@ -187,7 +188,15 @@ export function RequestFormPage() {
       setError('teardown_datetime', { type: 'manual', message: t('requests.teardownAfterSetup') });
       return;
     }
-    clearErrors('teardown_datetime');
+    if (values.due_time && !values.due_date) {
+      setError('due_date', { message: lang === 'th' ? 'กรุณาระบุวันครบกำหนด' : 'Choose a due date.' });
+      return;
+    }
+    if (deadlineBeforeWork(values.setup_datetime, values.due_date, values.due_time)) {
+      setError('due_date', { message: lang === 'th' ? 'กำหนดเสร็จต้องไม่ก่อนเวลาเริ่มงาน' : 'The deadline cannot be before work starts.' });
+      return;
+    }
+    clearErrors(['teardown_datetime', 'due_date']);
     setSaving(true);
     const payload = {
       department_id: values.department_id,
@@ -195,10 +204,10 @@ export function RequestFormPage() {
       title: values.title.trim(),
       reference: values.reference.trim(),
       location: values.location.trim(),
-      request_date: values.request_date,
       due_date: values.due_date || null,
-      setup_datetime: fromDateTimeLocal(values.setup_datetime),
-      teardown_datetime: fromDateTimeLocal(values.teardown_datetime),
+      due_at: values.due_date && values.due_time ? fromBangkokInput(`${values.due_date}T${values.due_time}`) : null,
+      setup_datetime: fromBangkokInput(values.setup_datetime),
+      teardown_datetime: fromBangkokInput(values.teardown_datetime),
       priority: values.priority,
       status: values.status,
       description: values.description,
@@ -263,19 +272,20 @@ export function RequestFormPage() {
             />
             <Input label={t('common.location')} {...register('location')} />
             <Input label={t('requests.reference')} {...register('reference')} />
+            <div className="rounded-xl bg-slate-50 p-3 text-xs text-slate-500 sm:col-span-2">
+              {lang === 'th' ? 'วันลงงาน: ' : 'Posted: '}{existing ? scheduleLabel(existing.created_at, lang) : (lang === 'th' ? 'บันทึกวันที่ปัจจุบันอัตโนมัติเมื่อกดบันทึก' : 'Recorded automatically when you save')}
+              <span className="mt-1 block">{lang === 'th' ? 'กรอกวันเวลาปฏิบัติงานด้านล่าง ทุกเวลาเป็นเวลาไทย' : 'Enter the work schedule below. All times are Thailand time.'}</span>
+            </div>
             <Input
-              label={t('requests.requestDate')}
-              type="date"
-              required
-              error={formState.errors.request_date && t('validation.dateRequired')}
-              {...register('request_date', { required: true })}
-            />
-            <Input label={t('requests.dueDate')} type="date" {...register('due_date')} />
-            <Input
-              label={`${t('requests.setupTime')} (${t('common.optional')})`}
+              label={t('requests.setupTime')}
               type="datetime-local"
-              {...register('setup_datetime')}
+              required={!isEdit}
+              error={formState.errors.setup_datetime && t('validation.required')}
+              {...register('setup_datetime', { required: !isEdit })}
+              className="sm:col-span-2"
             />
+            <Input label={t('requests.dueDate')} type="date" error={formState.errors.due_date?.message} {...register('due_date')} />
+            <Input label={lang === 'th' ? 'เวลาที่ต้องเสร็จ (ถ้าทราบ)' : 'Due time (if known)'} type="time" {...register('due_time')} />
             <Input
               label={`${t('requests.teardownTime')} (${t('common.optional')})`}
               type="datetime-local"

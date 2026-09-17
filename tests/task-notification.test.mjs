@@ -23,6 +23,7 @@ async function run(payload, options = {}) {
   };
   if (options.deletedTask) tables.event_tasks[0].deleted_at = '2026-09-13';
   if (options.deletedEvent) tables.events[0].deleted_at = '2026-09-13';
+  if (options.schedule) Object.assign(tables.department_requests[0], options.schedule);
   const admin = { from(table) {
     const filters = [];
     queries.push({table, filters});
@@ -115,4 +116,24 @@ test('existing event and request notification flows remain available', async () 
   const result = await run({type:'request',id:'request',departmentIds:['hk']},{campus:'invalid'});
   assert.equal(result.status,500);
   assert.equal(result.sent.length,0);
+});
+
+test('request email separates work and due times from automatic posted time in Bangkok', async () => {
+  const result = await run({type:'request',id:'request',departmentIds:['hk']}, {schedule: {
+    setup_datetime:'2026-09-16T18:15:00Z', due_at:'2026-09-17T08:30:00Z', created_at:'2026-09-14T02:00:00Z'
+  }});
+  const html = result.sent[0].html;
+  assert.match(html, /WORK STARTS \/ เริ่มดำเนินการ/);
+  assert.match(html, /17 September 2026.*01:15/);
+  assert.match(html, /COMPLETE BY \/ ต้องเสร็จภายใน/);
+  assert.match(html, /17 September 2026.*15:30/);
+  assert.match(html, /Posted \/ วันลงงาน: 14 September 2026.*09:00/);
+  assert.match(html, /Thailand time \(UTC\+7\)/);
+  assert.equal(result.body.templateVersion, 'support-board-20260916');
+});
+
+test('date-only legacy requests do not acquire a fabricated deadline time', async () => {
+  const result = await run({type:'request',id:'request',departmentIds:['hk']});
+  assert.match(result.sent[0].html, /17 September 2026 · Time not specified/);
+  assert.match(result.sent[0].html, /Not scheduled \/ ยังไม่ระบุ/);
 });

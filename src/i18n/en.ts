@@ -397,7 +397,7 @@ export const en = {
     requestTitle: 'Request Title',
     reference: 'Reference',
     headResponsible: 'Head Responsible',
-    requestDate: 'Request Date',
+    requestDate: 'Posted date',
     dueDate: 'Due Date',
     selectDepartment: 'Select department',
     noRequests: 'No department requests found',
@@ -410,7 +410,7 @@ export const en = {
     referencePhotosHint: 'Add photos of the item or location, for example broken equipment or furniture to move',
     addPhotos: 'Add photos',
     searchPlaceholder: 'Search by title, reference or location...',
-    setupTime: 'Setup time',
+    setupTime: 'Work starts',
     teardownTime: 'Teardown time',
     teardownAfterSetup: 'Teardown must be after setup'
   },
