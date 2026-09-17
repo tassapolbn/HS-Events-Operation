@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, CopyPlus, Eye, EyeOff, Pencil, Trash2 } from 'lucide-react';
+import { Bell, ChevronDown, ChevronUp, CopyPlus, Eye, EyeOff, Pencil, Trash2 } from 'lucide-react';
 import { useLanguage } from '../../i18n';
 import { useToast } from '../ui/Toast';
 import { useSessionMutations } from '../../hooks/useSessions';
@@ -15,6 +15,10 @@ interface SessionControlsProps {
   onDuplicate: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Opens the dialog that emails this session's new work to the departments */
+  onNotify?: () => void;
+  /** Jobs in this session that no department has been told about yet */
+  unsentCount?: number;
 }
 
 /**
@@ -23,7 +27,7 @@ interface SessionControlsProps {
  * the session chips under the worksheet, so both stay in step.
  */
 export function SessionControls({
-  session, sessions, tone, onDuplicate, onEdit, onDelete
+  session, sessions, tone, onDuplicate, onEdit, onDelete, onNotify, unsentCount = 0
 }: SessionControlsProps) {
   const { t } = useLanguage();
   const { toast } = useToast();
@@ -63,6 +67,23 @@ export function SessionControls({
 
   return (
     <span className="flex items-center gap-0.5">
+      {onNotify && (
+        <button
+          type="button"
+          onClick={onNotify}
+          className={cn(button, 'relative', unsentCount > 0 && (tone === 'dark' ? '!text-gold-300' : '!text-gold-600'))}
+          title={`${t('notify.sessionBell')}${unsentCount > 0 ? ` · ${unsentCount} ${t('notify.sessionBellCount')}` : ''}`}
+          aria-label={t('notify.sessionBell')}
+        >
+          <Bell className={size} />
+          {/* The count is the point: it says how much the departments have not heard about */}
+          {unsentCount > 0 && (
+            <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-gold-500 px-1 text-[0.55rem] font-extrabold tabular-nums text-navy-900">
+              {unsentCount > 9 ? '9+' : unsentCount}
+            </span>
+          )}
+        </button>
+      )}
       <button
         type="button"
         onClick={() => void move(-1)}

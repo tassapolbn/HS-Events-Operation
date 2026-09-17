@@ -4,6 +4,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Input, Select } from '../ui/Input';
 import { RichTextEditor } from '../editor/RichTextEditor';
+import { AttachmentSection } from '../attachments/AttachmentSection';
 import { useLanguage } from '../../i18n';
 import { useTaskMutations } from '../../hooks/useTasks';
 import { useToast } from '../ui/Toast';
@@ -198,6 +199,16 @@ export function TaskFormModal({ open, onClose, eventId, eventDate, departments, 
             </div>
           )}
         />
+
+        {/* A photo of the thing itself. "The red table in the atrium" is a guess
+            until the person carrying it can see which table is meant. */}
+        <div className="space-y-1.5 rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+          <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+            {t('tasks.photos')}
+          </label>
+          <p className="text-xs text-slate-400">{task ? t('tasks.photosHint') : t('tasks.photosAfterSave')}</p>
+          {task && <AttachmentSection entityType="event_task" entityId={task.id} canManage compact />}
+        </div>
 
         {/* Whole-event Additional Notes */}
         <div className="space-y-1.5 rounded-xl border border-gold-200 bg-gold-50/60 p-3 dark:border-gold-900 dark:bg-gold-950/20">

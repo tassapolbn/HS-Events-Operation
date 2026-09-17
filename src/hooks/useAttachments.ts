@@ -20,6 +20,34 @@ export function useAttachments(entityType: EntityType, entityId: string | undefi
   });
 }
 
+/**
+ * How many photos each of these records carries, in one round trip.
+ * Used where a list needs to say "this job has a picture" without loading
+ * every file row for every job on the page.
+ */
+export function useAttachmentPhotoCounts(entityType: EntityType, entityIds: string[]) {
+  const key = [...entityIds].sort().join(',');
+  const query = useQuery({
+    queryKey: ['attachment-photo-counts', entityType, key],
+    enabled: entityIds.length > 0,
+    queryFn: async (): Promise<Record<string, number>> => {
+      const { data, error } = await supabase
+        .from('attachments')
+        .select('entity_id, mime_type')
+        .eq('entity_type', entityType)
+        .in('entity_id', entityIds);
+      if (error) throw error;
+      const counts: Record<string, number> = {};
+      for (const row of (data ?? []) as Array<{ entity_id: string; mime_type: string }>) {
+        if (!row.mime_type?.startsWith('image/')) continue;
+        counts[row.entity_id] = (counts[row.entity_id] ?? 0) + 1;
+      }
+      return counts;
+    }
+  });
+  return query.data ?? {};
+}
+
 export function useAttachmentMutations(entityType: EntityType, entityId: string | undefined) {
   const queryClient = useQueryClient();
   const invalidate = () => {

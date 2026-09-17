@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { TaskPhotos } from '../display/TaskPhotos';
 import { FileText, FileSpreadsheet, Image as ImageIcon, File as FileIcon, Trash2, Download, Eye, UploadCloud, ExternalLink } from 'lucide-react';
 import { useAttachments, useAttachmentMutations, getSignedUrl, downloadAttachment } from '../../hooks/useAttachments';
 import { useAuth } from '../../contexts/AuthContext';
@@ -111,6 +112,20 @@ export function AttachmentSection({ entityType, entityId, canManage, compact }: 
             onChange={(e) => handleFiles(e.target.files)}
           />
         </div>
+      )}
+
+      {/* Pictures are shown, not just listed: a photo is attached precisely
+          because the words do not say which thing is meant. */}
+      {attachments && attachments.length > 0 && (
+        <TaskPhotos
+          files={attachments}
+          size={compact ? 'sm' : 'md'}
+          className="mt-0"
+          onOpen={(file) => {
+            const found = attachments.find((item) => item.id === file.id);
+            if (found) void openPreview(found);
+          }}
+        />
       )}
 
       {isLoading && entityId ? (

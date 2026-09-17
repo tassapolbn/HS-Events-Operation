@@ -39,12 +39,17 @@ export type SendNotificationPayload = {
   type: 'event' | 'request';
   id: string;
   departmentIds: string[];
-} | { type: 'request_cancel'; id: string; retryNotification?: boolean } | { type: 'task'; id: string; changeKind: 'updated' | 'added' };
+} | { type: 'request_cancel'; id: string; retryNotification?: boolean }
+  | { type: 'task'; id: string; changeKind: 'updated' | 'added' }
+  /** One session's chosen jobs, split so each department is emailed only its own */
+  | { type: 'session_tasks'; id: string; taskIds: string[]; departmentIds: string[] };
 
 export interface SendNotificationResult {
   ok: boolean;
   cancelled?: boolean;
   alreadyCancelled?: boolean;
+  /** How many jobs were marked as sent */
+  notified?: number;
   results: { department: string; emailed: string[]; error?: string }[];
 }
 
@@ -57,7 +62,7 @@ export function useSendNotification() {
       return data as SendNotificationResult;
     },
     onSettled: () => {
-      for (const key of ['notifications', 'requests', 'display', 'dashboard']) queryClient.invalidateQueries({ queryKey: [key] });
+      for (const key of ['notifications', 'requests', 'display', 'dashboard', 'events']) queryClient.invalidateQueries({ queryKey: [key] });
     }
   });
 }

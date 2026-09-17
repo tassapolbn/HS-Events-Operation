@@ -89,6 +89,8 @@ export interface EventSession {
 }
 
 export interface EventTask {
+  /** When this job was last emailed to its department. Null means never sent. */
+  notified_at?: string | null;
   id: string;
   event_id: string;
   department_id: string;

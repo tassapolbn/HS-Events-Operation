@@ -14,14 +14,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
-const TEMPLATE_VERSION = 'support-board-20260916';
+const TEMPLATE_VERSION = 'session-notify-20260918';
+
+/** Photos stay reachable in an inbox for a month without making the bucket public. */
+const PHOTO_URL_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 interface Payload {
-  type: 'event' | 'request' | 'task' | 'request_cancel';
+  type: 'event' | 'request' | 'task' | 'request_cancel' | 'session_tasks';
   retryNotification?: boolean;
   changeKind?: 'added' | 'updated';
   id: string;
   departmentIds: string[];
+  /** session_tasks: the exact jobs the events team chose to send */
+  taskIds?: string[];
+}
+
+/** One job as it appears in a session email: what to do, when, and a photo of it. */
+interface TaskBlock {
+  title: string;
+  lines: string[];
+  photos: { url: string; name: string }[];
 }
 
 function esc(value: string): string {
@@ -32,7 +44,7 @@ function esc(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function displayLink(campus: string, type: 'event' | 'request' | 'task', id: string, eventId?: string): string {
+function displayLink(campus: string, type: 'event' | 'request' | 'task' | 'session', id: string, eventId?: string): string {
   const code = campus?.toLowerCase();
   if (code !== 'hsc' && code !== 'hsn') throw new Error('Unknown campus for notification');
   const url = new URL(`/display/${code}`, 'https://hs-opt.netlify.app');
@@ -72,12 +84,23 @@ function emailHtml(options: {
   postedAt?: string;
   rows: { label: string; value: string }[];
   taskLines: string[];
+  /** Richer than taskLines: each job keeps its own details and photos */
+  taskBlocks?: TaskBlock[];
+  photos?: { url: string; name: string }[];
   link: string;
 }): string {
   const detailRows = options.rows.filter(r => r.value && r.value !== '-').map(r =>
     `<tr><td width="35%" valign="top" style="padding:12px 16px;border-bottom:1px solid #E5EAF0;color:#526579;font-size:13px;">${esc(r.label)}</td><td valign="top" style="padding:12px 16px;border-bottom:1px solid #E5EAF0;color:#003057;font-size:14px;font-weight:bold;overflow-wrap:anywhere;white-space:pre-line;">${esc(r.value)}</td></tr>`
   ).join('');
   const tasks = options.taskLines.map(t => `<li style="margin:8px 0;">${esc(t)}</li>`).join('');
+  // A photo answers "which table?" faster than any sentence can
+  const photoStrip = (photos: { url: string; name: string }[]) => photos.length === 0 ? '' :
+    photos.map(photo => `<div style="margin:10px 0;"><img src="${esc(photo.url)}" alt="${esc(photo.name)}" width="520" style="display:block;width:100%;max-width:520px;height:auto;border:1px solid #DCE4EC;border-radius:10px;" /><p style="margin:6px 0 0;font-size:11px;color:#64748B;">${esc(photo.name)}</p></div>`).join('');
+  const blocks = (options.taskBlocks ?? []).map((block, index) => `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:0 0 14px;background:#F5F8FB;border-left:4px solid #003057;border-collapse:collapse;"><tr><td style="padding:14px 16px;">
+<p style="margin:0 0 6px;font-size:15px;font-weight:bold;color:#003057;overflow-wrap:anywhere;">${index + 1}. ${esc(block.title)}</p>
+${block.lines.filter(Boolean).map(line => `<p style="margin:0 0 4px;font-size:13px;line-height:1.7;color:#526579;overflow-wrap:anywhere;white-space:pre-line;">${esc(line)}</p>`).join('')}
+${photoStrip(block.photos)}
+</td></tr></table>`).join('');
   const campusName = options.campus === 'HSN' ? 'Cherngtalay Campus' : 'Chaofah City Campus';
   const schedule = options.schedule ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:22px 0 8px;table-layout:fixed;"><tr>
 <td class="schedule-cell" width="50%" valign="top" style="padding:16px;background:#EEF5FC;border-top:3px solid #003057;"><p style="margin:0 0 8px;color:#526579;font-size:12px;font-weight:bold;">WORK STARTS / เริ่มดำเนินการ</p><p style="margin:0;font-size:16px;font-weight:bold;line-height:1.6;color:#003057;">${esc(readableSchedule(options.schedule.start))}</p></td>
@@ -103,7 +126,9 @@ ${options.cancelled ? `<p style="padding:16px;background:#FEF2F2;border-left:4px
 ${schedule}
 ${options.description ? `<div style="margin:24px 0;"><p style="margin:0 0 10px;font-size:12px;font-weight:bold;color:#526579;">JOB DETAILS / รายละเอียดงาน</p><div style="font-size:15px;line-height:1.8;white-space:pre-line;color:#243B53;overflow-wrap:anywhere;">${esc(options.description)}</div></div>` : ''}
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F5F8FB;border-collapse:collapse;">${detailRows}</table>
+${options.photos && options.photos.length ? `<div style="margin:24px 0;"><p style="margin:0 0 10px;font-size:12px;font-weight:bold;color:#526579;">PHOTOS / รูปประกอบ</p>${photoStrip(options.photos)}</div>` : ''}
 ${tasks ? `<p style="margin:24px 0 8px;font-size:14px;font-weight:bold;">Assigned work / งานที่มอบหมาย</p><ul style="margin:0;padding-left:22px;font-size:15px;line-height:1.7;">${tasks}</ul>` : ''}
+${blocks ? `<p style="margin:24px 0 10px;font-size:14px;font-weight:bold;">Assigned work / งานที่มอบหมาย</p>${blocks}` : ''}
 <table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:28px auto 16px;"><tr><td bgcolor="#F0B323" style="border-radius:8px;text-align:center;"><a href="${esc(options.link)}" style="display:inline-block;padding:16px 24px;border:1px solid #F0B323;border-radius:8px;color:#003057;font-size:15px;font-weight:bold;text-decoration:none;">${options.cancelled ? 'View Display Board / ดูบอร์ดงาน' : 'View job on Display Board / ดูงาน'}</a></td></tr></table>
 <p style="margin:0;text-align:center;color:#526579;font-size:12px;line-height:1.8;">Open the board to view the latest details and status.<br>ดูรายละเอียดและสถานะล่าสุดบน Display Board</p>
 ${options.postedAt ? `<p style="margin:22px 0 0;color:#64748B;font-size:11px;line-height:1.7;text-align:center;">Posted / วันลงงาน: ${esc(readableSchedule(options.postedAt))}<br>Recorded automatically · บันทึกอัตโนมัติ</p>` : ''}
@@ -157,7 +182,16 @@ Deno.serve(async (req: Request) => {
     }
 
     const payload = (await req.json()) as Payload;
-    if (!payload?.id || !['event', 'request', 'task', 'request_cancel'].includes(payload.type) || (payload.type === 'task' ? !['added', 'updated'].includes(payload.changeKind ?? '') : payload.type === 'request_cancel' ? false : !Array.isArray(payload.departmentIds) || payload.departmentIds.length === 0)) {
+    const validPayload = Boolean(payload?.id) && ['event', 'request', 'task', 'request_cancel', 'session_tasks'].includes(payload?.type)
+      && (payload.type === 'task'
+        ? ['added', 'updated'].includes(payload.changeKind ?? '')
+        : payload.type === 'request_cancel'
+          ? true
+          : payload.type === 'session_tasks'
+            ? Array.isArray(payload.taskIds) && payload.taskIds.length > 0
+              && Array.isArray(payload.departmentIds) && payload.departmentIds.length > 0
+            : Array.isArray(payload.departmentIds) && payload.departmentIds.length > 0);
+    if (!validPayload) {
       return new Response(JSON.stringify({ error: 'Invalid payload' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -196,6 +230,58 @@ Deno.serve(async (req: Request) => {
       departmentIds = [task.department_id];
     }
 
+    /** Signed links so a photo opens from an inbox without the bucket being public. */
+    const photosFor = async (taskIds: string[]) => {
+      const byTask = new Map<string, { url: string; name: string }[]>();
+      if (taskIds.length === 0) return byTask;
+      const { data: files } = await admin
+        .from('attachments')
+        .select('entity_id, file_name, storage_path, mime_type')
+        .eq('entity_type', 'event_task')
+        .in('entity_id', taskIds)
+        .order('created_at');
+      for (const file of files ?? []) {
+        if (!String(file.mime_type ?? '').startsWith('image/')) continue;
+        const signed = await admin.storage.from('attachments').createSignedUrl(file.storage_path, PHOTO_URL_TTL_SECONDS);
+        if (!signed.data?.signedUrl) continue;
+        const list = byTask.get(file.entity_id) ?? [];
+        // Three is plenty to identify a thing; more would make the email unreadable
+        if (list.length < 3) list.push({ url: signed.data.signedUrl, name: file.file_name });
+        byTask.set(file.entity_id, list);
+      }
+      return byTask;
+    };
+
+    // The events team picks the jobs; each department is emailed only its own.
+    let sessionRow = null;
+    let sessionEvent = null;
+    let sessionTasks: Record<string, unknown>[] = [];
+    let sessionPhotos = new Map<string, { url: string; name: string }[]>();
+    if (payload.type === 'session_tasks') {
+      const found = await admin.from('event_sessions').select('*').eq('id', payload.id).single();
+      if (found.error || !found.data) return new Response(JSON.stringify({ error: 'Session not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      sessionRow = found.data;
+      const parent = await admin.from('events').select('*').eq('id', sessionRow.event_id).is('deleted_at', null).single();
+      if (parent.error || !parent.data) return new Response(JSON.stringify({ error: 'Event not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      sessionEvent = parent.data;
+      // Only jobs that really sit in this session can be sent, whatever was asked for
+      const chosen = await admin.from('event_tasks').select('*')
+        .in('id', payload.taskIds ?? [])
+        .eq('session_id', sessionRow.id)
+        .eq('event_id', sessionRow.event_id)
+        .is('deleted_at', null);
+      if (chosen.error) throw chosen.error;
+      sessionTasks = chosen.data ?? [];
+      if (sessionTasks.length === 0) return new Response(JSON.stringify({ error: 'None of those jobs are in this session' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      sessionPhotos = await photosFor(sessionTasks.map(item => item.id as string));
+      // A department with nothing chosen is never emailed an empty list
+      const withWork = new Set(sessionTasks.map(item => item.department_id as string));
+      departmentIds = payload.departmentIds.filter(id => withWork.has(id));
+      if (departmentIds.length === 0) return new Response(JSON.stringify({ error: 'No chosen job belongs to those departments' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    const taskPhotos = payload.type === 'task' && task ? await photosFor([task.id as string]) : new Map();
+
     const { data: departments, error: departmentError } = await admin
       .from('departments')
       .select('id, code, name_en, emails')
@@ -211,6 +297,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const results: { department: string; emailed: string[]; error?: string }[] = [];
+    /** Jobs whose email actually went out, so they stop showing as unsent */
+    const notifiedIds: string[] = [];
 
     for (const dept of departments ?? []) {
       let subject = '';
@@ -259,7 +347,47 @@ Deno.serve(async (req: Request) => {
             { label: 'Notes', value: plain(task.notes) || '-' }
           ],
           taskLines: [],
+          photos: taskPhotos.get(task.id as string) ?? [],
           link: displayLink(taskEvent.campus, 'task', task.id, taskEvent.id)
+        });
+      } else if (payload.type === 'session_tasks' && sessionRow && sessionEvent) {
+        // One email per department, listing only the jobs that belong to it
+        const mine = sessionTasks.filter(item => item.department_id === dept.id);
+        if (mine.length === 0) continue;
+        const sessionName = (sessionRow.title as string) || readableDate(sessionRow.session_date as string);
+        const plain = (value: unknown) => String(value ?? '').replace(/<[^>]*>/g, ' ').trim();
+        eventId = sessionEvent.id;
+        subject = `[New work / งานใหม่] ${sessionEvent.name} · ${sessionName} · ${dept.name_en}`;
+        inAppTitle = `New work / งานใหม่: ${sessionEvent.name} · ${sessionName}`;
+        inAppBody = `${mine.length} job(s) for ${dept.name_en} / ${mine.length} งานสำหรับ ${dept.name_en}`;
+        html = emailHtml({
+          heading: `New work added / เพิ่มงานใหม่ (${mine.length})`,
+          eventName: sessionEvent.name,
+          eventDate: readableDate((sessionRow.session_date as string) || (sessionEvent.event_date as string)),
+          departmentName: dept.name_en,
+          campus: sessionEvent.campus,
+          rows: [
+            { label: 'Session', value: sessionName },
+            { label: 'Date / วันที่', value: readableDate(sessionRow.session_date as string) },
+            { label: 'Location / สถานที่', value: (sessionRow.location as string) || (sessionEvent.location as string) || '-' },
+            { label: 'Session time / เวลา', value: sessionRow.start_time ? `${readableSchedule(sessionRow.start_time as string)}${sessionRow.end_time ? ` - ${readableSchedule(sessionRow.end_time as string)}` : ''}` : '-' },
+            { label: 'Session note / หมายเหตุ', value: plain(sessionRow.note) || '-' }
+          ],
+          taskLines: [],
+          taskBlocks: mine.map(item => ({
+            title: String(item.title ?? ''),
+            lines: [
+              item.work_location ? `Location / สถานที่: ${item.work_location}` : '',
+              item.assigned_staff ? `Assigned / ผู้รับผิดชอบ: ${item.assigned_staff}` : '',
+              item.start_time ? `Start / เริ่ม: ${readableSchedule(item.start_time as string)}` : '',
+              item.completion_time ? `Complete by / เสร็จภายใน: ${readableSchedule(item.completion_time as string)}` : '',
+              plain(item.description),
+              plain(item.instructions),
+              plain(item.notes)
+            ].filter(Boolean) as string[],
+            photos: sessionPhotos.get(item.id as string) ?? []
+          })),
+          link: displayLink(sessionEvent.campus, 'session', sessionRow.id as string, sessionEvent.id as string)
         });
       } else if (payload.type === 'event') {
         const { data: event } = await admin
@@ -375,7 +503,7 @@ Deno.serve(async (req: Request) => {
 
       // Record the in-app notification regardless of email outcome
       const { error: recordError } = await admin.from('notifications').insert({
-        kind: payload.type === 'task' ? 'event' : payload.type === 'request_cancel' ? 'request' : payload.type,
+        kind: payload.type === 'task' || payload.type === 'session_tasks' ? 'event' : payload.type === 'request_cancel' ? 'request' : payload.type,
         title: inAppTitle,
         body: inAppBody,
         event_id: eventId,
@@ -386,10 +514,24 @@ Deno.serve(async (req: Request) => {
       });
 
       if (recordError) errorMsg = [errorMsg, 'Could not record the in-app notification'].filter(Boolean).join('; ');
+      // Only work that actually reached an inbox counts as sent
+      if (emailed.length > 0) {
+        if (payload.type === 'session_tasks') {
+          for (const item of sessionTasks) if (item.department_id === dept.id) notifiedIds.push(item.id as string);
+        } else if (payload.type === 'task' && task) {
+          notifiedIds.push(task.id as string);
+        }
+      }
       results.push({ department: dept.name_en, emailed, error: errorMsg });
     }
 
-    return new Response(JSON.stringify({ ok: true, cancelled: !!cancelledRequest, templateVersion: TEMPLATE_VERSION, results }), {
+    // Marking last, so the session bell only ever stops counting work that went out
+    if (notifiedIds.length > 0) {
+      const marked = await admin.from('event_tasks').update({ notified_at: new Date().toISOString() }).in('id', notifiedIds);
+      if (marked.error) results.push({ department: '-', emailed: [], error: 'Sent, but could not record that it was sent' });
+    }
+
+    return new Response(JSON.stringify({ ok: true, cancelled: !!cancelledRequest, templateVersion: TEMPLATE_VERSION, notified: notifiedIds.length, results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (error) {

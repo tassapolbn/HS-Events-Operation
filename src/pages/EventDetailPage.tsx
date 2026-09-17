@@ -27,6 +27,7 @@ import { NotifyModal } from '../components/events/NotifyModal';
 import { SaveTemplateModal } from '../components/events/SaveTemplateModal';
 import { SessionFormModal } from '../components/events/SessionFormModal';
 import { HiddenSessionBadge, SessionControls } from '../components/events/SessionControls';
+import { SessionNotifyModal, unsentTasks } from '../components/events/SessionNotifyModal';
 import { SessionImportModal } from '../components/events/SessionImportModal';
 import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
@@ -75,6 +76,7 @@ export function EventDetailPage() {
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [notifySession, setNotifySession] = useState<EventSession | null>(null);
   const [sessionModal, setSessionModal] = useState<{
     mode: 'create' | 'edit' | 'duplicate';
     session: EventSession | null;
@@ -328,6 +330,8 @@ export function EventDetailPage() {
             onDuplicate={() => setSessionModal({ mode: 'duplicate', session })}
             onEdit={() => setSessionModal({ mode: 'edit', session })}
             onDelete={() => setDeletingSession(session)}
+            onNotify={() => setNotifySession(session)}
+            unsentCount={unsentTasks(event.event_tasks, session.id).length}
           />
         )}
       </div>
@@ -545,6 +549,8 @@ export function EventDetailPage() {
                 onDuplicate={() => setSessionModal({ mode: 'duplicate', session })}
                 onEdit={() => setSessionModal({ mode: 'edit', session })}
                 onDelete={() => setDeletingSession(session)}
+                onNotify={() => setNotifySession(session)}
+                unsentCount={unsentTasks(event.event_tasks, session.id).length}
               />
             </div>
           ))}
@@ -579,6 +585,16 @@ export function EventDetailPage() {
         eventId={event.id}
         onEdit={openEditTask}
       />
+      {notifySession && (
+        <SessionNotifyModal
+          open
+          onClose={() => setNotifySession(null)}
+          session={notifySession}
+          eventName={event.name}
+          tasks={event.event_tasks}
+          departments={sortedDepartments}
+        />
+      )}
       {sessionModal && (
         <SessionFormModal
           open

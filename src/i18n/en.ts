@@ -179,6 +179,9 @@ export const en = {
     urgent: 'Urgent'
   },
   tasks: {
+    photos: 'Photos',
+    photosHint: 'Attach a picture of the thing itself. It is shown with the job on the Display Board and in the email to the department.',
+    photosAfterSave: 'Save the job first, then reopen it to attach a photo.',
     addTask: 'Add Task',
     editTask: 'Edit Task',
     taskTitle: 'Task Title',
@@ -440,6 +443,15 @@ export const en = {
     sessionsIncluded: 'sessions kept'
   },
   notify: {
+    sessionTitle: 'Send new work to the departments',
+    newSinceLast: 'job(s) not sent yet',
+    nothingNew: 'Every job in this session has already been sent. Tick anything you want to send again.',
+    neverSent: 'Not sent yet',
+    lastSent: 'Sent',
+    noTasks: 'Tick at least one job to send.',
+    willSend: 'One email will go to each of',
+    sessionBell: 'Send new work to the departments',
+    sessionBellCount: 'not sent yet',
     title: 'Send Notification',
     subtitle: 'Choose which departments should be notified by email and in the app.',
     selectAll: 'Select all departments',

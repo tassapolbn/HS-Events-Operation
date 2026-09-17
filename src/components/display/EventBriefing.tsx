@@ -8,6 +8,7 @@ import { showAttachment } from './AttachmentViewer';
 import { useLanguage } from '../../i18n';
 import { BoardEditableText } from './BoardEditableText';
 import { cn, extractDate, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
+import { isImage, TaskPhotos } from './TaskPhotos';
 import type { DisplayAttachment, DisplayEvent } from '../../types';
 
 export type BoardStatus = 'upcoming' | 'preparing' | 'live' | 'breakdown' | 'completed';
@@ -84,11 +85,19 @@ export function openAttachment(file: DisplayAttachment, siblings?: DisplayAttach
   showAttachment(file, siblings);
 }
 
+/**
+ * Files on a job. A picture is shown as a picture, because the whole reason for
+ * attaching one is that the words alone do not say which thing is meant;
+ * anything that is not a picture stays a chip to tap.
+ */
 export function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
+  const others = files.filter((file) => !isImage(file));
   if (files.length === 0) return null;
   return (
-    <span className="mt-1.5 flex flex-wrap gap-1.5">
-      {files.map((file) => (
+    <>
+    <TaskPhotos files={files} />
+    <span className={cn('flex flex-wrap gap-1.5', others.length > 0 && 'mt-1.5')}>
+      {others.map((file) => (
         <button
           key={file.id}
           onClick={(e) => {
@@ -101,6 +110,7 @@ export function AttachmentChips({ files }: { files: DisplayAttachment[] }) {
         </button>
       ))}
     </span>
+    </>
   );
 }
 
