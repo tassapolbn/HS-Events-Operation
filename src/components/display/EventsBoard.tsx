@@ -1,4 +1,4 @@
-import { blockIsDone, inScope, outstandingTasks, type BoardScope } from '../../lib/boardScope';
+import { blockIsDone, blockIsOverdue, inScope, outstandingTasks, type BoardScope } from '../../lib/boardScope';
 import { BoardEditableText } from './BoardEditableText';
 import { sessionTimeline } from '../../lib/sessionTimeline';
 import { FloorPlanPreview } from './FloorPlanPreview';
@@ -90,6 +90,22 @@ export function EventsBoard({
   // staff expand only the event they are working on.
   const [expanded, setExpanded] = useState<Set<string>>(new Set(focusEventId ? [focusEventId] : []));
   const [boardNow, setBoardNow] = useState(Date.now);
+  /**
+   * The entrance animation belongs to opening the board, not to every change of
+   * filter. Replaying it on each tap left cards at zero opacity for up to a
+   * second, which on a wall display reads as work that is simply not there.
+   * After the first second the board renders instantly, always.
+   */
+  const [introDone, setIntroDone] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setIntroDone(true), 1100);
+    return () => window.clearTimeout(timer);
+  }, []);
+  /** Entrance styling for the nth card, and nothing at all once the board is up */
+  const intro = (order: number) =>
+    introDone
+      ? { className: '', style: undefined }
+      : { className: 'animate-rise-in', style: { animationDelay: `${Math.min(order, 5) * 45}ms` } };
   useEffect(() => { const timer = window.setInterval(() => setBoardNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   /** Which event the "Ask a question" dialog is open for */
@@ -173,8 +189,11 @@ export function EventsBoard({
           return (
             <div
               key={dept.id}
-              className="flex animate-rise-in flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow duration-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-900"
-              style={{ borderLeft: `5px solid ${dept.color}`, animationDelay: `${Math.min(deptIndex, 5) * 60}ms` }}
+              className={cn(
+                'flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow duration-200 hover:shadow-md dark:border-slate-700 dark:bg-slate-900',
+                intro(deptIndex).className
+              )}
+              style={{ borderLeft: `5px solid ${dept.color}`, ...intro(deptIndex).style }}
             >
               {/* A tint of the department colour rather than a block of it: four of
                   these side by side used to shout louder than the work itself. The
@@ -469,12 +488,16 @@ export function EventsBoard({
     return { sessions, general, generalShown, any: sessions.length > 0 || hasGeneral };
   };
 
-  /**
-   * Work left open on a day that has already gone by. Inside Done this can only
-   * happen when the day itself ran out, because a block whose tasks are all
-   * ticked has nothing outstanding, so the count doubles as a follow up flag.
+/**
+   * Jobs still open after their time has gone. Done never holds open work any
+   * more, so this only ever appears on the active board, which is the point:
+   * being late has to be visible to the people who can still do something.
    */
-  const followUpCount = (tasks: DisplayTask[]): number => (scope === 'done' ? outstandingTasks(tasks).length : 0);
+  const overdueCount = (
+    session: DisplaySession | null,
+    fallbackDate: string,
+    tasks: DisplayTask[]
+  ): number => (blockIsOverdue(session, fallbackDate, tasks, boardNow) ? outstandingTasks(tasks).length : 0);
 
   /** Operational note a session carries: OT, reminders, venue instructions */
   const sessionNoteBar = (session: DisplaySession, eventId: string): ReactNode => {
@@ -497,7 +520,11 @@ export function EventsBoard({
   /** One event's work on one day, inside the date ordered view */
   const renderTimelineGroup = (date: string, group: TimelineEventGroup, order = 0): ReactNode => {
     const evt = group.event;
-    const openWork = followUpCount(group.blocks.flatMap((block) => block.tasks));
+    const openWork = overdueCount(
+      group.blocks[0]?.session ?? null,
+      group.blocks[0]?.session?.session_date ?? date,
+      group.blocks.flatMap((block) => block.tasks)
+    );
     const headerColor = evt.header_color || '#1a3c5e';
     const headerText = evt.header_text_color || '#ffffff';
     const CategoryIcon = categoryIcon(evt.category);
@@ -512,12 +539,14 @@ export function EventsBoard({
       <div
         key={group.blocks[0].key}
         data-timeline-event={evt.id}
-        className="animate-rise-in overflow-hidden rounded-2xl border bg-white shadow-[0_10px_28px_-16px_var(--event-glow)] transition-shadow duration-300 hover:shadow-[0_18px_40px_-16px_var(--event-glow)] dark:bg-slate-900"
+        className={cn(
+          'overflow-hidden rounded-2xl border bg-white shadow-[0_10px_28px_-16px_var(--event-glow)] transition-shadow duration-300 hover:shadow-[0_18px_40px_-16px_var(--event-glow)] dark:bg-slate-900',
+          intro(order).className
+        )}
         style={{
           '--event-glow': headerColor + '66',
           borderColor: headerColor + '80',
-          // Cards land in reading order. Capped so a long day never waits.
-          animationDelay: `${Math.min(order, 8) * 70}ms`
+          ...intro(order).style
         } as React.CSSProperties}
       >
         <div
@@ -547,13 +576,13 @@ export function EventsBoard({
                 : 'day ' + dayIndex + ' of ' + dates.length}
             </span>
           )}
-          {/* This day has gone by with work still open on it */}
+          {/* Its time has gone and the work is still open, so the board says so */}
           {openWork > 0 && (
             <span
-              title={t('display.leftOpenHint')}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-2.5 py-1 text-xs font-extrabold text-amber-950"
+              title={t('display.overdueHint')}
+              className="inline-flex animate-live-ring items-center gap-1.5 rounded-lg bg-red-500 px-2.5 py-1 text-xs font-extrabold text-white"
             >
-              <TriangleAlert className="h-3.5 w-3.5" /> {openWork} {t('display.leftOpen')}
+              <TriangleAlert className="h-3.5 w-3.5" /> {openWork} {t('display.overdue')}
             </span>
           )}
           <span className="ml-auto flex items-center gap-2">
@@ -744,9 +773,10 @@ export function EventsBoard({
         </section>
       )}
 
-      {/* Keyed so a change of view or of scope plays the entrance again and the
-          board visibly answers the tap, instead of swapping content in silence. */}
-      <div key={`${viewMode}-${scope}-${selectedDept}`} className="animate-fade-in space-y-6">
+      {/* Deliberately not keyed on the view or the scope. Remounting here used to
+          replay every card's entrance, so a tap on a department chip emptied the
+          board for about a second. The toggles answer the tap themselves. */}
+      <div className="space-y-6">
       {viewMode === 'date' && renderTimeline()}
 
       {viewMode === 'event' && eventsInScope.length === 0 && scopeEmptyState}
@@ -765,7 +795,13 @@ export function EventsBoard({
         const allSessions = event.sessions ?? [];
         const sessions = scoped.sessions;
         const generalTasks = scoped.generalShown ? scoped.general : [];
-        const openWork = followUpCount([...generalTasks, ...sessions.flatMap((session) => event.tasks.filter((task) => task.session_id === session.id))]);
+        const openWork =
+          overdueCount(null, event.event_date, generalTasks) +
+          sessions.reduce(
+            (total, session) =>
+              total + overdueCount(session, session.session_date, event.tasks.filter((task) => task.session_id === session.id)),
+            0
+          );
         // Give every distinct session date its own bar colour (stable order).
         const sessionDateOrder = Array.from(new Set(allSessions.map((s) => s.session_date)));
         const barGradientFor = (date: string) =>
@@ -776,13 +812,14 @@ export function EventsBoard({
             key={event.id}
             id={`event-${event.id}`}
             className={cn(
-              'animate-rise-in scroll-mt-4 overflow-hidden rounded-2xl border bg-white transition-all duration-300 shadow-sm hover:shadow-md dark:bg-slate-900',
+              'scroll-mt-4 overflow-hidden rounded-2xl border bg-white transition-all duration-300 shadow-sm hover:shadow-md dark:bg-slate-900',
+              intro(cardOrder).className,
               highlighted === event.id && 'ring-4 ring-gold-400/80'
             )}
             style={{
               '--event-glow': `${headerColor}66`,
               borderColor: `${headerColor}80`,
-              animationDelay: `${Math.min(cardOrder, 8) * 70}ms`
+              ...intro(cardOrder).style
             } as React.CSSProperties}
           >
             <div className="h-2" style={{ backgroundColor: headerColor }} />
@@ -822,10 +859,10 @@ export function EventsBoard({
                   </span>
                   {openWork > 0 && (
                     <span
-                      title={t('display.leftOpenHint')}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-amber-400 px-2.5 py-1 text-sm font-extrabold text-amber-950"
+                      title={t('display.overdueHint')}
+                      className="inline-flex animate-live-ring items-center gap-1.5 rounded-lg bg-red-500 px-2.5 py-1 text-sm font-extrabold text-white"
                     >
-                      <TriangleAlert className="h-4 w-4" /> {openWork} {t('display.leftOpen')}
+                      <TriangleAlert className="h-4 w-4" /> {openWork} {t('display.overdue')}
                     </span>
                   )}
                 </div>

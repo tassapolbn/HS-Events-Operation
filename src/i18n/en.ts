@@ -316,11 +316,13 @@ export const en = {
     xlarge: 'XL'
   },
   display: {
+    overdue: 'past due, still open',
+    overdueHint: 'This work was due by now and has not been ticked off. It stays on the board until it is done.',
     scopeActive: 'Active work',
     scopeDone: 'Done',
-    scopeHint: 'Work that is finished, and days that have already passed, move to Done.',
+    scopeHint: 'Finished work moves to Done. Anything still open stays here until it is ticked off, however late it is.',
     activeEmpty: 'Nothing outstanding. Everything is in Done.',
-    doneEmpty: 'Nothing has been finished or passed yet.',
+    doneEmpty: 'Nothing has been finished yet.',
     doneRequestsEmpty: 'No request has been finished yet.',
     leftOpen: 'left open',
     leftOpenHint: 'This day has passed with work still open on it.',

@@ -26,10 +26,14 @@ export function outstandingTasks(tasks: DisplayTask[]): DisplayTask[] {
 }
 
 /**
- * A day of work is done once it is over, or once every task on it is ticked.
- * A day that has passed counts as done even with work left open on it: that day
- * cannot be worked any more, so Done lists it for follow up instead of leaving
- * it in the way of the work that is still live.
+ * Done means finished, never merely late.
+ *
+ * Work that is still open stays on the active board however far past its time it
+ * is, because that is exactly the work most likely to be missed: a session that
+ * ran to 16:00 with two jobs still untouched used to vanish from the board at
+ * 16:01, and nobody standing in front of the screen would ever see it again.
+ * Once every job on a day is ticked it leaves; a day with no work on it at all
+ * leaves once the day itself is over, since there is nothing there to miss.
  */
 export function blockIsDone(
   session: Pick<DisplaySession, 'session_date' | 'end_time'> | null,
@@ -37,8 +41,23 @@ export function blockIsDone(
   tasks: DisplayTask[],
   now: number
 ): boolean {
-  if (sessionHasEnded(session ?? { session_date: fallbackDate, end_time: null }, now)) return true;
-  return tasks.length > 0 && outstandingTasks(tasks).length === 0;
+  if (outstandingTasks(tasks).length > 0) return false;
+  if (tasks.length > 0) return true;
+  return sessionHasEnded(session ?? { session_date: fallbackDate, end_time: null }, now);
+}
+
+/**
+ * Open work whose time has already gone. It stays on the active board, and the
+ * board says so loudly, so that being late is visible rather than silent.
+ */
+export function blockIsOverdue(
+  session: Pick<DisplaySession, 'session_date' | 'end_time'> | null,
+  fallbackDate: string,
+  tasks: DisplayTask[],
+  now: number
+): boolean {
+  if (outstandingTasks(tasks).length === 0) return false;
+  return sessionHasEnded(session ?? { session_date: fallbackDate, end_time: null }, now);
 }
 
 /** A request leaves the active board once it is completed or cancelled. */
