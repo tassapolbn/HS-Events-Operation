@@ -17,7 +17,8 @@ const corsHeaders = {
 const TEMPLATE_VERSION = 'support-board-20260916';
 
 interface Payload {
-  type: 'event' | 'request' | 'task';
+  type: 'event' | 'request' | 'task' | 'request_cancel';
+  retryNotification?: boolean;
   changeKind?: 'added' | 'updated';
   id: string;
   departmentIds: string[];
@@ -66,6 +67,7 @@ function emailHtml(options: {
   departmentName: string;
   campus: string;
   description?: string;
+  cancelled?: boolean;
   schedule?: { start?: string | null; due?: string | null };
   postedAt?: string;
   rows: { label: string; value: string }[];
@@ -97,11 +99,12 @@ function emailHtml(options: {
 <h1 class="email-title" style="margin:0 0 12px;font-size:27px;line-height:1.4;color:#003057;overflow-wrap:anywhere;">${esc(options.eventName)}</h1>
 <p style="margin:0 0 8px;font-size:14px;line-height:1.7;color:#526579;">Assigned to / แผนกรับผิดชอบ<br><strong style="color:#003057;font-size:16px;">${esc(options.departmentName)}</strong></p>
 ${options.eventDate ? `<p style="margin:12px 0 20px;font-size:14px;color:#526579;">${esc(options.eventDate)}</p>` : ''}
+${options.cancelled ? `<p style="padding:16px;background:#FEF2F2;border-left:4px solid #DC2626;color:#991B1B;font-weight:bold;line-height:1.8;">CANCELLED / ยกเลิกงานแล้ว<br>This work is no longer required. It has been removed from the active board.<br>ไม่ต้องดำเนินงานนี้ต่อ งานถูกนำออกจากบอร์ดแล้ว</p>` : ''}
 ${schedule}
 ${options.description ? `<div style="margin:24px 0;"><p style="margin:0 0 10px;font-size:12px;font-weight:bold;color:#526579;">JOB DETAILS / รายละเอียดงาน</p><div style="font-size:15px;line-height:1.8;white-space:pre-line;color:#243B53;overflow-wrap:anywhere;">${esc(options.description)}</div></div>` : ''}
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F5F8FB;border-collapse:collapse;">${detailRows}</table>
 ${tasks ? `<p style="margin:24px 0 8px;font-size:14px;font-weight:bold;">Assigned work / งานที่มอบหมาย</p><ul style="margin:0;padding-left:22px;font-size:15px;line-height:1.7;">${tasks}</ul>` : ''}
-<table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:28px auto 16px;"><tr><td bgcolor="#F0B323" style="border-radius:8px;text-align:center;"><a href="${esc(options.link)}" style="display:inline-block;padding:16px 24px;border:1px solid #F0B323;border-radius:8px;color:#003057;font-size:15px;font-weight:bold;text-decoration:none;">View job on Display Board / ดูงาน</a></td></tr></table>
+<table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:28px auto 16px;"><tr><td bgcolor="#F0B323" style="border-radius:8px;text-align:center;"><a href="${esc(options.link)}" style="display:inline-block;padding:16px 24px;border:1px solid #F0B323;border-radius:8px;color:#003057;font-size:15px;font-weight:bold;text-decoration:none;">${options.cancelled ? 'View Display Board / ดูบอร์ดงาน' : 'View job on Display Board / ดูงาน'}</a></td></tr></table>
 <p style="margin:0;text-align:center;color:#526579;font-size:12px;line-height:1.8;">Open the board to view the latest details and status.<br>ดูรายละเอียดและสถานะล่าสุดบน Display Board</p>
 ${options.postedAt ? `<p style="margin:22px 0 0;color:#64748B;font-size:11px;line-height:1.7;text-align:center;">Posted / วันลงงาน: ${esc(readableSchedule(options.postedAt))}<br>Recorded automatically · บันทึกอัตโนมัติ</p>` : ''}
 </td></tr>
@@ -154,18 +157,30 @@ Deno.serve(async (req: Request) => {
     }
 
     const payload = (await req.json()) as Payload;
-    if (!payload?.id || !['event', 'request', 'task'].includes(payload.type) || (payload.type === 'task' ? !['added', 'updated'].includes(payload.changeKind ?? '') : !Array.isArray(payload.departmentIds) || payload.departmentIds.length === 0)) {
+    if (!payload?.id || !['event', 'request', 'task', 'request_cancel'].includes(payload.type) || (payload.type === 'task' ? !['added', 'updated'].includes(payload.changeKind ?? '') : payload.type === 'request_cancel' ? false : !Array.isArray(payload.departmentIds) || payload.departmentIds.length === 0)) {
       return new Response(JSON.stringify({ error: 'Invalid payload' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
+    let cancelledRequest = null;
+    if (payload.type === 'request_cancel') {
+      const found = await admin.from('department_requests').select('*').eq('id', payload.id).is('deleted_at', null).single();
+      if (found.error || !found.data) return new Response(JSON.stringify({ error: 'Request not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      cancelledRequest = found.data;
+      // Validate the saved campus before changing the request.
+      displayLink(cancelledRequest.campus, 'request', cancelledRequest.id);
+      if (cancelledRequest.status === 'cancelled' && !payload.retryNotification) {
+        return new Response(JSON.stringify({ ok: true, cancelled: true, alreadyCancelled: true, results: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     // The recipient is derived from the saved task; callers cannot broaden it.
     let task = null;
     let taskEvent = null;
     let taskSession = null;
-    let departmentIds = payload.departmentIds;
+    let departmentIds = cancelledRequest ? [cancelledRequest.department_id] : payload.departmentIds;
     if (payload.type === 'task') {
       const found = await admin.from('event_tasks').select('*').eq('id', payload.id).is('deleted_at', null).single();
       if (found.error || !found.data) return new Response(JSON.stringify({ error: 'Task not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -188,6 +203,13 @@ Deno.serve(async (req: Request) => {
     if (departmentError) throw departmentError;
     if (!departments?.length) throw new Error('No recipient department found');
 
+    if (cancelledRequest && cancelledRequest.status !== 'cancelled') {
+      const saved = await admin.from('department_requests').update({ status: 'cancelled' })
+        .eq('id', cancelledRequest.id).eq('status', cancelledRequest.status).is('deleted_at', null).select('*').single();
+      if (saved.error || !saved.data) throw new Error('Could not cancel request. Refresh and try again.');
+      cancelledRequest = saved.data;
+    }
+
     const results: { department: string; emailed: string[]; error?: string }[] = [];
 
     for (const dept of departments ?? []) {
@@ -198,7 +220,23 @@ Deno.serve(async (req: Request) => {
       let eventId: string | null = null;
       let requestId: string | null = null;
 
-      if (payload.type === 'task' && task && taskEvent) {
+      if (cancelledRequest) {
+        requestId = cancelledRequest.id;
+        subject = `[Cancelled / ยกเลิกงาน] ${cancelledRequest.title} · ${dept.name_en}`;
+        inAppTitle = `Cancelled / ยกเลิกงาน: ${cancelledRequest.title}`;
+        inAppBody = 'This work is no longer required. / ไม่ต้องดำเนินงานนี้ต่อ';
+        html = emailHtml({
+          heading: 'Request cancelled / ยกเลิกคำขอ', eventName: cancelledRequest.title,
+          eventDate: '', departmentName: dept.name_en, campus: cancelledRequest.campus,
+          cancelled: true, description: plainText(cancelledRequest.description),
+          rows: [
+            { label: 'Location / สถานที่', value: cancelledRequest.location || '-' },
+            { label: 'Reference', value: cancelledRequest.reference || '-' },
+            { label: 'Original work start / กำหนดเริ่มเดิม', value: readableSchedule(cancelledRequest.setup_datetime) }
+          ], taskLines: [],
+          link: displayLink(cancelledRequest.campus, 'request', cancelledRequest.id).split('?')[0]
+        });
+      } else if (payload.type === 'task' && task && taskEvent) {
         const action = payload.changeKind === 'added' ? 'Task added / เพิ่มงาน' : 'Task updated / แก้ไขงาน';
         const plain = (value: string | null) => (value ?? '').replace(/<[^>]*>/g, ' ').trim();
         eventId = taskEvent.id;
@@ -337,7 +375,7 @@ Deno.serve(async (req: Request) => {
 
       // Record the in-app notification regardless of email outcome
       const { error: recordError } = await admin.from('notifications').insert({
-        kind: payload.type === 'task' ? 'event' : payload.type,
+        kind: payload.type === 'task' ? 'event' : payload.type === 'request_cancel' ? 'request' : payload.type,
         title: inAppTitle,
         body: inAppBody,
         event_id: eventId,
@@ -351,7 +389,7 @@ Deno.serve(async (req: Request) => {
       results.push({ department: dept.name_en, emailed, error: errorMsg });
     }
 
-    return new Response(JSON.stringify({ ok: true, templateVersion: TEMPLATE_VERSION, results }), {
+    return new Response(JSON.stringify({ ok: true, cancelled: !!cancelledRequest, templateVersion: TEMPLATE_VERSION, results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (error) {

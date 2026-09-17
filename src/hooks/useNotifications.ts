@@ -39,10 +39,12 @@ export type SendNotificationPayload = {
   type: 'event' | 'request';
   id: string;
   departmentIds: string[];
-} | { type: 'task'; id: string; changeKind: 'updated' | 'added' };
+} | { type: 'request_cancel'; id: string; retryNotification?: boolean } | { type: 'task'; id: string; changeKind: 'updated' | 'added' };
 
 export interface SendNotificationResult {
   ok: boolean;
+  cancelled?: boolean;
+  alreadyCancelled?: boolean;
   results: { department: string; emailed: string[]; error?: string }[];
 }
 
@@ -54,6 +56,8 @@ export function useSendNotification() {
       if (error) throw error;
       return data as SendNotificationResult;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    onSettled: () => {
+      for (const key of ['notifications', 'requests', 'display', 'dashboard']) queryClient.invalidateQueries({ queryKey: [key] });
+    }
   });
 }

@@ -296,7 +296,7 @@ export function RequestFormPage() {
               {PRIORITIES.map((p) => <option key={p} value={p}>{t(`priority.${p}`)}</option>)}
             </Select>
             <Select label={t('common.status')} {...register('status')}>
-              {REQUEST_STATUSES.map((s) => <option key={s} value={s}>{t(`taskStatus.${s}`)}</option>)}
+              {REQUEST_STATUSES.filter(s => s !== 'cancelled' || existing?.status === 'cancelled').map((s) => <option key={s} value={s}>{t(`taskStatus.${s}`)}</option>)}
             </Select>
 
             {/* Reference photos: multiple images with preview and removal */}
