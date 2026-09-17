@@ -19,16 +19,18 @@ async function run(payload, options = {}) {
     events: [{ id: 'event', campus: options.campus ?? 'HSC', name: 'Open Day', event_date: '2026-09-14', deleted_at: null, priority: 'medium' }],
     event_sessions: [{ id: 'session', event_id: 'event', title: 'Afternoon', session_date: '2026-09-15' }],
     departments: [{ id: 'hk', name_en: 'Housekeeping', emails: ['hk@example.test'] }, { id: 'security', name_en: 'Security', emails: ['security@example.test'] }],
-    department_requests: [{ id: 'request', campus: options.campus ?? 'HSC', description: '<p>Collect boards & chairs</p>', due_date: '2026-09-17', title: 'Request', request_date: '2026-09-14', priority: 'medium' }]
+    department_requests: [{ id: 'request', department_id: 'hk', status: 'new', deleted_at: null, campus: options.campus ?? 'HSC', description: '<p>Collect boards & chairs</p>', due_date: '2026-09-17', title: 'Request', request_date: '2026-09-14', priority: 'medium' }]
   };
   if (options.deletedTask) tables.event_tasks[0].deleted_at = '2026-09-13';
   if (options.deletedEvent) tables.events[0].deleted_at = '2026-09-13';
+  if (options.schedule) Object.assign(tables.department_requests[0], options.schedule);
   const admin = { from(table) {
     const filters = [];
     queries.push({table, filters});
-    let single = false, inserted = null;
+    let single = false, inserted = null, changed = null;
     const builder = {
       select() { return builder; },
+      update(value) { changed = value; return builder; },
       eq(field, value) { filters.push([field, value]); return builder; },
       is(field, value) { filters.push([field, value]); return builder; },
       in(field, values) { filters.push([field, values]); return builder; },
@@ -37,6 +39,8 @@ async function run(payload, options = {}) {
       insert(row) { inserted = row; records.push(row); return builder; },
       then(resolve) {
         const rows = (tables[table] ?? []).filter(row => filters.every(([field, value]) => Array.isArray(value) ? value.includes(row[field]) : row[field] === value));
+        if (changed && options.updateError) return Promise.resolve({data:null,error:{message:'update failed'}}).then(resolve);
+        if (changed) rows.forEach(row => Object.assign(row, changed));
         return Promise.resolve({ data: single ? rows[0] ?? null : rows, error: inserted && options.recordError ? {message:'record failed'} : null }).then(resolve);
       }
     };
@@ -49,7 +53,7 @@ async function run(payload, options = {}) {
     fetch: async (_url, init) => { sent.push(JSON.parse(init.body)); return Response.json(options.emailError ? {ok:false,error:'transport unavailable'} : {ok:true}); }
   });
   const response = await handler(new Request('https://fn.example.test', { method: 'POST', headers: {Authorization: 'Bearer test'}, body: JSON.stringify(payload) }));
-  return {status:response.status, body:await response.json(), sent, records, queries};
+  return {status:response.status, body:await response.json(), sent, records, queries, requestStatus:tables.department_requests[0].status};
 }
 
 test('task notification ignores supplied recipients, sends only chosen saved task with session date', async () => {
@@ -115,4 +119,62 @@ test('existing event and request notification flows remain available', async () 
   const result = await run({type:'request',id:'request',departmentIds:['hk']},{campus:'invalid'});
   assert.equal(result.status,500);
   assert.equal(result.sent.length,0);
+});
+
+test('request email separates work and due times from automatic posted time in Bangkok', async () => {
+  const result = await run({type:'request',id:'request',departmentIds:['hk']}, {schedule: {
+    setup_datetime:'2026-09-16T18:15:00Z', due_at:'2026-09-17T08:30:00Z', created_at:'2026-09-14T02:00:00Z'
+  }});
+  const html = result.sent[0].html;
+  assert.match(html, /WORK STARTS \/ เริ่มดำเนินการ/);
+  assert.match(html, /17 September 2026.*01:15/);
+  assert.match(html, /COMPLETE BY \/ ต้องเสร็จภายใน/);
+  assert.match(html, /17 September 2026.*15:30/);
+  assert.match(html, /Posted \/ วันลงงาน: 14 September 2026.*09:00/);
+  assert.match(html, /Thailand time \(UTC\+7\)/);
+  assert.equal(result.body.templateVersion, 'support-board-20260916');
+});
+
+test('date-only legacy requests do not acquire a fabricated deadline time', async () => {
+  const result = await run({type:'request',id:'request',departmentIds:['hk']});
+  assert.match(result.sent[0].html, /17 September 2026 · Time not specified/);
+  assert.match(result.sent[0].html, /Not scheduled \/ ยังไม่ระบุ/);
+});
+
+
+test('cancellation saves status and notifies only the assigned department', async () => {
+  const result = await run({type:'request_cancel',id:'request',departmentIds:['security']});
+  assert.equal(result.status,200);
+  assert.equal(result.requestStatus,'cancelled');
+  assert.equal(result.body.cancelled,true);
+  assert.deepEqual(result.sent[0].to,['hk@example.test']);
+  assert.match(result.sent[0].subject,/Cancelled/);
+  assert.match(result.sent[0].html,/This work is no longer required/);
+  assert.doesNotMatch(result.sent[0].html,/\?request=/);
+  assert.match(result.sent[0].html,/https:\/\/hs-opt.netlify.app\/display\/hsc/);
+  assert.equal(result.records[0].kind,'request');
+  assert.equal(result.records[0].request_id,'request');
+  assert.equal(result.records[0].department_id,'hk');
+});
+
+test('unauthorized, deleted or failed cancellations send nothing', async () => {
+  for (const options of [{signedOut:true},{role:'department'},{schedule:{deleted_at:'2026-09-17'}},{updateError:true}]) {
+    const result = await run({type:'request_cancel',id:'request'},options);
+    assert.ok(result.status>=400);
+    assert.equal(result.requestStatus,'new');
+    assert.equal(result.sent.length,0);
+  }
+});
+
+test('notification failure keeps cancellation saved and allows an explicit retry', async () => {
+  const result = await run({type:'request_cancel',id:'request'},{emailError:true});
+  assert.equal(result.requestStatus,'cancelled');
+  assert.match(result.body.results[0].error,/transport unavailable/);
+  assert.equal(result.records[0].email_sent,false);
+  const duplicate = await run({type:'request_cancel',id:'request'},{schedule:{status:'cancelled'}});
+  assert.equal(duplicate.body.alreadyCancelled,true);
+  assert.equal(duplicate.sent.length,0);
+  const retry = await run({type:'request_cancel',id:'request',retryNotification:true},{schedule:{status:'cancelled'},campus:'HSN'});
+  assert.equal(retry.sent.length,1);
+  assert.match(retry.sent[0].html,/https:\/\/hs-opt.netlify.app\/display\/hsn/);
 });

@@ -1,6 +1,8 @@
+import { useSendNotification } from '../hooks/useNotifications';
+import { scheduleLabel } from '../lib/requestSchedule';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Bell, CalendarDays, Clock, MapPin, Pencil, Trash2, User } from 'lucide-react';
+import { ArrowLeft, Bell, CalendarDays, Clock, MapPin, Pencil, Trash2, User, Ban } from 'lucide-react';
 import { useRequest, useRequestMutations } from '../hooks/useRequests';
 import { useDepartments } from '../hooks/useDepartments';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,7 +19,7 @@ import { NotifyModal } from '../components/events/NotifyModal';
 import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
 import { departmentIcon, REQUEST_STATUSES } from '../lib/constants';
-import { formatDate, formatDateTime, isRichTextEmpty } from '../lib/utils';
+import { isRichTextEmpty } from '../lib/utils';
 import type { TaskStatus } from '../types';
 
 export function RequestDetailPage() {
@@ -31,6 +33,8 @@ export function RequestDetailPage() {
   const { data: departments } = useDepartments();
   const { updateRequest, deleteRequest } = useRequestMutations();
 
+  const cancelRequest = useSendNotification();
+  const [confirmCancel, setConfirmCancel] = useState(false);
   const [notifyOpen, setNotifyOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -49,6 +53,7 @@ export function RequestDetailPage() {
   const canUpdate = isEventsTeam || (!!profile?.department_id && profile.department_id === request.department_id);
 
   const changeStatus = async (status: TaskStatus) => {
+    if (status === 'cancelled') { setConfirmCancel(true); return; }
     try {
       await updateRequest.mutateAsync({ id: request.id, status });
       toast(t('common.savedSuccess'));
@@ -66,9 +71,10 @@ export function RequestDetailPage() {
         <div className="min-w-0 flex-1" />
         {isEventsTeam && (
           <div className="flex items-center gap-1.5">
-            <Button variant="gold" size="sm" onClick={() => setNotifyOpen(true)}>
+            <Button variant="gold" size="sm" disabled={request.status === 'cancelled'} onClick={() => setNotifyOpen(true)}>
               <Bell className="h-4 w-4" /> {t('events.notify')}
             </Button>
+            {request.status !== 'cancelled' && <Button variant="outline" size="sm" className="text-red-700" onClick={() => setConfirmCancel(true)}><Ban className="h-4 w-4" />{lang === 'th' ? 'ยกเลิกงาน' : 'Cancel request'}</Button>}
             <Link to={`/requests/${request.id}/edit`}>
               <Button variant="outline" size="sm"><Pencil className="h-4 w-4" /> {t('common.edit')}</Button>
             </Link>
@@ -84,6 +90,10 @@ export function RequestDetailPage() {
         )}
       </div>
 
+      {request.status === 'cancelled' && <div role="status" className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
+        <p className="font-bold">{lang === 'th' ? 'งานนี้ถูกยกเลิกแล้ว ไม่ต้องดำเนินการต่อ' : 'This request is cancelled. No further work is required.'}</p>
+        {isEventsTeam && <Button variant="outline" size="sm" className="mt-3" onClick={() => setConfirmCancel(true)}>{lang === 'th' ? 'ส่งแจ้งยกเลิกอีกครั้ง' : 'Resend cancellation notice'}</Button>}
+      </div>}
       <Card>
         <CardBody className="space-y-4">
           <div className="flex flex-wrap items-start gap-3">
@@ -103,19 +113,12 @@ export function RequestDetailPage() {
           </div>
 
           <div className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm dark:bg-slate-800/60 sm:grid-cols-2 lg:grid-cols-3">
-            <div className="flex items-center gap-2">
-              <CalendarDays className="h-4 w-4 text-slate-400" />
-              <div>
-                <p className="text-xs text-slate-400">{t('requests.requestDate')}</p>
-                <p className="font-medium">{formatDate(request.request_date, lang)}</p>
-              </div>
-            </div>
-            {request.due_date && (
+            {(request.due_at || request.due_date) && (
               <div className="flex items-center gap-2">
                 <CalendarDays className="h-4 w-4 text-slate-400" />
                 <div>
                   <p className="text-xs text-slate-400">{t('requests.dueDate')}</p>
-                  <p className="font-medium">{formatDate(request.due_date, lang)}</p>
+                  <p className="font-medium">{scheduleLabel(request.due_at || request.due_date, lang)}</p>
                 </div>
               </div>
             )}
@@ -133,7 +136,7 @@ export function RequestDetailPage() {
                 <Clock className="h-4 w-4 text-slate-400" />
                 <div>
                   <p className="text-xs text-slate-400">{t('requests.setupTime')}</p>
-                  <p className="font-medium">{formatDateTime(request.setup_datetime, lang)}</p>
+                  <p className="font-medium">{scheduleLabel(request.setup_datetime, lang)}</p>
                 </div>
               </div>
             )}
@@ -142,7 +145,7 @@ export function RequestDetailPage() {
                 <Clock className="h-4 w-4 text-slate-400" />
                 <div>
                   <p className="text-xs text-slate-400">{t('requests.teardownTime')}</p>
-                  <p className="font-medium">{formatDateTime(request.teardown_datetime, lang)}</p>
+                  <p className="font-medium">{scheduleLabel(request.teardown_datetime, lang)}</p>
                 </div>
               </div>
             )}
@@ -163,11 +166,13 @@ export function RequestDetailPage() {
             )}
           </div>
 
+          <p className="text-xs text-slate-500">{t('requests.requestDate')}: {scheduleLabel(request.created_at, lang)} · {lang === 'th' ? 'บันทึกอัตโนมัติ' : 'Recorded automatically'}</p>
+
           {canUpdate && (
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400">{t('myDept.updateStatus')}:</span>
               <Select value={request.status} onChange={(e) => changeStatus(e.target.value as TaskStatus)} className="w-44">
-                {REQUEST_STATUSES.map((s) => <option key={s} value={s}>{t(`taskStatus.${s}`)}</option>)}
+                {REQUEST_STATUSES.filter(s => s !== 'cancelled' || isEventsTeam || request.status === 'cancelled').map((s) => <option key={s} value={s}>{t(`taskStatus.${s}`)}</option>)}
               </Select>
             </div>
           )}
@@ -206,6 +211,30 @@ export function RequestDetailPage() {
           suggestedIds={dept ? [dept.id] : []}
         />
       )}
+      <ConfirmDialog
+        open={confirmCancel}
+        onClose={() => { if (!cancelRequest.isPending) setConfirmCancel(false); }}
+        title={lang === 'th' ? 'ยืนยันยกเลิกและแจ้งแผนก' : 'Confirm cancellation notice'}
+        message={lang === 'th' ? 'ระบบจะยกเลิกงานและส่งอีเมลพร้อมการแจ้งเตือนในระบบให้แผนกที่รับผิดชอบ งานจะไม่แสดงบน Display Board' : 'Cancel this request and notify its assigned department by email and in the app. The request will be removed from the Display Board.'}
+        confirmLabel={lang === 'th' ? 'ยืนยันและแจ้งแผนก' : 'Confirm and notify'}
+        loading={cancelRequest.isPending}
+        onConfirm={async () => {
+          try {
+            const result = await cancelRequest.mutateAsync({ type: 'request_cancel', id: request.id, retryNotification: request.status === 'cancelled' });
+            if (!result.cancelled) throw new Error('Cancellation not confirmed');
+            if (result.alreadyCancelled) {
+              toast(lang === 'th' ? 'งานถูกยกเลิกแล้ว หากต้องการแจ้งแผนกให้กดส่งแจ้งยกเลิกอีกครั้ง' : 'Already cancelled. Use Resend cancellation notice to notify the department.', 'info');
+            } else if (result.results.some(r => r.error)) {
+              toast(lang === 'th' ? 'ยกเลิกงานแล้ว แต่แจ้งแผนกไม่ครบ กรุณากดส่งแจ้งยกเลิกอีกครั้ง' : 'Request cancelled, but notification failed. Please resend the cancellation notice.', 'error');
+            } else {
+              toast(lang === 'th' ? 'ยกเลิกงานและแจ้งแผนกแล้ว' : 'Request cancelled and department notified');
+            }
+            setConfirmCancel(false);
+          } catch {
+            toast(lang === 'th' ? 'ดำเนินการไม่สำเร็จ กรุณาตรวจสอบสถานะแล้วลองอีกครั้ง' : 'Could not finish. Check the request status and try again.', 'error');
+          }
+        }}
+      />
       <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}

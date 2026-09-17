@@ -222,7 +222,7 @@ export function EventsBoard({
                       id={`task-${task.id}`}
                       tabIndex={focusTaskId === task.id ? -1 : undefined}
                       className={cn(
-                        'px-4 py-2.5 transition-all duration-300',
+                        'px-4 py-3 transition-colors duration-150',
                         focusTaskId === task.id && 'ring-4 ring-inset ring-gold-400',
                         completed
                           ? 'border-l-[3px] border-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/25'
@@ -234,7 +234,7 @@ export function EventsBoard({
                           onClick={() => toggleTask.mutate({ taskId: task.id, done: !completed })}
                           className={cn(
                             // the after: ring expands the tap area to 44px for WCAG without shifting layout
-                            "relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 after:absolute after:-inset-2 after:content-[''] hover:scale-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-90",
+                            "relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 after:absolute after:-inset-2 after:content-['']  focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-90",
                             completed
                               ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
                               : 'border-slate-300 bg-white hover:border-emerald-400 dark:border-slate-600 dark:bg-slate-900'
@@ -512,7 +512,7 @@ export function EventsBoard({
       <div
         key={group.blocks[0].key}
         data-timeline-event={evt.id}
-        className="animate-rise-in overflow-hidden rounded-3xl border-2 bg-white shadow-[0_10px_28px_-16px_var(--event-glow)] transition-shadow duration-300 hover:shadow-[0_18px_40px_-16px_var(--event-glow)] dark:bg-slate-900"
+        className="animate-rise-in overflow-hidden rounded-2xl border bg-white shadow-[0_10px_28px_-16px_var(--event-glow)] transition-shadow duration-300 hover:shadow-[0_18px_40px_-16px_var(--event-glow)] dark:bg-slate-900"
         style={{
           '--event-glow': headerColor + '66',
           borderColor: headerColor + '80',
@@ -706,7 +706,7 @@ export function EventsBoard({
                   title={t('display.tapToView')}
                   aria-label={`${task.title} - ${t('display.tapToView')}`}
                   className={cn(
-                    'flex w-64 shrink-0 cursor-pointer flex-col gap-1.5 rounded-2xl border bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 dark:bg-slate-900',
+                    'flex w-64 shrink-0 cursor-pointer flex-col gap-1.5 rounded-2xl border bg-white p-3 shadow-sm transition-all duration-200  hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 dark:bg-slate-900',
                     soon ? 'border-gold-300 ring-1 ring-gold-300/60 dark:border-gold-700' : 'border-slate-200 dark:border-slate-700'
                   )}
                   style={{ borderLeft: `5px solid ${event.header_color || '#1a3c5e'}` }}
@@ -776,7 +776,7 @@ export function EventsBoard({
             key={event.id}
             id={`event-${event.id}`}
             className={cn(
-              'animate-rise-in scroll-mt-4 overflow-hidden rounded-3xl border-2 bg-white transition-all duration-300 shadow-[0_12px_34px_-14px_var(--event-glow)] hover:shadow-[0_20px_48px_-14px_var(--event-glow)] dark:bg-slate-900',
+              'animate-rise-in scroll-mt-4 overflow-hidden rounded-2xl border bg-white transition-all duration-300 shadow-sm hover:shadow-md dark:bg-slate-900',
               highlighted === event.id && 'ring-4 ring-gold-400/80'
             )}
             style={{

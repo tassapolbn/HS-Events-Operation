@@ -1,5 +1,6 @@
+import { searchEvents, searchRequests } from '../lib/boardSearch';
 import { useSearchParams } from 'react-router-dom';
-import { useEffect, useState, type ComponentType } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState, type ComponentType } from 'react';
 import { CalendarDays, Inbox } from 'lucide-react';
 import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../hooks/usePublicDisplay';
 import { DisplayShell, type DisplayScale, type DisplayTab } from '../components/display/DisplayShell';
@@ -83,6 +84,8 @@ export function DisplayBoardPage({
   useLightModeOnly();
   const [tab, setTab] = useState<DisplayTab>(initialTab);
   const [selectedDept, setSelectedDept] = useState('');
+  const [search, setSearch] = useState('');
+  const deferredSearch = useDeferredValue(search);
   // Active / Done splits finished work away from work that still has to happen
   const [scope, setScope] = useState<BoardScope>(readBoardScope);
   const [scale, setScale] = useState<DisplayScale>(() => {
@@ -114,15 +117,19 @@ export function DisplayBoardPage({
   }, [scale]);
 
   const { data: departments } = useDisplayDepartments();
-  const eventsQuery = useDisplayEvents(campus, eventId);
-  const requestsQuery = useDisplayRequests(campus);
+  const rawEventsQuery = useDisplayEvents(campus, eventId);
+  const rawRequestsQuery = useDisplayRequests(campus);
+  const filteredEvents = useMemo(() => searchEvents(rawEventsQuery.data ?? [], deferredSearch, departments ?? []), [rawEventsQuery.data, deferredSearch, departments]);
+  const filteredRequests = useMemo(() => searchRequests(rawRequestsQuery.data ?? [], deferredSearch, departments ?? []), [rawRequestsQuery.data, deferredSearch, departments]);
+  const eventsQuery = { ...rawEventsQuery, data: focused ? rawEventsQuery.data : filteredEvents };
+  const requestsQuery = { ...rawRequestsQuery, data: focused ? rawRequestsQuery.data : filteredRequests };
 
   const departmentList = departments ?? [];
   const active = requestId ? requestsQuery : eventId ? eventsQuery : tab === 'events' ? eventsQuery : requestsQuery;
   const linkedEvent = eventsQuery.data?.find(event => event.id === eventId);
   const linkedRequest = requestsQuery.data?.find(request => request.id === requestId);
   const targetAvailable = requestId ? Boolean(linkedRequest) : Boolean(linkedEvent && (!taskId || linkedEvent.tasks.some(task => task.id === taskId)));
-  const exitFocus = () => { setSearchParams({}); setSelectedDept(''); setTab(requestId ? 'requests' : 'events'); };
+  const exitFocus = () => { setSearchParams({}); setSelectedDept(''); setTab(requestId ? 'requests' : 'events'); setSearch(''); };
 
   const canEdit = isEventsTeam;
   const boardEditMode = canEdit;
@@ -179,6 +186,8 @@ export function DisplayBoardPage({
     <DisplayShell
       tab={requestId ? 'requests' : eventId ? 'events' : tab}
       onTabChange={(next) => { if (focused) setSearchParams({}); setTab(next); }}
+      search={search}
+      onSearch={(value) => { if (focused) { setTab(requestId ? 'requests' : 'events'); setSearchParams({}); } setSearch(value); }}
       scale={scale}
       onScaleChange={setScale}
       departments={departmentList}
@@ -193,6 +202,8 @@ export function DisplayBoardPage({
       canEdit={canEdit}
       campusName={campus ? CAMPUS_NAMES[campus] : undefined}
     >
+      {search.trim() && <p role="status" className="mb-4 text-sm text-slate-600">{lang === 'th' ? 'ผลการค้นหาในบอร์ดนี้' : 'Search results on this board'}: “{search}” <button className="ml-2 rounded-lg px-3 py-2 font-semibold text-navy-800 underline" onClick={() => setSearch('')}>{lang === 'th' ? 'ล้างคำค้น' : 'Clear'}</button></p>}
+      {active.isError && !focused && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">{lang === 'th' ? 'โหลดข้อมูลไม่สำเร็จ กรุณากดรีเฟรช' : 'Could not load work. Please refresh.'}</p>}
       {focused ? (
         <div className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gold-300 bg-gold-50 p-4">

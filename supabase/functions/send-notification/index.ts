@@ -14,8 +14,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type'
 };
 
+const TEMPLATE_VERSION = 'support-board-20260916';
+
 interface Payload {
-  type: 'event' | 'request' | 'task';
+  type: 'event' | 'request' | 'task' | 'request_cancel';
+  retryNotification?: boolean;
   changeKind?: 'added' | 'updated';
   id: string;
   departmentIds: string[];
@@ -48,6 +51,15 @@ function readableDate(value: string | null | undefined): string {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Bangkok' });
 }
 
+function readableSchedule(value: string | null | undefined): string {
+  if (!value) return 'Not scheduled / ยังไม่ระบุ';
+  if (value.length === 10) return `${readableDate(value)} · Time not specified / ยังไม่ระบุเวลา`;
+  return new Date(value).toLocaleString('en-GB', {
+    day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+    hourCycle: 'h23', timeZone: 'Asia/Bangkok'
+  });
+}
+
 function emailHtml(options: {
   heading: string;
   eventName: string;
@@ -55,6 +67,9 @@ function emailHtml(options: {
   departmentName: string;
   campus: string;
   description?: string;
+  cancelled?: boolean;
+  schedule?: { start?: string | null; due?: string | null };
+  postedAt?: string;
   rows: { label: string; value: string }[];
   taskLines: string[];
   link: string;
@@ -64,27 +79,34 @@ function emailHtml(options: {
   ).join('');
   const tasks = options.taskLines.map(t => `<li style="margin:8px 0;">${esc(t)}</li>`).join('');
   const campusName = options.campus === 'HSN' ? 'Cherngtalay Campus' : 'Chaofah City Campus';
+  const schedule = options.schedule ? `<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin:22px 0 8px;table-layout:fixed;"><tr>
+<td class="schedule-cell" width="50%" valign="top" style="padding:16px;background:#EEF5FC;border-top:3px solid #003057;"><p style="margin:0 0 8px;color:#526579;font-size:12px;font-weight:bold;">WORK STARTS / เริ่มดำเนินการ</p><p style="margin:0;font-size:16px;font-weight:bold;line-height:1.6;color:#003057;">${esc(readableSchedule(options.schedule.start))}</p></td>
+<td class="schedule-cell" width="50%" valign="top" style="padding:16px;background:#FFFAEB;border-top:3px solid #F0B323;"><p style="margin:0 0 8px;color:#715719;font-size:12px;font-weight:bold;">COMPLETE BY / ต้องเสร็จภายใน</p><p style="margin:0;font-size:16px;font-weight:bold;line-height:1.6;color:#003057;">${esc(readableSchedule(options.schedule.due))}</p></td>
+</tr></table><p style="margin:0 0 24px;font-size:11px;color:#526579;">Thailand time (UTC+7) / เวลาไทย</p>` : '';
   return `<!doctype html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><style>@media only screen and (max-width:480px){.email-content{padding:22px 18px!important}.schedule-cell{display:block!important;width:auto!important}.email-title{font-size:23px!important}}</style></head>
 <body style="margin:0;padding:0;background:#EDF2F7;font-family:Arial,Tahoma,sans-serif;color:#003057;">
+<!-- email-template: ${TEMPLATE_VERSION} -->
 <div style="display:none;max-height:0;overflow:hidden;">${esc(options.heading)}: ${esc(options.eventName)} · ${esc(options.departmentName)}</div>
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#EDF2F7;"><tr><td align="center" style="padding:24px 12px;">
 <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="width:100%;max-width:600px;background:#FFFFFF;border:1px solid #DCE4EC;border-radius:16px;overflow:hidden;">
-<tr><td style="background:#003057;border-top:6px solid #F0B323;padding:28px 28px 24px;">
-<p style="margin:0 0 14px;color:#F0B323;font-size:12px;font-weight:bold;letter-spacing:1px;">HEADSTART INTERNATIONAL SCHOOL</p>
-<h1 style="margin:0;color:#FFFFFF;font-size:24px;line-height:1.4;">${esc(options.heading)}</h1>
-<p style="margin:10px 0 0;color:#FFFFFF;font-size:13px;">${esc(campusName)} · ${esc(options.campus)}</p>
+<tr><td class="email-content" style="background:#003057;border-top:5px solid #F0B323;padding:24px 28px;">
+<p style="margin:0;color:#FFFFFF;font-size:22px;font-weight:bold;letter-spacing:0.2px;">HeadStart <span style="color:#F0B323;">Event Operations</span></p>
+<p style="margin:8px 0 0;color:#DAE6F0;font-size:12px;line-height:1.7;">${esc(campusName)} · ${esc(options.campus)}</p>
 </td></tr>
-<tr><td style="padding:28px;">
-<p style="margin:0 0 8px;color:#526579;font-size:13px;">FOR ${esc(options.departmentName.toUpperCase())}</p>
-<h2 style="margin:0 0 10px;font-size:22px;line-height:1.5;color:#003057;overflow-wrap:anywhere;">${esc(options.eventName)}</h2>
-<p style="margin:0 0 22px;font-size:14px;color:#526579;">${esc(options.eventDate)}</p>
-${options.description ? `<div style="border-left:4px solid #F0B323;background:#FFFAEB;padding:16px;margin-bottom:22px;"><p style="margin:0 0 8px;font-size:12px;font-weight:bold;color:#003057;">JOB DETAILS / รายละเอียดงาน</p><div style="font-size:15px;line-height:1.8;white-space:pre-line;color:#243B53;">${esc(options.description)}</div></div>` : ''}
+<tr><td class="email-content" style="padding:28px;">
+<p style="margin:0 0 12px;color:#526579;font-size:12px;font-weight:bold;">${esc(options.heading)}</p>
+<h1 class="email-title" style="margin:0 0 12px;font-size:27px;line-height:1.4;color:#003057;overflow-wrap:anywhere;">${esc(options.eventName)}</h1>
+<p style="margin:0 0 8px;font-size:14px;line-height:1.7;color:#526579;">Assigned to / แผนกรับผิดชอบ<br><strong style="color:#003057;font-size:16px;">${esc(options.departmentName)}</strong></p>
+${options.eventDate ? `<p style="margin:12px 0 20px;font-size:14px;color:#526579;">${esc(options.eventDate)}</p>` : ''}
+${options.cancelled ? `<p style="padding:16px;background:#FEF2F2;border-left:4px solid #DC2626;color:#991B1B;font-weight:bold;line-height:1.8;">CANCELLED / ยกเลิกงานแล้ว<br>This work is no longer required. It has been removed from the active board.<br>ไม่ต้องดำเนินงานนี้ต่อ งานถูกนำออกจากบอร์ดแล้ว</p>` : ''}
+${schedule}
+${options.description ? `<div style="margin:24px 0;"><p style="margin:0 0 10px;font-size:12px;font-weight:bold;color:#526579;">JOB DETAILS / รายละเอียดงาน</p><div style="font-size:15px;line-height:1.8;white-space:pre-line;color:#243B53;overflow-wrap:anywhere;">${esc(options.description)}</div></div>` : ''}
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#F5F8FB;border-collapse:collapse;">${detailRows}</table>
 ${tasks ? `<p style="margin:24px 0 8px;font-size:14px;font-weight:bold;">Assigned work / งานที่มอบหมาย</p><ul style="margin:0;padding-left:22px;font-size:15px;line-height:1.7;">${tasks}</ul>` : ''}
-<table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:28px auto 16px;"><tr><td bgcolor="#F0B323" style="border-radius:8px;text-align:center;"><a href="${esc(options.link)}" style="display:inline-block;padding:16px 24px;border:1px solid #F0B323;border-radius:8px;color:#003057;font-size:15px;font-weight:bold;text-decoration:none;">View job on Display Board / ดูงาน</a></td></tr></table>
+<table role="presentation" cellspacing="0" cellpadding="0" align="center" style="margin:28px auto 16px;"><tr><td bgcolor="#F0B323" style="border-radius:8px;text-align:center;"><a href="${esc(options.link)}" style="display:inline-block;padding:16px 24px;border:1px solid #F0B323;border-radius:8px;color:#003057;font-size:15px;font-weight:bold;text-decoration:none;">${options.cancelled ? 'View Display Board / ดูบอร์ดงาน' : 'View job on Display Board / ดูงาน'}</a></td></tr></table>
 <p style="margin:0;text-align:center;color:#526579;font-size:12px;line-height:1.8;">Open the board to view the latest details and status.<br>ดูรายละเอียดและสถานะล่าสุดบน Display Board</p>
-<p style="margin:16px 0 0;color:#526579;font-size:11px;line-height:1.6;overflow-wrap:anywhere;">If the button does not open, use this link:<br><a href="${esc(options.link)}" style="color:#003057;word-break:break-all;">${esc(options.link)}</a></p>
+${options.postedAt ? `<p style="margin:22px 0 0;color:#64748B;font-size:11px;line-height:1.7;text-align:center;">Posted / วันลงงาน: ${esc(readableSchedule(options.postedAt))}<br>Recorded automatically · บันทึกอัตโนมัติ</p>` : ''}
 </td></tr>
 <tr><td style="padding:18px 28px;background:#F5F8FB;border-top:1px solid #E5EAF0;color:#526579;font-size:11px;line-height:1.7;text-align:center;">HeadStart Event Operations<br>Automated notification / การแจ้งเตือนอัตโนมัติ</td></tr>
 </table></td></tr></table></body></html>`;
@@ -135,18 +157,30 @@ Deno.serve(async (req: Request) => {
     }
 
     const payload = (await req.json()) as Payload;
-    if (!payload?.id || !['event', 'request', 'task'].includes(payload.type) || (payload.type === 'task' ? !['added', 'updated'].includes(payload.changeKind ?? '') : !Array.isArray(payload.departmentIds) || payload.departmentIds.length === 0)) {
+    if (!payload?.id || !['event', 'request', 'task', 'request_cancel'].includes(payload.type) || (payload.type === 'task' ? !['added', 'updated'].includes(payload.changeKind ?? '') : payload.type === 'request_cancel' ? false : !Array.isArray(payload.departmentIds) || payload.departmentIds.length === 0)) {
       return new Response(JSON.stringify({ error: 'Invalid payload' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }
 
+    let cancelledRequest = null;
+    if (payload.type === 'request_cancel') {
+      const found = await admin.from('department_requests').select('*').eq('id', payload.id).is('deleted_at', null).single();
+      if (found.error || !found.data) return new Response(JSON.stringify({ error: 'Request not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      cancelledRequest = found.data;
+      // Validate the saved campus before changing the request.
+      displayLink(cancelledRequest.campus, 'request', cancelledRequest.id);
+      if (cancelledRequest.status === 'cancelled' && !payload.retryNotification) {
+        return new Response(JSON.stringify({ ok: true, cancelled: true, alreadyCancelled: true, results: [] }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     // The recipient is derived from the saved task; callers cannot broaden it.
     let task = null;
     let taskEvent = null;
     let taskSession = null;
-    let departmentIds = payload.departmentIds;
+    let departmentIds = cancelledRequest ? [cancelledRequest.department_id] : payload.departmentIds;
     if (payload.type === 'task') {
       const found = await admin.from('event_tasks').select('*').eq('id', payload.id).is('deleted_at', null).single();
       if (found.error || !found.data) return new Response(JSON.stringify({ error: 'Task not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -169,6 +203,13 @@ Deno.serve(async (req: Request) => {
     if (departmentError) throw departmentError;
     if (!departments?.length) throw new Error('No recipient department found');
 
+    if (cancelledRequest && cancelledRequest.status !== 'cancelled') {
+      const saved = await admin.from('department_requests').update({ status: 'cancelled' })
+        .eq('id', cancelledRequest.id).eq('status', cancelledRequest.status).is('deleted_at', null).select('*').single();
+      if (saved.error || !saved.data) throw new Error('Could not cancel request. Refresh and try again.');
+      cancelledRequest = saved.data;
+    }
+
     const results: { department: string; emailed: string[]; error?: string }[] = [];
 
     for (const dept of departments ?? []) {
@@ -179,30 +220,45 @@ Deno.serve(async (req: Request) => {
       let eventId: string | null = null;
       let requestId: string | null = null;
 
-      if (payload.type === 'task' && task && taskEvent) {
+      if (cancelledRequest) {
+        requestId = cancelledRequest.id;
+        subject = `[Cancelled / ยกเลิกงาน] ${cancelledRequest.title} · ${dept.name_en}`;
+        inAppTitle = `Cancelled / ยกเลิกงาน: ${cancelledRequest.title}`;
+        inAppBody = 'This work is no longer required. / ไม่ต้องดำเนินงานนี้ต่อ';
+        html = emailHtml({
+          heading: 'Request cancelled / ยกเลิกคำขอ', eventName: cancelledRequest.title,
+          eventDate: '', departmentName: dept.name_en, campus: cancelledRequest.campus,
+          cancelled: true, description: plainText(cancelledRequest.description),
+          rows: [
+            { label: 'Location / สถานที่', value: cancelledRequest.location || '-' },
+            { label: 'Reference', value: cancelledRequest.reference || '-' },
+            { label: 'Original work start / กำหนดเริ่มเดิม', value: readableSchedule(cancelledRequest.setup_datetime) }
+          ], taskLines: [],
+          link: displayLink(cancelledRequest.campus, 'request', cancelledRequest.id).split('?')[0]
+        });
+      } else if (payload.type === 'task' && task && taskEvent) {
         const action = payload.changeKind === 'added' ? 'Task added / เพิ่มงาน' : 'Task updated / แก้ไขงาน';
-        const fmt = (value: string | null) => value ? new Date(value).toLocaleString('en-GB', { timeZone: 'Asia/Bangkok', dateStyle: 'medium', timeStyle: 'short' }) : '-';
         const plain = (value: string | null) => (value ?? '').replace(/<[^>]*>/g, ' ').trim();
         eventId = taskEvent.id;
         subject = `[${action}] ${task.title} - ${taskEvent.name}`;
         inAppTitle = `${action}: ${task.title}`;
         inAppBody = `${taskEvent.name} · ${taskSession?.title || taskSession?.session_date || taskEvent.event_date} · ${task.title}`;
         html = emailHtml({
-          heading: action, eventName: taskEvent.name,
+          heading: action, eventName: task.title,
           eventDate: readableDate(taskSession?.session_date || taskEvent.event_date),
           departmentName: dept.name_en,
           campus: taskEvent.campus,
+          description: plainText(task.description),
+          schedule: { start: task.start_time, due: task.completion_time },
           rows: [
+            { label: 'Event / กิจกรรม', value: taskEvent.name },
             { label: 'Session', value: taskSession?.title || '-' },
             { label: 'Location', value: task.work_location || taskSession?.location || taskEvent.location || '-' },
             { label: 'Assigned staff', value: task.assigned_staff || '-' },
-            { label: 'Start', value: fmt(task.start_time) },
-            { label: 'Complete by', value: fmt(task.completion_time) },
-            { label: 'Description', value: plain(task.description) || '-' },
             { label: 'Instructions', value: plain(task.instructions) || '-' },
             { label: 'Notes', value: plain(task.notes) || '-' }
           ],
-          taskLines: [task.title],
+          taskLines: [],
           link: displayLink(taskEvent.campus, 'task', task.id, taskEvent.id)
         });
       } else if (payload.type === 'event') {
@@ -229,11 +285,10 @@ Deno.serve(async (req: Request) => {
         html = emailHtml({
           heading: 'Event Job Request',
           eventName: event.name,
-          eventDate: new Date(event.event_date + 'T00:00:00').toLocaleDateString('en-GB', {
-            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-          }),
+          eventDate: readableDate(event.event_date),
           departmentName: dept.name_en,
           campus: event.campus,
+          description: plainText(event.description),
           rows: [
             { label: 'Location', value: event.location || '-' },
             { label: 'Setup start', value: fmtTime(event.setup_start) },
@@ -259,17 +314,18 @@ Deno.serve(async (req: Request) => {
         html = emailHtml({
           heading: 'Department Job Request',
           eventName: request.title,
-          eventDate: new Date(request.request_date + 'T00:00:00').toLocaleDateString('en-GB', {
-            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
-          }),
+          eventDate: '',
           departmentName: dept.name_en,
           campus: request.campus,
           description: plainText(request.description),
+          schedule: { start: request.setup_datetime, due: request.due_at || request.due_date },
+          postedAt: request.created_at || request.request_date,
           rows: [
             { label: 'Location', value: request.location || '-' },
-            { label: 'Due date', value: readableDate(request.due_date) },
+            { label: 'Teardown / เก็บงาน', value: request.teardown_datetime ? readableSchedule(request.teardown_datetime) : '-' },
             { label: 'Priority', value: request.priority.charAt(0).toUpperCase() + request.priority.slice(1) },
-            { label: 'Reference', value: request.reference || '-' }
+            { label: 'Reference', value: request.reference || '-' },
+            { label: 'Notes / หมายเหตุ', value: plainText(request.notes) || '-' }
           ],
           taskLines: [],
           link: displayLink(request.campus, 'request', request.id)
@@ -319,7 +375,7 @@ Deno.serve(async (req: Request) => {
 
       // Record the in-app notification regardless of email outcome
       const { error: recordError } = await admin.from('notifications').insert({
-        kind: payload.type === 'task' ? 'event' : payload.type,
+        kind: payload.type === 'task' ? 'event' : payload.type === 'request_cancel' ? 'request' : payload.type,
         title: inAppTitle,
         body: inAppBody,
         event_id: eventId,
@@ -333,7 +389,7 @@ Deno.serve(async (req: Request) => {
       results.push({ department: dept.name_en, emailed, error: errorMsg });
     }
 
-    return new Response(JSON.stringify({ ok: true, results }), {
+    return new Response(JSON.stringify({ ok: true, cancelled: !!cancelledRequest, templateVersion: TEMPLATE_VERSION, results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   } catch (error) {
