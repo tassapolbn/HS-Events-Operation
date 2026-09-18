@@ -8,6 +8,8 @@ import { ToastProvider } from './components/ui/Toast';
 import { AppLayout } from './components/layout/AppLayout';
 import { Spinner } from './components/ui/Spinner';
 import { LoginPage } from './pages/LoginPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
+import { UsersPage } from './pages/UsersPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { EventsPage } from './pages/EventsPage';
 import { EventFormPage } from './pages/EventFormPage';
@@ -45,6 +47,13 @@ function RequireAuth() {
   return <Outlet />;
 }
 
+function RequireAdmin() {
+  const { isAdmin, loading, profile } = useAuth();
+  if (loading || !profile) return <Spinner />;
+  if (!isAdmin) return <Navigate to="/" replace />;
+  return <Outlet />;
+}
+
 function RequireEventsTeam() {
   const { isEventsTeam, loading, profile } = useAuth();
   if (loading || !profile) return <Spinner />;
@@ -63,6 +72,9 @@ export default function App() {
               <BrowserRouter>
                 <Routes>
                   <Route path="/login" element={<LoginPage />} />
+                  {/* Where a password reset link lands. No sign in required: the
+                      link itself carries a one-off recovery session. */}
+                  <Route path="/reset-password" element={<ResetPasswordPage />} />
                   {/* Public display board: no sign in required. One board, per-campus links. */}
                   <Route path="/display" element={<DisplayPickerPage />} />
                   <Route path="/display/hsc" element={<DisplayBoardPage campus="HSC" />} />
@@ -73,6 +85,9 @@ export default function App() {
                   <Route element={<RequireAuth />}>
                     <Route element={<AppLayout />}>
                       <Route path="/" element={<DashboardPage />} />
+                      <Route element={<RequireAdmin />}>
+                        <Route path="/users" element={<UsersPage />} />
+                      </Route>
                       <Route path="/events" element={<EventsPage />} />
                       <Route path="/events/:id" element={<EventDetailPage />} />
                       <Route path="/requests" element={<RequestsPage />} />

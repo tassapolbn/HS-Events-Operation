@@ -10,6 +10,7 @@ import { useEvent } from '../../hooks/useEvents';
 import { useSessionMutations, useSessionSourceEvents } from '../../hooks/useSessions';
 import { useTaskMutations } from '../../hooks/useTasks';
 import { useAuth } from '../../contexts/AuthContext';
+import { nextOrderOnDay } from '../../lib/sessionOrder';
 import { cn, combineDateTime, dayDiff, extractTime, formatDate, shiftDate } from '../../lib/utils';
 import type { EventSession } from '../../types';
 
@@ -19,11 +20,11 @@ interface SessionImportModalProps {
   eventId: string;
   /** The event being planned, used as the base date for task times */
   eventDate: string;
-  /** Where the copied sessions are placed in the running order */
-  nextSortOrder: number;
+  /** The event's own sessions, so copies land after whatever each day already holds */
+  sessions: Array<Pick<EventSession, 'session_date' | 'sort_order'>>;
 }
 
-export function SessionImportModal({ open, onClose, eventId, eventDate, nextSortOrder }: SessionImportModalProps) {
+export function SessionImportModal({ open, onClose, eventId, eventDate, sessions }: SessionImportModalProps) {
   const { t, lang } = useLanguage();
   const { toast } = useToast();
   const { profile } = useAuth();
@@ -85,8 +86,12 @@ export function SessionImportModal({ open, onClose, eventId, eventDate, nextSort
       const ordered = [...selected].sort(
         (a, b) => a.session_date.localeCompare(b.session_date) || a.sort_order - b.sort_order
       );
-      for (const [index, session] of ordered.entries()) {
+      // Each copy is placed after the last one already put on its own day.
+      const placed = sessions.map((item) => ({ session_date: item.session_date, sort_order: item.sort_order }));
+      for (const session of ordered) {
         const newDate = previewDate(session);
+        const sortOrder = nextOrderOnDay(placed, newDate);
+        placed.push({ session_date: newDate, sort_order: sortOrder });
         const created = await createSession.mutateAsync({
           title: session.title,
           session_date: newDate,
@@ -95,7 +100,7 @@ export function SessionImportModal({ open, onClose, eventId, eventDate, nextSort
           end_time: combineDateTime(newDate, extractTime(session.end_time)),
           time_note: session.time_note ?? '',
           note: session.note ?? '',
-          sort_order: nextSortOrder + index
+          sort_order: sortOrder
         });
         if (!copyTasks) continue;
         const tasks = sourceEvent.event_tasks.filter((task) => task.session_id === session.id);

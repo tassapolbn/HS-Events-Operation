@@ -28,6 +28,10 @@ export interface Department {
 export interface Profile {
   id: string;
   email: string;
+  /** What this person types to sign in. Null means they sign in with their email. */
+  username?: string | null;
+  /** Where a password reset link is sent. Null falls back to the shared mailbox. */
+  recovery_email?: string | null;
   full_name: string;
   role: UserRole;
   department_id: string | null;
@@ -37,7 +41,20 @@ export interface Profile {
 
 export type Campus = 'HSC' | 'HSN';
 
+/**
+ * Somebody to ask about an event. Only the name is needed: often the person is
+ * known and the point is simply who, not how to reach them.
+ */
+export interface EventContact {
+  name: string;
+  role?: string;
+  phone?: string;
+  email?: string;
+}
+
 export interface EventRow {
+  /** People to ask about this event. Empty when nobody is named. */
+  contacts?: EventContact[];
   id: string;
   name: string;
   category: string;
@@ -310,6 +327,8 @@ export interface DisplayTask {
 }
 
 export interface DisplayEvent {
+  /** People to ask about this event. Empty when nobody is named. */
+  contacts?: EventContact[];
   id: string;
   name: string;
   category: string;

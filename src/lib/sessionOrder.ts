@@ -44,3 +44,21 @@ export function reorderWithinDay(
 export function canReorder(sessions: EventSession[], id: string, direction: -1 | 1): boolean {
   return reorderWithinDay(sessions, id, direction).length > 0;
 }
+
+/**
+ * The sort_order a session added to this date should take: one past the last
+ * session already on that day.
+ *
+ * Counting the day's sessions instead would collide with a day that has been
+ * reordered, and two sessions sharing a sort_order leave the order of that day
+ * resting on the moment each was created, which is not something the admin can
+ * see or change from the worksheet.
+ */
+export function nextOrderOnDay(
+  sessions: Array<Pick<EventSession, 'session_date' | 'sort_order'>>,
+  date: string
+): number {
+  return sessions
+    .filter((item) => item.session_date === date)
+    .reduce((last, item) => Math.max(last, item.sort_order), -1) + 1;
+}

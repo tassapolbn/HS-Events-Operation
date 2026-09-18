@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
-  LayoutDashboard, CalendarDays, ClipboardList, Inbox, LayoutTemplate, Building2, X, MonitorPlay, ExternalLink
+  LayoutDashboard, CalendarDays, ClipboardList, Inbox, LayoutTemplate, Building2, X, MonitorPlay, ExternalLink,
+  UsersRound
 } from 'lucide-react';
 import { useLanguage } from '../../i18n';
 import { useAuth } from '../../contexts/AuthContext';
@@ -13,7 +14,7 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const { t } = useLanguage();
-  const { isEventsTeam, profile } = useAuth();
+  const { isEventsTeam, isAdmin, profile } = useAuth();
 
   const items = [
     { to: '/', icon: LayoutDashboard, label: t('nav.dashboard'), show: true },
@@ -21,7 +22,8 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     { to: '/requests', icon: Inbox, label: t('nav.requests'), show: true },
     { to: '/calendar', icon: CalendarDays, label: t('nav.calendar'), show: true },
     { to: '/templates', icon: LayoutTemplate, label: t('nav.templates'), show: isEventsTeam },
-    { to: '/my-department', icon: Building2, label: t('nav.myDepartment'), show: !!profile?.department_id }
+    { to: '/my-department', icon: Building2, label: t('nav.myDepartment'), show: !!profile?.department_id },
+    { to: '/users', icon: UsersRound, label: t('nav.users'), show: isAdmin }
   ];
 
   return (

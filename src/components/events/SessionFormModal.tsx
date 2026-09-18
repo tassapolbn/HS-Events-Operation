@@ -10,6 +10,7 @@ import { useToast } from '../ui/Toast';
 import { useSessionMutations } from '../../hooks/useSessions';
 import { useTaskMutations } from '../../hooks/useTasks';
 import { useAuth } from '../../contexts/AuthContext';
+import { nextOrderOnDay } from '../../lib/sessionOrder';
 import { combineDateTime, extractTime } from '../../lib/utils';
 import type { EventSession, EventTask } from '../../types';
 
@@ -38,11 +39,12 @@ interface SessionFormModalProps {
   duplicateFrom?: EventSession | null;
   /** Tasks that belong to the session being duplicated */
   sourceTasks?: EventTask[];
-  nextSortOrder: number;
+  /** The event's sessions, so a new one lands last on the day it is given */
+  sessions: Array<Pick<EventSession, 'session_date' | 'sort_order'>>;
 }
 
 export function SessionFormModal({
-  open, onClose, eventId, eventDate, session, duplicateFrom, sourceTasks = [], nextSortOrder
+  open, onClose, eventId, eventDate, session, duplicateFrom, sourceTasks = [], sessions
 }: SessionFormModalProps) {
   const { t } = useLanguage();
   const { toast } = useToast();
@@ -95,7 +97,7 @@ export function SessionFormModal({
     };
     try {
       if (duplicating) {
-        const created = await createSession.mutateAsync({ ...payload, sort_order: nextSortOrder });
+        const created = await createSession.mutateAsync({ ...payload, sort_order: nextOrderOnDay(sessions, values.session_date) });
         if (copyTasks && sourceTasks.length > 0) {
           await createTasks.mutateAsync(
             sourceTasks.map((task) => ({
@@ -123,7 +125,7 @@ export function SessionFormModal({
         await updateSession.mutateAsync({ id: session.id, ...payload });
         toast(t('common.savedSuccess'));
       } else {
-        await createSession.mutateAsync({ ...payload, sort_order: nextSortOrder });
+        await createSession.mutateAsync({ ...payload, sort_order: nextOrderOnDay(sessions, values.session_date) });
         toast(t('common.savedSuccess'));
       }
       onClose();

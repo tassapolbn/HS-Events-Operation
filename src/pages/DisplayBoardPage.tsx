@@ -290,7 +290,8 @@ export function DisplayBoardPage({
         eventId={editing?.event.id ?? ''}
         eventDate={editing?.event.event_date ?? ''}
         session={sessionForModal}
-        nextSortOrder={editing?.kind === 'session' ? editing.session.sort_order : 0}
+        // The board only ever edits a session, so nothing here creates one
+        sessions={editing?.kind === 'session' ? editing.event.sessions ?? [] : []}
       />
       <TaskEditModal
         open={editing?.kind === 'task'}

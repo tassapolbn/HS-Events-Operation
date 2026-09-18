@@ -12,10 +12,11 @@ import { Card, CardBody, CardHeader, CardTitle } from '../components/ui/Card';
 import { Input, Select } from '../components/ui/Input';
 import { RichTextEditor } from '../components/editor/RichTextEditor';
 import { Spinner } from '../components/ui/Spinner';
+import { cleanContacts, EventContactsField } from '../components/events/EventContactsField';
 import { CAMPUSES, CAMPUS_NAMES, EVENT_CATEGORIES, EVENT_STATUSES } from '../lib/constants';
 import { combineDateTime, extractDate, extractTime } from '../lib/utils';
 import { supabase } from '../lib/supabase';
-import type { Campus, EventStatus } from '../types';
+import type { Campus, EventContact, EventStatus } from '../types';
 
 const SCHEDULE_FIELDS = [
   { name: 'setup_start', label: 'events.setupStart' },
@@ -48,6 +49,7 @@ interface EventFormValues {
   status: EventStatus;
   header_color: string;
   header_text_color: string;
+  contacts: EventContact[];
 }
 
 const emptySchedule = (): Record<ScheduleFieldName, ScheduleSlot> => ({
@@ -83,7 +85,8 @@ export function EventFormPage() {
       internal_notes: '',
       status: 'draft',
       header_color: '#1a3c5e',
-      header_text_color: '#FFFFFF'
+      header_text_color: '#FFFFFF',
+      contacts: []
     }
   });
 
@@ -115,7 +118,8 @@ export function EventFormPage() {
         internal_notes: existing.internal_notes,
         status: existing.status,
         header_color: existing.header_color || '#1a3c5e',
-        header_text_color: existing.header_text_color || '#FFFFFF'
+        header_text_color: existing.header_text_color || '#FFFFFF',
+        contacts: existing.contacts ?? []
       });
     }
   }, [existing, isEdit, reset]);
@@ -149,7 +153,9 @@ export function EventFormPage() {
       internal_notes: values.internal_notes,
       status: values.status,
       header_color: values.header_color,
-      header_text_color: values.header_text_color
+      header_text_color: values.header_text_color,
+      // Rows nobody filled in are not people, so they never reach the database
+      contacts: cleanContacts(values.contacts ?? [])
     };
     try {
       if (isEdit && id) {
@@ -289,6 +295,21 @@ export function EventFormPage() {
                 </div>
               ))}
             </div>
+          </CardBody>
+        </Card>
+
+        {/* Who a department asks when something about this event is unclear */}
+        <Card>
+          <CardHeader><CardTitle>{t('events.contacts')}</CardTitle></CardHeader>
+          <CardBody className="space-y-3">
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('events.contactsHint')}</p>
+            <Controller
+              control={control}
+              name="contacts"
+              render={({ field }) => (
+                <EventContactsField value={field.value ?? []} onChange={field.onChange} />
+              )}
+            />
           </CardBody>
         </Card>
 

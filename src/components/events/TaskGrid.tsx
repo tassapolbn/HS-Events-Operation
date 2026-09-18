@@ -14,6 +14,7 @@ import { useToast } from '../ui/Toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTaskMutations, type TaskInput, type TaskPatch } from '../../hooks/useTasks';
 import { useSessionMutations } from '../../hooks/useSessions';
+import { nextOrderOnDay } from '../../lib/sessionOrder';
 import { sessionColor, WHOLE_EVENT_COLOR } from '../../lib/sessionColors';
 import { PRIORITIES, TASK_STATUSES, TASK_STATUS_DOTS } from '../../lib/constants';
 import { cn, combineDateTime, darkenColor, extractTime, formatDate, lightenColor } from '../../lib/utils';
@@ -206,7 +207,7 @@ export function TaskGrid({
   const [sel, setSel] = useState<Selection | null>(null);
   const [editing, setEditing] = useState<{ r: number; c: number; initial: string | null; version?: number } | null>(null);
   const [pending, setPending] = useState<Record<string, Partial<RowValues>>>({});
-  const [fillTo, setFillTo] = useState<number | null>(null);
+  const [fillTo, setFillTo] = useState<{ r: number; c: number } | null>(null);
   const [undoDepth, setUndoDepth] = useState(0);
   // Find and replace, over the whole sheet or just the selected cells
   const [replaceOpen, setReplaceOpen] = useState(false);
@@ -373,7 +374,7 @@ export function TaskGrid({
   // End a drag even if the pointer leaves the table
   useEffect(() => {
     const stop = () => {
-      if (dragMode.current === 'fill' && fillTo !== null) void applyFill(fillTo);
+      if (dragMode.current === 'fill' && fillTo) void applyFill(fillTo);
       dragMode.current = 'none';
       setFillTo(null);
     };
@@ -807,21 +808,89 @@ export function TaskGrid({
     await commitUpdates(changes);
   };
 
-  const applyFill = async (endRow: number) => {
-    if (!bounds || !canEdit || endRow <= bounds.bottom) return;
-    const height = bounds.bottom - bounds.top + 1;
-    const changes: Array<{ id: string; values: Partial<RowValues> }> = [];
-    for (let r = bounds.bottom + 1; r <= Math.min(endRow, rows.length - 1); r += 1) {
-      const row = rows[r];
-      const from = rows[bounds.top + ((r - bounds.top) % height)];
-      if (!row || !from) continue;
-      const values: Partial<RowValues> = {};
-      for (let c = bounds.left; c <= bounds.right; c += 1) values[columns[c].field] = from.values[columns[c].field];
-      changes.push({ id: row.task.id, values });
+  /**
+   * Dragging the corner handle fills along one axis, the one the pointer moved
+   * furthest on, the way a spreadsheet does. Both are offered because a session
+   * often needs the same staff written down a column and the same location
+   * written across a row.
+   */
+  const fillAxis = (to: { r: number; c: number }): 'down' | 'up' | 'right' | 'left' | null => {
+    if (!bounds) return null;
+    const down = to.r - bounds.bottom;
+    const up = bounds.top - to.r;
+    const right = to.c - bounds.right;
+    const left = bounds.left - to.c;
+    const vertical = Math.max(down, up);
+    const horizontal = Math.max(right, left);
+    if (vertical <= 0 && horizontal <= 0) return null;
+    if (horizontal > vertical) return right > left ? 'right' : 'left';
+    return down > up ? 'down' : 'up';
+  };
+
+  /**
+   * A column across is only worth filling into when it holds the same kind of
+   * thing. A department is not a status and a name is not a time, so those
+   * cells are left alone rather than filled with something nobody meant.
+   */
+  const acceptsFrom = (target: number, source: number) => {
+    const to = columns[target];
+    const from = columns[source];
+    if (!to || !from) return false;
+    if (to.field === from.field) return true;
+    return to.type === from.type && to.type !== 'select';
+  };
+
+  const applyFill = async (to: { r: number; c: number }) => {
+    if (!bounds || !canEdit) return;
+    const axis = fillAxis(to);
+    if (!axis) return;
+    const changes = new Map<string, Partial<RowValues>>();
+    const write = (row: GridRow, field: GridField, value: string) => {
+      const values = changes.get(row.task.id) ?? {};
+      values[field] = value;
+      changes.set(row.task.id, values);
+    };
+
+    let next: Selection = { r: bounds.top, c: bounds.left, r2: bounds.bottom, c2: bounds.right };
+
+    if (axis === 'down' || axis === 'up') {
+      const height = bounds.bottom - bounds.top + 1;
+      const first = axis === 'down' ? bounds.bottom + 1 : Math.max(to.r, 0);
+      const last = axis === 'down' ? Math.min(to.r, rows.length - 1) : bounds.top - 1;
+      for (let r = first; r <= last; r += 1) {
+        const row = rows[r];
+        // The pattern repeats, so a block of three fills three, three, three
+        const offset = ((((r - bounds.top) % height) + height) % height);
+        const from = rows[bounds.top + offset];
+        if (!row || !from) continue;
+        for (let c = bounds.left; c <= bounds.right; c += 1) write(row, columns[c].field, from.values[columns[c].field]);
+      }
+      next = { r: Math.min(bounds.top, first), c: bounds.left, r2: Math.max(bounds.bottom, last), c2: bounds.right };
+    } else {
+      const width = bounds.right - bounds.left + 1;
+      const first = axis === 'right' ? bounds.right + 1 : Math.max(to.c, 0);
+      const last = axis === 'right' ? Math.min(to.c, columns.length - 1) : bounds.left - 1;
+      let refused = 0;
+      for (let c = first; c <= last; c += 1) {
+        const offset = ((((c - bounds.left) % width) + width) % width);
+        const source = bounds.left + offset;
+        if (!acceptsFrom(c, source)) { refused += 1; continue; }
+        for (let r = bounds.top; r <= bounds.bottom; r += 1) {
+          const row = rows[r];
+          if (!row) continue;
+          write(row, columns[c].field, row.values[columns[source].field]);
+        }
+      }
+      if (changes.size === 0) {
+        if (refused > 0) toast(t('grid.fillNotAcross'), 'error');
+        return;
+      }
+      next = { r: bounds.top, c: Math.min(bounds.left, first), r2: bounds.bottom, c2: Math.max(bounds.right, last) };
     }
-    if (changes.length === 0) return;
-    setSel({ r: bounds.top, c: bounds.left, r2: Math.min(endRow, rows.length - 1), c2: bounds.right });
-    await commitUpdates(changes);
+
+    if (changes.size === 0) return;
+    setSel(next);
+    await commitUpdates([...changes].map(([id, values]) => ({ id, values })));
   };
 
   // ---------- rows ----------
@@ -992,7 +1061,7 @@ export function TaskGrid({
         end_time: combineDateTime(date, row.values.completion_time || null),
         time_note: '',
         note: '',
-        sort_order: sessions.filter((item) => item.session_date === date).length
+        sort_order: nextOrderOnDay(sessions, date)
       });
       if (followers.length > 0) {
         await updateTasks.mutateAsync(
@@ -1256,8 +1325,18 @@ export function TaskGrid({
 
   const inSelection = (r: number, c: number) =>
     !!bounds && r >= bounds.top && r <= bounds.bottom && c >= bounds.left && c <= bounds.right;
-  const inFillPreview = (r: number) =>
-    fillTo !== null && !!bounds && r > bounds.bottom && r <= fillTo;
+  const fillPreview = useMemo(() => {
+    if (!fillTo || !bounds) return null;
+    const axis = fillAxis(fillTo);
+    if (!axis) return null;
+    if (axis === 'down') return { top: bounds.bottom + 1, bottom: fillTo.r, left: bounds.left, right: bounds.right };
+    if (axis === 'up') return { top: fillTo.r, bottom: bounds.top - 1, left: bounds.left, right: bounds.right };
+    if (axis === 'right') return { top: bounds.top, bottom: bounds.bottom, left: bounds.right + 1, right: fillTo.c };
+    return { top: bounds.top, bottom: bounds.bottom, left: fillTo.c, right: bounds.left - 1 };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fillTo, bounds]);
+  const inFillPreview = (r: number, c: number) =>
+    !!fillPreview && r >= fillPreview.top && r <= fillPreview.bottom && c >= fillPreview.left && c <= fillPreview.right;
 
   const busy = insertTaskRows.isPending || createTasks.isPending || updateTasks.isPending || deleteTasks.isPending || restoreTasks.isPending;
   const selectedRowCount = bounds ? bounds.bottom - bounds.top + 1 : 0;
@@ -1724,7 +1803,7 @@ export function TaskGrid({
                           }}
                           onMouseEnter={() => {
                             if (dragMode.current === 'select') selectCell(r, c, true);
-                            if (dragMode.current === 'fill') setFillTo(r);
+                            if (dragMode.current === 'fill') setFillTo({ r, c });
                           }}
                           onDoubleClick={() => startEdit(r, c)}
                           className={cn(
@@ -1759,7 +1838,7 @@ export function TaskGrid({
                                 column.type === 'time' && 'tabular-nums',
                                 (column.field === 'title' || column.field === 'assigned_staff') && 'font-medium',
                                 selected && 'bg-navy-100/70 dark:bg-navy-800/50',
-                                inFillPreview(r) && 'bg-gold-100/70 dark:bg-gold-900/30'
+                                inFillPreview(r, c) && 'bg-gold-100/70 dark:bg-gold-900/30'
                               )}
                             >
                               {column.type === 'select' && <ChevronDown className="order-last ml-auto h-3 w-3 shrink-0 text-slate-400" />}
@@ -1795,7 +1874,7 @@ export function TaskGrid({
                                 event.stopPropagation();
                                 event.preventDefault();
                                 dragMode.current = 'fill';
-                                setFillTo(r);
+                                setFillTo({ r, c });
                               }}
                               className="absolute -bottom-[3px] -right-[3px] z-[2] h-2.5 w-2.5 cursor-crosshair rounded-[2px] border border-white bg-navy-600 dark:border-slate-900 dark:bg-gold-400"
                             />

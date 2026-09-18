@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Check, Clock, EyeOff, Layers, Loader2, MapPin, Maximize2, Plus, Redo2, Undo2, User } from 'lucide-react';
+import { CalendarDays, Check, Clock, EyeOff, GripVertical, Layers, Loader2, MapPin, Maximize2, Plus, Redo2, Undo2, User } from 'lucide-react';
 import { ContextMenu, type ContextAction } from '../ui/ContextMenu';
 import { inverseGridEntry, type GridHistoryEntry } from '../../lib/gridHistory';
 import { useLanguage } from '../../i18n';
@@ -22,7 +22,17 @@ interface BoardGroup {
   rows: number;
 }
 
-type BoardHistoryEntry = GridHistoryEntry<'title'>;
+/** Where a job sits: which department column, which session, and how far down. */
+type Placement = { id: string; session_id: string | null; department_id: string; sort_order: number };
+
+/**
+ * A move changes none of the text, so the title based history cannot describe
+ * it. Placement is kept as its own kind of entry rather than left out, because
+ * a job dropped on the wrong department is exactly the mistake worth undoing.
+ */
+type BoardHistoryEntry = GridHistoryEntry<'title'> | { kind: 'placement'; patches: Placement[] };
+
+type Cell = { group: string; dept: string; row: number };
 
 interface TaskBoardGridProps {
   eventId: string;
@@ -68,6 +78,13 @@ export function TaskBoardGrid({
   const [cursor, setCursor] = useState<{ group: string; dept: string; row: number } | null>(null);
   const [editing, setEditing] = useState<{ group: string; dept: string; row: number; initial: string | null } | null>(null);
   const [context, setContext] = useState<{ x: number; y: number } | null>(null);
+  /** The far corner of a dragged out selection, always inside the cursor's band */
+  const [focus, setFocus] = useState<Cell | null>(null);
+  const dragMode = useRef<'none' | 'select' | 'fill'>('none');
+  const [fillTo, setFillTo] = useState<Cell | null>(null);
+  /** The job being carried to another column, and the cell under the pointer */
+  const carrying = useRef<EventTask | null>(null);
+  const [dropAt, setDropAt] = useState<Cell | null>(null);
 
   const busy = createTasks.isPending || updateTasks.isPending || deleteTasks.isPending || restoreTasks.isPending;
 
@@ -136,7 +153,7 @@ export function TaskBoardGrid({
     }
   }, [groups, columns]);
 
-  useEffect(() => { setCursor(null); setEditing(null); setContext(null); }, [search, departmentFilter, sessionFilter]);
+  useEffect(() => { setCursor(null); setFocus(null); setEditing(null); setContext(null); }, [search, departmentFilter, sessionFilter]);
 
   // ---------- writing ----------
 
@@ -276,6 +293,26 @@ export function TaskBoardGrid({
     if (!entry) return;
     busyRef.current = true;
     try {
+      // Putting a job back where it was is its own kind of step
+      if (entry.kind === 'placement') {
+        const byId = new Map(tasks.map((task) => [task.id, task]));
+        const back: Placement[] = entry.patches.map((patch) => {
+          const task = byId.get(patch.id);
+          if (!task) throw new Error('Task is no longer available');
+          return {
+            id: task.id,
+            session_id: task.session_id ?? null,
+            department_id: task.department_id,
+            sort_order: task.sort_order
+          };
+        });
+        await updateTasks.mutateAsync(entry.patches);
+        from.current.pop();
+        to.current.push({ kind: 'placement', patches: back });
+        setDepth({ undo: undoStack.current.length, redo: redoStack.current.length });
+        toast(redo ? (lang === 'th' ? 'ทำซ้ำแล้ว' : 'Redone') : t('grid.undone'));
+        return;
+      }
       const values = new Map(tasks.map((task) => [task.id, { title: task.title }]));
       const inverse = inverseGridEntry(entry, values);
       if (entry.kind === 'update') {
@@ -324,6 +361,201 @@ export function TaskBoardGrid({
     setCursor({ group: nextGroup.key, dept: cursor.dept, row: dRow > 0 ? 0 : nextGroup.rows });
   };
 
+  // ---------- selecting a block, filling it, carrying a job elsewhere ----------
+
+  /**
+   * The block the pointer has swept out. A selection never leaves its band:
+   * the bands hold different sessions and different numbers of rows, so a
+   * rectangle across two of them would mean nothing to read and nothing to fill.
+   */
+  const area = (() => {
+    if (!cursor) return null;
+    const far = focus && focus.group === cursor.group ? focus : cursor;
+    const a = flatColumns.indexOf(cursor.dept);
+    const b = flatColumns.indexOf(far.dept);
+    if (a === -1 || b === -1) return null;
+    return {
+      group: cursor.group,
+      top: Math.min(cursor.row, far.row),
+      bottom: Math.max(cursor.row, far.row),
+      left: Math.min(a, b),
+      right: Math.max(a, b)
+    };
+  })();
+
+  const inArea = (groupKey: string, deptId: string, row: number) => {
+    if (!area || area.group !== groupKey) return false;
+    const column = flatColumns.indexOf(deptId);
+    return row >= area.top && row <= area.bottom && column >= area.left && column <= area.right;
+  };
+
+  /** The way a fill is heading: whichever axis the pointer has travelled furthest. */
+  const fillRect = (() => {
+    if (!fillTo || !area || fillTo.group !== area.group) return null;
+    const row = fillTo.row;
+    const column = flatColumns.indexOf(fillTo.dept);
+    if (column === -1) return null;
+    const down = row - area.bottom;
+    const right = column - area.right;
+    if (down <= 0 && right <= 0) return null;
+    if (right > down) return { top: area.top, bottom: area.bottom, left: area.right + 1, right: column };
+    return { top: area.bottom + 1, bottom: row, left: area.left, right: area.right };
+  })();
+
+  const inFillPreview = (groupKey: string, deptId: string, row: number) => {
+    if (!fillRect || !area || area.group !== groupKey) return false;
+    const column = flatColumns.indexOf(deptId);
+    return row >= fillRect.top && row <= fillRect.bottom && column >= fillRect.left && column <= fillRect.right;
+  };
+
+  /**
+   * Write a title into each named cell, creating the job where the slot is
+   * still empty. Everything goes in one round trip so a filled block either
+   * lands or does not, rather than half landing.
+   */
+  const writeCells = async (entries: Array<{ dept: string; row: number; title: string }>, groupKey: string) => {
+    if (!canEdit || busyRef.current || entries.length === 0) return;
+    const updates: Array<{ id: string; title: string }> = [];
+    const before: Array<{ id: string; values: { title: string } }> = [];
+    const inserts: TaskInput[] = [];
+    const orders = new Map<string, number>();
+    for (const entry of entries) {
+      const existing = groupByKey.get(groupKey)?.columns.get(entry.dept) ?? [];
+      const task = existing[entry.row];
+      if (task) {
+        if (task.title === entry.title) continue;
+        updates.push({ id: task.id, title: entry.title });
+        before.push({ id: task.id, values: { title: task.title } });
+      } else {
+        const order = orders.get(entry.dept) ?? nextSortOrder(groupKey, entry.dept);
+        inserts.push(newTask(groupKey, entry.dept, entry.title, order));
+        orders.set(entry.dept, order + 1);
+      }
+    }
+    if (updates.length === 0 && inserts.length === 0) return;
+    busyRef.current = true;
+    try {
+      if (updates.length > 0) {
+        await updateTasks.mutateAsync(updates);
+        pushUndo({ kind: 'update', patches: before });
+      }
+      if (inserts.length > 0) {
+        const created = await createTasks.mutateAsync(inserts);
+        pushUndo({ kind: 'create', ids: created.map((task) => task.id) });
+      }
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    } finally {
+      busyRef.current = false;
+    }
+  };
+
+  /** Every job inside the selected block, read left to right then down. */
+  const areaTasks = (): EventTask[] => {
+    if (!area) return [];
+    const found: EventTask[] = [];
+    for (let row = area.top; row <= area.bottom; row += 1) {
+      for (let column = area.left; column <= area.right; column += 1) {
+        const task = taskAt(area.group, flatColumns[column] ?? '', row);
+        if (task) found.push(task);
+      }
+    }
+    return found;
+  };
+
+  const removeTasks = async (list: EventTask[]) => {
+    if (!canEdit || busyRef.current || list.length === 0) return;
+    busyRef.current = true;
+    try {
+      const ids = list.map((task) => task.id);
+      await deleteTasks.mutateAsync(ids);
+      pushUndo({ kind: 'delete', ids });
+      toast(t('grid.deletedUndoHint'));
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    } finally {
+      busyRef.current = false;
+    }
+  };
+
+  const applyFill = async (to: Cell) => {
+    if (!area || !fillRect || to.group !== area.group) return;
+    const height = area.bottom - area.top + 1;
+    const width = area.right - area.left + 1;
+    const entries: Array<{ dept: string; row: number; title: string }> = [];
+    for (let row = fillRect.top; row <= fillRect.bottom; row += 1) {
+      for (let column = fillRect.left; column <= fillRect.right; column += 1) {
+        const dept = flatColumns[column];
+        if (!dept) continue;
+        // The block repeats, so a pair of jobs fills as a pair over and over
+        const fromRow = area.top + (((row - area.top) % height) + height) % height;
+        const fromColumn = area.left + (((column - area.left) % width) + width) % width;
+        const source = taskAt(area.group, flatColumns[fromColumn] ?? '', fromRow);
+        if (!source || !source.title.trim()) continue;
+        entries.push({ dept, row, title: source.title });
+      }
+    }
+    if (entries.length === 0) return;
+    await writeCells(entries, area.group);
+  };
+
+  /**
+   * Carry a job to another department column or another session. The column it
+   * lands in is renumbered so it sits exactly where it was dropped, and the
+   * placement it came from is kept so the drop can be undone.
+   */
+  const carryTo = async (task: EventTask, target: Cell) => {
+    if (!canEdit || busyRef.current) return;
+    const column = groupByKey.get(target.group)?.columns.get(target.dept) ?? [];
+    const without = column.filter((item) => item.id !== task.id);
+    const at = Math.min(Math.max(target.row, 0), without.length);
+    const ordered = [...without.slice(0, at), task, ...without.slice(at)];
+    const patches: Array<{ id: string; sort_order: number; session_id?: string | null; department_id?: string }> = [];
+    const undo: Placement[] = [];
+    ordered.forEach((item, order) => {
+      const moved = item.id === task.id;
+      const placed = moved && (
+        (task.session_id ?? '') !== target.group || task.department_id !== target.dept
+      );
+      if (item.sort_order === order && !placed) return;
+      undo.push({
+        id: item.id,
+        session_id: item.session_id ?? null,
+        department_id: item.department_id,
+        sort_order: item.sort_order
+      });
+      patches.push({
+        id: item.id,
+        sort_order: order,
+        ...(placed ? { session_id: target.group || null, department_id: target.dept } : {})
+      });
+    });
+    if (patches.length === 0) return;
+    busyRef.current = true;
+    try {
+      await updateTasks.mutateAsync(patches);
+      pushUndo({ kind: 'placement', patches: undo });
+      setCursor({ group: target.group, dept: target.dept, row: at });
+      setFocus(null);
+      toast(t('grid.taskMoved'));
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    } finally {
+      busyRef.current = false;
+    }
+  };
+
+  // A drag that ends anywhere, including outside the table, still settles
+  useEffect(() => {
+    const stop = () => {
+      if (dragMode.current === 'fill' && fillTo) void applyFill(fillTo);
+      dragMode.current = 'none';
+      setFillTo(null);
+    };
+    document.addEventListener('mouseup', stop);
+    return () => document.removeEventListener('mouseup', stop);
+  });
+
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (editing || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || context) return;
     const mod = event.ctrlKey || event.metaKey;
@@ -331,11 +563,25 @@ export function TaskBoardGrid({
     if (mod && key.toLowerCase() === 'z') { event.preventDefault(); void travel(event.shiftKey); return; }
     if (mod && key.toLowerCase() === 'y') { event.preventDefault(); void travel(true); return; }
     if (mod) return;
-    if (key === 'ArrowDown') { event.preventDefault(); move(1, 0); return; }
-    if (key === 'ArrowUp') { event.preventDefault(); move(-1, 0); return; }
-    if (key === 'ArrowLeft') { event.preventDefault(); move(0, -1); return; }
-    if (key === 'ArrowRight' || key === 'Tab') { event.preventDefault(); move(0, event.shiftKey && key === 'Tab' ? -1 : 1); return; }
-    if (key === 'Escape') { event.preventDefault(); setCursor(null); return; }
+    if (event.shiftKey && cursor && (key === 'ArrowDown' || key === 'ArrowUp' || key === 'ArrowLeft' || key === 'ArrowRight')) {
+      event.preventDefault();
+      const from = focus && focus.group === cursor.group ? focus : cursor;
+      const column = flatColumns.indexOf(from.dept);
+      const limit = groups.find((group) => group.key === cursor.group)?.rows ?? 0;
+      if (key === 'ArrowDown' || key === 'ArrowUp') {
+        const row = Math.min(Math.max(from.row + (key === 'ArrowDown' ? 1 : -1), 0), limit);
+        setFocus({ group: cursor.group, dept: from.dept, row });
+      } else {
+        const next = Math.min(Math.max(column + (key === 'ArrowRight' ? 1 : -1), 0), flatColumns.length - 1);
+        setFocus({ group: cursor.group, dept: flatColumns[next], row: from.row });
+      }
+      return;
+    }
+    if (key === 'ArrowDown') { event.preventDefault(); setFocus(null); move(1, 0); return; }
+    if (key === 'ArrowUp') { event.preventDefault(); setFocus(null); move(-1, 0); return; }
+    if (key === 'ArrowLeft') { event.preventDefault(); setFocus(null); move(0, -1); return; }
+    if (key === 'ArrowRight' || key === 'Tab') { event.preventDefault(); setFocus(null); move(0, event.shiftKey && key === 'Tab' ? -1 : 1); return; }
+    if (key === 'Escape') { event.preventDefault(); setCursor(null); setFocus(null); return; }
     if ((key === 'Enter' || key === 'F2') && cursor && canEdit) {
       event.preventDefault();
       setEditing({ ...cursor, initial: null });
@@ -343,8 +589,9 @@ export function TaskBoardGrid({
     }
     if ((key === 'Delete' || key === 'Backspace') && cursor && canEdit) {
       event.preventDefault();
-      const task = taskAt(cursor.group, cursor.dept, cursor.row);
-      if (task) void removeTask(task);
+      const picked = areaTasks();
+      if (picked.length > 1) void removeTasks(picked);
+      else if (picked.length === 1) void removeTask(picked[0]);
       return;
     }
     if (canEdit && cursor && key.length === 1 && !event.altKey) {
@@ -376,11 +623,19 @@ export function TaskBoardGrid({
   };
 
   const onCopy = (event: React.ClipboardEvent) => {
-    if (editing || !cursor) return;
-    const task = taskAt(cursor.group, cursor.dept, cursor.row);
-    if (!task) return;
+    if (editing || !area) return;
+    // A block copies as a block, so it can go straight into a spreadsheet
+    const table: string[][] = [];
+    for (let row = area.top; row <= area.bottom; row += 1) {
+      const line: string[] = [];
+      for (let column = area.left; column <= area.right; column += 1) {
+        line.push(taskAt(area.group, flatColumns[column] ?? '', row)?.title ?? '');
+      }
+      table.push(line);
+    }
+    if (table.every((line) => line.every((value) => !value))) return;
     event.preventDefault();
-    event.clipboardData.setData('text/plain', toClipboardTable([[task.title]]));
+    event.clipboardData.setData('text/plain', toClipboardTable(table));
   };
 
   const commitEdit = async (raw: string, cell: { group: string; dept: string; row: number }, after: 'down' | 'stay') => {
@@ -454,7 +709,7 @@ export function TaskBoardGrid({
         aria-label={t('grid.boardLayout')}
         className="max-h-[72vh] overflow-auto outline-none"
       >
-        <table className="w-full min-w-[720px] border-separate border-spacing-0 text-[13px]">
+        <table className="w-full min-w-[720px] select-none border-separate border-spacing-0 text-[13px]">
           <colgroup>
             {columns.map((dept) => (
               <col key={dept.id} style={{ width: `${100 / columns.length}%` }} />
@@ -545,14 +800,48 @@ export function TaskBoardGrid({
                         const isEditing =
                           editing?.group === group.key && editing.dept === dept.id && editing.row === row;
                         const completed = task?.status === 'completed';
+                        const picked = inArea(group.key, dept.id, row);
+                        const filling = inFillPreview(group.key, dept.id, row);
+                        const isDropTarget =
+                          !!dropAt && dropAt.group === group.key && dropAt.dept === dept.id && dropAt.row === row;
+                        const isFillCorner =
+                          !!area && area.group === group.key && row === area.bottom
+                          && flatColumns.indexOf(dept.id) === area.right;
                         return (
                           <td
                             key={dept.id}
                             data-board-cell={`${group.key || 'general'}|${dept.id}|${row}`}
-                            onMouseDown={() => {
-                              if (isEditing) return;
+                            onMouseDown={(event) => {
+                              if (isEditing || event.button !== 0) return;
                               containerRef.current?.focus();
-                              setCursor({ group: group.key, dept: dept.id, row });
+                              dragMode.current = 'select';
+                              if (event.shiftKey && cursor?.group === group.key) {
+                                setFocus({ group: group.key, dept: dept.id, row });
+                              } else {
+                                setCursor({ group: group.key, dept: dept.id, row });
+                                setFocus(null);
+                              }
+                            }}
+                            onMouseEnter={() => {
+                              if (dragMode.current === 'select' && cursor?.group === group.key) {
+                                setFocus({ group: group.key, dept: dept.id, row });
+                              }
+                              if (dragMode.current === 'fill') setFillTo({ group: group.key, dept: dept.id, row });
+                            }}
+                            onDragOver={(event) => {
+                              if (!canEdit || !carrying.current) return;
+                              event.preventDefault();
+                              event.dataTransfer.dropEffect = 'move';
+                              if (!isDropTarget) setDropAt({ group: group.key, dept: dept.id, row });
+                            }}
+                            onDragLeave={() => { if (isDropTarget) setDropAt(null); }}
+                            onDrop={(event) => {
+                              if (!canEdit) return;
+                              event.preventDefault();
+                              const moved = carrying.current;
+                              carrying.current = null;
+                              setDropAt(null);
+                              if (moved) void carryTo(moved, { group: group.key, dept: dept.id, row });
                             }}
                             onDoubleClick={() => canEdit && setEditing({ group: group.key, dept: dept.id, row, initial: null })}
                             onContextMenu={(event) => {
@@ -564,7 +853,10 @@ export function TaskBoardGrid({
                             className={cn(
                               'group/cell relative border-b border-r border-slate-100 p-0 align-top dark:border-slate-800',
                               here && 'outline outline-2 -outline-offset-2 outline-navy-600 dark:outline-gold-400',
-                              completed && 'bg-emerald-50/60 dark:bg-emerald-950/20'
+                              completed && 'bg-emerald-50/60 dark:bg-emerald-950/20',
+                              picked && !here && 'bg-navy-100/70 dark:bg-navy-800/50',
+                              filling && 'bg-gold-100/70 dark:bg-gold-900/30',
+                              isDropTarget && 'outline-dashed outline-2 -outline-offset-2 outline-navy-500 dark:outline-gold-300'
                             )}
                           >
                             {isEditing ? (
@@ -575,7 +867,25 @@ export function TaskBoardGrid({
                                 onCancel={() => { setEditing(null); containerRef.current?.focus(); }}
                               />
                             ) : task ? (
-                              <div className="flex min-h-[38px] gap-2 px-2.5 py-1.5">
+                              <div className="flex min-h-[38px] gap-1.5 px-2 py-1.5">
+                                {canEdit && (
+                                  <span
+                                    data-board-grip="true"
+                                    title={t('grid.dragToMove')}
+                                    draggable={!busy}
+                                    onDragStart={(event) => {
+                                      // A carry is not a sweep, so the selection stops following the pointer
+                                      dragMode.current = 'none';
+                                      carrying.current = task;
+                                      event.dataTransfer.effectAllowed = 'move';
+                                      event.dataTransfer.setData('text/plain', task.title);
+                                    }}
+                                    onDragEnd={() => { carrying.current = null; setDropAt(null); }}
+                                    className="mt-0.5 flex h-4 w-3 shrink-0 cursor-grab items-center justify-center text-slate-300 opacity-0 transition-opacity active:cursor-grabbing group-hover/cell:opacity-100 dark:text-slate-600"
+                                  >
+                                    <GripVertical className="h-3.5 w-3.5" />
+                                  </span>
+                                )}
                                 <button
                                   type="button"
                                   disabled={!canEdit}
@@ -636,6 +946,19 @@ export function TaskBoardGrid({
                               >
                                 {canEdit && <><Plus className="h-3 w-3" /> {t('grid.typeToAdd')}</>}
                               </div>
+                            )}
+                            {canEdit && isFillCorner && !isEditing && (
+                              <span
+                                data-board-fill="true"
+                                title={t('grid.fillHandle')}
+                                onMouseDown={(event) => {
+                                  event.stopPropagation();
+                                  event.preventDefault();
+                                  dragMode.current = 'fill';
+                                  setFillTo({ group: group.key, dept: dept.id, row });
+                                }}
+                                className="absolute -bottom-[3px] -right-[3px] z-[2] h-2.5 w-2.5 cursor-crosshair rounded-[2px] border border-white bg-navy-600 dark:border-slate-900 dark:bg-gold-400"
+                              />
                             )}
                           </td>
                         );
@@ -711,7 +1034,7 @@ function BoardCellEditor({
         if (event.key === 'Escape') { event.preventDefault(); done.current = true; onCancel(); }
       }}
       onBlur={() => finish('stay')}
-      className="block w-full resize-none border-0 bg-white px-2.5 py-1.5 text-[13px] leading-snug text-slate-800 outline-none ring-2 ring-inset ring-navy-600 dark:bg-slate-900 dark:text-slate-100 dark:ring-gold-400"
+      className="block w-full select-text resize-none border-0 bg-white px-2.5 py-1.5 text-[13px] leading-snug text-slate-800 outline-none ring-2 ring-inset ring-navy-600 dark:bg-slate-900 dark:text-slate-100 dark:ring-gold-400"
     />
   );
 }

@@ -7,3 +7,6 @@ dist
 node_modules/.tmp
 
 supabase/.temp/
+
+# Claude's local test rig, never part of the app
+harness/

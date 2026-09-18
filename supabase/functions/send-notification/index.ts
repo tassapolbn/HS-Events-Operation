@@ -53,6 +53,22 @@ function displayLink(campus: string, type: 'event' | 'request' | 'task' | 'sessi
   return url.toString();
 }
 
+/** Who to ask about an event, on one line, for an email row. */
+function contactLine(contacts: unknown): string {
+  if (!Array.isArray(contacts)) return '-';
+  const people = contacts
+    .filter((item) => item && typeof item === 'object')
+    .map((item) => item as Record<string, unknown>)
+    .map((item) => {
+      const name = String(item.name ?? '').trim();
+      if (!name) return '';
+      const extra = [item.role, item.phone, item.email].map((part) => String(part ?? '').trim()).filter(Boolean);
+      return extra.length > 0 ? `${name} (${extra.join(', ')})` : name;
+    })
+    .filter(Boolean);
+  return people.length > 0 ? people.join('\n') : '-';
+}
+
 function plainText(value: string | null | undefined): string {
   return (value || '').replace(/<br\s*\/?\s*>/gi, '\n').replace(/<\/(p|div|li)>/gi, '\n').replace(/<[^>]*>/g, ' ').trim();
 }
@@ -340,6 +356,7 @@ Deno.serve(async (req: Request) => {
           schedule: { start: task.start_time, due: task.completion_time },
           rows: [
             { label: 'Event / กิจกรรม', value: taskEvent.name },
+            { label: 'Ask / สอบถามได้ที่', value: contactLine(taskEvent.contacts) },
             { label: 'Session', value: taskSession?.title || '-' },
             { label: 'Location', value: task.work_location || taskSession?.location || taskEvent.location || '-' },
             { label: 'Assigned staff', value: task.assigned_staff || '-' },
@@ -368,6 +385,7 @@ Deno.serve(async (req: Request) => {
           campus: sessionEvent.campus,
           rows: [
             { label: 'Session', value: sessionName },
+            { label: 'Ask / สอบถามได้ที่', value: contactLine(sessionEvent.contacts) },
             { label: 'Date / วันที่', value: readableDate(sessionRow.session_date as string) },
             { label: 'Location / สถานที่', value: (sessionRow.location as string) || (sessionEvent.location as string) || '-' },
             { label: 'Session time / เวลา', value: sessionRow.start_time ? `${readableSchedule(sessionRow.start_time as string)}${sessionRow.end_time ? ` - ${readableSchedule(sessionRow.end_time as string)}` : ''}` : '-' },
@@ -418,6 +436,7 @@ Deno.serve(async (req: Request) => {
           campus: event.campus,
           description: plainText(event.description),
           rows: [
+            { label: 'Ask / สอบถามได้ที่', value: contactLine(event.contacts) },
             { label: 'Location', value: event.location || '-' },
             { label: 'Setup start', value: fmtTime(event.setup_start) },
             { label: 'Venue ready', value: fmtTime(event.venue_ready) },

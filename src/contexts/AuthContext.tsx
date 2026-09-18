@@ -10,7 +10,8 @@ interface AuthContextValue {
   /** Events Team or Admin: full edit access */
   isEventsTeam: boolean;
   isAdmin: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  /** Takes a username or an email address; both reach the same account */
+  signIn: (login: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -57,7 +58,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (login: string, password: string) => {
+    const typed = login.trim();
+    // Supabase identifies an account by its email, so a username is turned into
+    // one first. Staff without a school mailbox can then sign in with a name
+    // they can actually remember.
+    let email = typed;
+    if (!typed.includes('@')) {
+      const { data, error: lookupError } = await supabase.rpc('public_email_for_username', { p_username: typed });
+      if (lookupError || !data) return { error: 'invalid' };
+      email = data as string;
+    }
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error ? error.message : null };
   };

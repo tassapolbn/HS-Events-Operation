@@ -27,6 +27,7 @@ import { NotifyModal } from '../components/events/NotifyModal';
 import { SaveTemplateModal } from '../components/events/SaveTemplateModal';
 import { SessionFormModal } from '../components/events/SessionFormModal';
 import { HiddenSessionBadge, SessionControls } from '../components/events/SessionControls';
+import { EventContacts } from '../components/events/EventContacts';
 import { SessionNotifyModal, unsentTasks } from '../components/events/SessionNotifyModal';
 import { SessionImportModal } from '../components/events/SessionImportModal';
 import { AuditHistory } from '../components/events/AuditHistory';
@@ -384,6 +385,8 @@ export function EventDetailPage() {
                 {t(`categories.${event.category}` as never)}
               </Badge>
             </div>
+            {/* Who to ask, right under the name of the thing being asked about */}
+            <EventContacts contacts={event.contacts} className="mt-1.5" />
           </div>
           <div className="flex items-center gap-1.5">
             <EventStatusBadge status={event.status} />
@@ -608,7 +611,7 @@ export function EventDetailPage() {
               ? event.event_tasks.filter((task) => task.session_id === sessionModal.session?.id)
               : []
           }
-          nextSortOrder={sessions.length}
+          sessions={sessions}
         />
       )}
       {importOpen && (
@@ -617,7 +620,7 @@ export function EventDetailPage() {
           onClose={() => setImportOpen(false)}
           eventId={event.id}
           eventDate={event.event_date}
-          nextSortOrder={sessions.length}
+          sessions={sessions}
         />
       )}
       {notifyOpen && (

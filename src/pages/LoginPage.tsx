@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../i18n';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { supabase } from '../lib/supabase';
 
 /**
  * Physics-led entrance: elements settle in sequence so the eye is guided
@@ -23,6 +24,11 @@ export function LoginPage() {
   const { t, lang, setLang } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  /** The reset panel, opened from under the form */
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetLogin, setResetLogin] = useState('');
+  const [resetSent, setResetSent] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -74,14 +80,18 @@ export function LoginPage() {
           <p className="mt-1.5 text-sm leading-relaxed text-slate-500 dark:text-slate-400">{t('auth.signInSubtitle')}</p>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
+            {/* A username or an email: not everyone here has a school mailbox,
+                and an address is a poor thing to ask someone to memorise. */}
             <Input
-              label={t('auth.email')}
-              type="email"
+              label={t('auth.loginId')}
+              type="text"
               required
-              autoComplete="email"
+              autoComplete="username"
+              autoCapitalize="none"
+              spellCheck={false}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="name@headstartphuket.com"
+              placeholder={t('auth.loginIdPlaceholder')}
             />
             <Input
               label={t('auth.password')}
@@ -103,6 +113,75 @@ export function LoginPage() {
               {submitting ? t('auth.signingIn') : t('auth.signIn')}
             </Button>
           </form>
+
+          {/* Forgetting a password should not mean finding whoever set the account up */}
+          <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
+            {resetOpen ? (
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{t('auth.resetTitle')}</p>
+                {resetSent ? (
+                  <p
+                    role="status"
+                    className="rounded-xl border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-sm leading-relaxed text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300"
+                  >
+                    {t('auth.resetSent')}
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('auth.resetHint')}</p>
+                    <Input
+                      label={t('auth.loginId')}
+                      type="text"
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      value={resetLogin}
+                      onChange={(e) => setResetLogin(e.target.value)}
+                      placeholder={t('auth.loginIdPlaceholder')}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      loading={resetBusy}
+                      disabled={!resetLogin.trim()}
+                      onClick={async () => {
+                        setResetBusy(true);
+                        // The reply is the same whatever happens, so this never
+                        // tells anyone whether an account exists
+                        try {
+                          await supabase.functions.invoke('request-password-reset', {
+                            body: { login: resetLogin.trim() }
+                          });
+                        } catch {
+                          // deliberately ignored, see above
+                        }
+                        setResetBusy(false);
+                        setResetSent(true);
+                      }}
+                    >
+                      {t('auth.resetSend')}
+                    </Button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => { setResetOpen(false); setResetSent(false); setResetLogin(''); }}
+                  className="w-full text-center text-xs font-semibold text-slate-500 hover:text-navy-700 dark:text-slate-400 dark:hover:text-gold-300"
+                >
+                  {t('auth.backToSignIn')}
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => { setResetOpen(true); setResetLogin(email.trim()); }}
+                className="w-full text-center text-sm font-semibold text-navy-700 hover:underline dark:text-gold-300"
+              >
+                {t('auth.forgotPassword')}
+              </button>
+            )}
+          </div>
 
           <p className="mt-4 text-center text-xs leading-relaxed text-slate-400 dark:text-slate-500">
             {t('auth.noAccount')}

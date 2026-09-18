@@ -1,5 +1,6 @@
 import { blockIsDone, blockIsOverdue, inScope, outstandingTasks, type BoardScope } from '../../lib/boardScope';
 import { BoardEditableText } from './BoardEditableText';
+import { EventContacts } from '../events/EventContacts';
 import { sessionTimeline } from '../../lib/sessionTimeline';
 import { FloorPlanPreview } from './FloorPlanPreview';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -585,6 +586,8 @@ export function EventsBoard({
               <TriangleAlert className="h-3.5 w-3.5" /> {openWork} {t('display.overdue')}
             </span>
           )}
+          {/* Who to ask, beside the name of the thing being asked about */}
+          <EventContacts contacts={evt.contacts} tone="onDark" className="basis-full" />
           <span className="ml-auto flex items-center gap-2">
             {editMode && <button type="button" onClick={() => onEditEvent?.(evt)} aria-label={`${t('events.editEvent')}: ${evt.name}`} className="rounded-lg bg-white/20 p-2 hover:bg-white/30"><Pencil className="h-4 w-4" /></button>}
             {/* The plan opens straight on the board, without leaving this view */}
@@ -857,6 +860,7 @@ export function EventsBoard({
                   >
                     <CalendarDays className="h-4 w-4" /> {formatDate(event.event_date, lang, 'EEE d MMM yyyy')}
                   </span>
+                  <EventContacts contacts={event.contacts} tone="onDark" className="basis-full" />
                   {openWork > 0 && (
                     <span
                       title={t('display.overdueHint')}
