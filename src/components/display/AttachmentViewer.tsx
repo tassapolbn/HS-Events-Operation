@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, ExternalLink, Maximize2, Minus, Plus, X } from 'lucide-react';
-import { getSignedUrl } from '../../hooks/useAttachments';
+import { forgetSignedUrl, getCachedSignedUrl } from '../../hooks/useAttachments';
 import { useLanguage } from '../../i18n';
 import { cn } from '../../lib/utils';
 import type { DisplayAttachment } from '../../types';
@@ -83,8 +83,13 @@ export function AttachmentViewer() {
     pinchFrom.current = null;
   }, [file?.id, resetView]);
 
-  // Fetch a fresh signed link for the file being shown
+  // The same cached link as the thumbnail, so an opened photo usually comes
+  // straight from the browser's cache instead of being downloaded again
+  const shownPath = useRef<string | null>(null);
+  const retriedPath = useRef<string | null>(null);
   useEffect(() => {
+    shownPath.current = file?.storage_path ?? null;
+    retriedPath.current = null;
     if (!file) {
       setUrl(null);
       setFailed(false);
@@ -93,7 +98,7 @@ export function AttachmentViewer() {
     let alive = true;
     setUrl(null);
     setFailed(false);
-    getSignedUrl(file.storage_path)
+    getCachedSignedUrl(file.storage_path)
       .then((signed) => {
         if (alive) setUrl(signed);
       })
@@ -104,6 +109,25 @@ export function AttachmentViewer() {
       alive = false;
     };
   }, [file?.id, file?.storage_path, file]);
+
+  // A cached link that stopped working is replaced once before giving up
+  const onImageError = useCallback(() => {
+    const path = shownPath.current;
+    if (!path) return;
+    if (retriedPath.current === path) {
+      setFailed(true);
+      return;
+    }
+    retriedPath.current = path;
+    forgetSignedUrl(path);
+    getCachedSignedUrl(path)
+      .then((signed) => {
+        if (shownPath.current === path) setUrl(signed);
+      })
+      .catch(() => {
+        if (shownPath.current === path) setFailed(true);
+      });
+  }, []);
 
   // Keyboard: escape closes, arrows page through, plus and minus zoom
   useEffect(() => {
@@ -286,6 +310,7 @@ export function AttachmentViewer() {
             src={url}
             alt={file.file_name}
             draggable={false}
+            onError={onImageError}
             onDoubleClick={() => (zoom > 1 ? resetView() : setZoom(2))}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}

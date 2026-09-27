@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { randomId } from '../lib/utils';
+import { createSignedUrlCache } from '../lib/signedUrlCache';
 import type { Attachment, EntityType } from '../types';
+
+/**
+ * How long browsers may keep an uploaded file. Every upload gets a path of its
+ * own and is never overwritten, so a picture never changes behind its address.
+ */
+export const ATTACHMENT_CACHE_CONTROL = '31536000';
 
 export function useAttachments(entityType: EntityType, entityId: string | undefined) {
   return useQuery({
@@ -61,7 +68,7 @@ export function useAttachmentMutations(entityType: EntityType, entityId: string 
       const safeName = file.name.replace(/[^\w.\-() ]+/g, '_');
       const path = `${entityType}/${entityId}/${randomId()}-${safeName}`;
       const { error: storageError } = await supabase.storage.from('attachments').upload(path, file, {
-        cacheControl: '3600',
+        cacheControl: ATTACHMENT_CACHE_CONTROL,
         upsert: false
       });
       if (storageError) throw storageError;
@@ -99,6 +106,42 @@ export async function getSignedUrl(storagePath: string, expiresIn = 3600): Promi
   const { data, error } = await supabase.storage.from('attachments').createSignedUrl(storagePath, expiresIn);
   if (error || !data) throw error ?? new Error('Could not create signed URL');
   return data.signedUrl;
+}
+
+function browserStorage(): Storage | null {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+// One link per file, reused for most of a week (see lib/signedUrlCache)
+const signedUrls = createSignedUrlCache({ sign: getSignedUrl, storage: browserStorage() });
+
+/** A signed link that stays the same for days, so browsers keep the picture they already have. */
+export function getCachedSignedUrl(storagePath: string): Promise<string> {
+  return signedUrls.get(storagePath);
+}
+
+/** Drop a link that stopped working, so the next request signs a new one. */
+export function forgetSignedUrl(storagePath: string): void {
+  signedUrls.forget(storagePath);
+}
+
+/**
+ * A cached signed link for showing a photo or floor plan. The link lasts a
+ * week; the hourly check costs nothing until less than a day is left, and only
+ * then asks Supabase for a new one.
+ */
+export function useSignedUrl(storagePath: string) {
+  return useQuery({
+    queryKey: ['signed-url', storagePath],
+    queryFn: () => getCachedSignedUrl(storagePath),
+    staleTime: 60 * 60_000,
+    refetchInterval: 60 * 60_000,
+    refetchOnWindowFocus: false
+  });
 }
 
 export async function downloadAttachment(attachment: Attachment): Promise<void> {

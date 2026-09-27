@@ -1,20 +1,19 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { Map, Maximize2, RefreshCw } from 'lucide-react';
-import { getSignedUrl } from '../../hooks/useAttachments';
+import { forgetSignedUrl, useSignedUrl } from '../../hooks/useAttachments';
 import { useLanguage } from '../../i18n';
 import { showAttachment } from './AttachmentViewer';
 import type { DisplayAttachment } from '../../types';
 
-/** Cached, renewable URLs keep unattended boards working beyond one hour. */
+/**
+ * The link lasts a week and is renewed only near its end, so an unattended
+ * board keeps working and the browser keeps the plan it already downloaded.
+ */
 export function FloorPlanPreview({ file, label }: { file: DisplayAttachment; label?: string }) {
   const { t, lang } = useLanguage();
-  const url = useQuery({
-    queryKey: ['floor-plan-url', file.storage_path],
-    queryFn: () => getSignedUrl(file.storage_path),
-    staleTime: 45 * 60_000,
-    refetchInterval: 45 * 60_000,
-    refetchIntervalInBackground: true
-  });
+  const url = useSignedUrl(file.storage_path);
+  // A link that stopped working is replaced once before the plan reports it
+  const [retried, setRetried] = useState(false);
   return (
     <figure className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900" data-floor-plan={file.id}>
       <figcaption className="flex items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 dark:border-slate-700 dark:bg-slate-800">
@@ -37,7 +36,7 @@ export function FloorPlanPreview({ file, label }: { file: DisplayAttachment; lab
         <iframe title={`${label || t('display.floorPlan')}: ${file.file_name}`} src={`${url.data}#view=FitH`} className="h-[420px] w-full border-0 bg-white" />
       ) : (
         <button type="button" className="block w-full bg-white p-2 focus-visible:ring-2 focus-visible:ring-teal-500" onClick={() => showAttachment(file)} aria-label={t('display.viewFloorPlan')}>
-          <img src={url.data} alt={`${label || t('display.floorPlan')}: ${file.file_name}`} className="max-h-[480px] min-h-40 w-full object-contain" onError={(event) => { event.currentTarget.alt = lang === 'th' ? 'ไม่สามารถแสดงภาพแผนผังได้ กดเพื่อเปิดไฟล์' : 'Floor plan image unavailable. Select to open file.'; }} />
+          <img src={url.data} alt={`${label || t('display.floorPlan')}: ${file.file_name}`} className="max-h-[480px] min-h-40 w-full object-contain" onLoad={() => { if (retried) setRetried(false); }} onError={(event) => { if (!retried) { setRetried(true); forgetSignedUrl(file.storage_path); void url.refetch(); return; } event.currentTarget.alt = lang === 'th' ? 'ไม่สามารถแสดงภาพแผนผังได้ กดเพื่อเปิดไฟล์' : 'Floor plan image unavailable. Select to open file.'; }} />
         </button>
       )}
     </figure>

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useDeferredValue, useEffect, useMemo, useState, type ComponentType } from 'react';
 import { CalendarDays, Inbox } from 'lucide-react';
 import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../hooks/usePublicDisplay';
+import { useDisplayLiveUpdates } from '../hooks/useDisplayLiveUpdates';
 import { DisplayShell, type DisplayScale, type DisplayTab } from '../components/display/DisplayShell';
 import { EventsBoard } from '../components/display/EventsBoard';
 import { RequestsBoard } from '../components/display/RequestsBoard';
@@ -116,6 +117,17 @@ export function DisplayBoardPage({
     };
   }, [scale]);
 
+  // Reload only when the Events team changes something, never on a timer
+  const live = useDisplayLiveUpdates(campus);
+
+  // Re-read the clock every 30 seconds so the Active / Done counts follow the
+  // time of day even when no new data arrives.
+  const [, setClockTick] = useState(0);
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockTick((tick) => tick + 1), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const { data: departments } = useDisplayDepartments();
   const rawEventsQuery = useDisplayEvents(campus, eventId);
   const rawRequestsQuery = useDisplayRequests(campus);
@@ -199,6 +211,7 @@ export function DisplayBoardPage({
       }}
       refreshing={active.isFetching}
       updatedAt={active.dataUpdatedAt ? new Date(active.dataUpdatedAt) : null}
+      live={live}
       canEdit={canEdit}
       campusName={campus ? CAMPUS_NAMES[campus] : undefined}
     >

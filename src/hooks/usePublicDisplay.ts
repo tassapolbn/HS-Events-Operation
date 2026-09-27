@@ -2,7 +2,16 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import type { Campus, DisplayDepartment, DisplayEvent, DisplayRequest, TaskStatus } from '../types';
 
-const REFRESH_MS = 30_000;
+/**
+ * The board no longer polls. useDisplayLiveUpdates reloads these queries when
+ * the database reports a change, and once an hour as a safety net, so they are
+ * never fetched again just because time passed or the window was clicked.
+ */
+const LIVE_QUERY = {
+  staleTime: 60 * 60_000,
+  refetchOnWindowFocus: false,
+  refetchOnReconnect: false
+} as const;
 
 export function useDisplayDepartments() {
   return useQuery({
@@ -34,8 +43,7 @@ function eventLastDate(event: DisplayEvent): string {
 export function useDisplayEvents(campus?: Campus, focusEventId = '') {
   return useQuery({
     queryKey: ['display', 'events', campus ?? 'all', focusEventId],
-    refetchInterval: REFRESH_MS,
-    refetchIntervalInBackground: true,
+    ...LIVE_QUERY,
     queryFn: async (): Promise<DisplayEvent[]> => {
       const { data, error } = await supabase.rpc('public_display_events', campus ? { p_campus: campus } : {});
       if (error) throw error;
@@ -51,8 +59,7 @@ export function useDisplayEvents(campus?: Campus, focusEventId = '') {
 export function useDisplayRequests(campus?: Campus) {
   return useQuery({
     queryKey: ['display', 'requests', campus ?? 'all'],
-    refetchInterval: REFRESH_MS,
-    refetchIntervalInBackground: true,
+    ...LIVE_QUERY,
     queryFn: async (): Promise<DisplayRequest[]> => {
       const { data, error } = await supabase.rpc('public_display_requests', campus ? { p_campus: campus } : {});
       if (error) throw error;

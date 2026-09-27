@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { ImageOff } from 'lucide-react';
-import { getSignedUrl } from '../../hooks/useAttachments';
+import { forgetSignedUrl, useSignedUrl } from '../../hooks/useAttachments';
 import { useLanguage } from '../../i18n';
 import { showAttachment } from './AttachmentViewer';
 import { cn } from '../../lib/utils';
@@ -15,7 +15,8 @@ export function isImage(file: { mime_type: string }): boolean {
  * "Carry the red table in the atrium" is a guess until someone sees the table,
  * so the picture belongs where the instruction is, not one tap away behind it.
  *
- * The bucket is private, so the link is signed and renewed well inside its hour.
+ * The bucket is private, so the link is signed. The same link is reused for
+ * days, so the browser downloads each picture once instead of at every renewal.
  */
 function Thumb({ file, siblings, size, onOpen }: {
   file: DisplayAttachment;
@@ -24,16 +25,12 @@ function Thumb({ file, siblings, size, onOpen }: {
   onOpen?: (file: DisplayAttachment) => void;
 }) {
   const { lang } = useLanguage();
-  const url = useQuery({
-    queryKey: ['task-photo-url', file.storage_path],
-    queryFn: () => getSignedUrl(file.storage_path),
-    staleTime: 45 * 60_000,
-    refetchInterval: 45 * 60_000,
-    refetchIntervalInBackground: true
-  });
+  const url = useSignedUrl(file.storage_path);
+  // A link that stopped working is replaced once; after that the tile says so
+  const [failures, setFailures] = useState(0);
   const box = size === 'sm' ? 'h-20 w-28' : 'h-32 w-44';
 
-  if (url.isError) {
+  if (url.isError || failures > 1) {
     return (
       <span
         className={cn('flex shrink-0 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-slate-50 text-[11px] text-slate-400 dark:border-slate-700 dark:bg-slate-800', box)}
@@ -62,7 +59,22 @@ function Thumb({ file, siblings, size, onOpen }: {
         box
       )}
     >
-      <img src={url.data} alt={file.file_name} loading="lazy" className="h-full w-full object-cover" />
+      <img
+        src={url.data}
+        alt={file.file_name}
+        loading="lazy"
+        className="h-full w-full object-cover"
+        onLoad={() => {
+          if (failures) setFailures(0);
+        }}
+        onError={() => {
+          if (failures === 0) {
+            forgetSignedUrl(file.storage_path);
+            void url.refetch();
+          }
+          setFailures((count) => count + 1);
+        }}
+      />
     </button>
   );
 }

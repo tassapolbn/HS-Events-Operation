@@ -17,7 +17,7 @@ import { RichTextEditor } from '../components/editor/RichTextEditor';
 import { Spinner } from '../components/ui/Spinner';
 import { CAMPUSES, CAMPUS_NAMES, PRIORITIES, REQUEST_STATUSES } from '../lib/constants';
 import { supabase } from '../lib/supabase';
-import { getSignedUrl } from '../hooks/useAttachments';
+import { ATTACHMENT_CACHE_CONTROL, getSignedUrl } from '../hooks/useAttachments';
 import { MAX_FILE_SIZE, randomId } from '../lib/utils';
 import type { Attachment, Campus, Priority, TaskStatus } from '../types';
 
@@ -163,7 +163,10 @@ export function RequestFormPage() {
     for (const photo of pendingPhotos) {
       const safeName = photo.file.name.replace(/[^\w.\-() ]+/g, '_');
       const path = `request/${requestId}/${randomId()}-${safeName}`;
-      const { error: storageError } = await supabase.storage.from('attachments').upload(path, photo.file);
+      const { error: storageError } = await supabase.storage.from('attachments').upload(path, photo.file, {
+        cacheControl: ATTACHMENT_CACHE_CONTROL,
+        upsert: false
+      });
       if (storageError) throw storageError;
       const { error: rowError } = await supabase.from('attachments').insert({
         entity_type: 'request',

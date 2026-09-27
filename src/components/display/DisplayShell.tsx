@@ -4,6 +4,7 @@ import { useLanguage } from '../../i18n';
 import { departmentIcon } from '../../lib/constants';
 import { cn } from '../../lib/utils';
 import type { DisplayDepartment } from '../../types';
+import type { LiveStatus } from '../../lib/displayLive';
 
 export type DisplayTab = 'events' | 'requests';
 export type DisplayScale = 'small' | 'medium' | 'large' | 'xlarge';
@@ -19,6 +20,8 @@ interface DisplayShellProps {
   onRefresh: () => void;
   refreshing?: boolean;
   updatedAt?: Date | null;
+  /** Whether the board is receiving changes as they happen */
+  live?: LiveStatus;
   canEdit?: boolean;
   campusName?: string;
   search: string;
@@ -26,7 +29,7 @@ interface DisplayShellProps {
   children: ReactNode;
 }
 
-export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departments, selectedDepartmentId, onSelectDepartment, onRefresh, refreshing, updatedAt, campusName, search, onSearch, children }: DisplayShellProps) {
+export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departments, selectedDepartmentId, onSelectDepartment, onRefresh, refreshing, updatedAt, live, campusName, search, onSearch, children }: DisplayShellProps) {
   const { t, lang, setLang, deptName } = useLanguage();
   const [now, setNow] = useState(new Date());
   const [settings, setSettings] = useState(false);
@@ -67,7 +70,7 @@ export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departmen
       </div>
     </div>
     <main className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><p>{th ? 'เลือกแผนกเพื่อดูงานของทีม · แตะงานเพื่อดูรายละเอียด' : 'Choose your department · Open a job for details'}</p><span>{updatedAt ? `${t('display.updated')} ${updatedAt.toLocaleTimeString(th ? 'th-TH' : 'en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})}` : ''}</span></div>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><p>{th ? 'เลือกแผนกเพื่อดูงานของทีม · แตะงานเพื่อดูรายละเอียด' : 'Choose your department · Open a job for details'}</p><span className="flex items-center gap-3">{live && <span title={th ? 'บอร์ดจะอัปเดตเองทันทีเมื่อทีม Events แก้ไขงาน' : 'The board updates by itself as soon as the Events team makes a change'} className={cn('inline-flex items-center gap-1.5 font-semibold', live === 'live' ? 'text-emerald-700' : live === 'offline' ? 'text-amber-800' : 'text-slate-500')}><span aria-hidden className={cn('h-2 w-2 rounded-full', live === 'live' ? 'bg-emerald-500' : live === 'offline' ? 'bg-amber-500' : 'bg-slate-400')} />{live === 'live' ? (th ? 'อัปเดตสด' : 'Live') : live === 'offline' ? (th ? 'กำลังเชื่อมต่อใหม่…' : 'Reconnecting…') : (th ? 'กำลังเชื่อมต่อ…' : 'Connecting…')}</span>}<span>{updatedAt ? `${t('display.updated')} ${updatedAt.toLocaleTimeString(th ? 'th-TH' : 'en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})}` : ''}</span></span></div>
       {children}
     </main>
   </div>;
