@@ -4,6 +4,7 @@ import { useDeferredValue, useEffect, useMemo, useState, type ComponentType } fr
 import { CalendarDays, Inbox } from 'lucide-react';
 import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../hooks/usePublicDisplay';
 import { useDisplayLiveUpdates } from '../hooks/useDisplayLiveUpdates';
+import { useAutoUpdate } from '../hooks/useAutoUpdate';
 import { DisplayShell, type DisplayScale, type DisplayTab } from '../components/display/DisplayShell';
 import { EventsBoard } from '../components/display/EventsBoard';
 import { RequestsBoard } from '../components/display/RequestsBoard';
@@ -119,6 +120,9 @@ export function DisplayBoardPage({
 
   // Reload only when the Events team changes something, never on a timer
   const live = useDisplayLiveUpdates(campus);
+
+  // Pick up new releases by itself, but never while someone is editing or searching
+  useAutoUpdate(editing !== null || search.trim() !== '');
 
   // Re-read the clock every 30 seconds so the Active / Done counts follow the
   // time of day even when no new data arrives.

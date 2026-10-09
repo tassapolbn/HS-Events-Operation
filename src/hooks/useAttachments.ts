@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { randomId } from '../lib/utils';
 import { createSignedUrlCache } from '../lib/signedUrlCache';
+import { shrinkImage } from '../lib/imageShrink';
 import type { Attachment, EntityType } from '../types';
 
 /**
@@ -64,7 +65,9 @@ export function useAttachmentMutations(entityType: EntityType, entityId: string 
   };
 
   const upload = useMutation({
-    mutationFn: async ({ file, userId }: { file: File; userId: string }) => {
+    mutationFn: async ({ file: original, userId }: { file: File; userId: string }) => {
+      // Big photos are shrunk first: smaller to store, and to download on every board
+      const file = await shrinkImage(original);
       const safeName = file.name.replace(/[^\w.\-() ]+/g, '_');
       const path = `${entityType}/${entityId}/${randomId()}-${safeName}`;
       const { error: storageError } = await supabase.storage.from('attachments').upload(path, file, {

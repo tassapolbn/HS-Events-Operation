@@ -40,14 +40,27 @@ function eventLastDate(event: DisplayEvent): string {
   return last;
 }
 
+/**
+ * Reads a board feed. The feeds are public_board_events and
+ * public_board_requests; the old names now answer only with a "please refresh"
+ * card, which board pages opened before this release show until someone
+ * reloads them. Until that database change has run the new names do not exist
+ * yet (PGRST202), so fall back to the old ones.
+ */
+async function readBoardFeed(board: 'events' | 'requests', campus?: Campus): Promise<unknown[]> {
+  const args = campus ? { p_campus: campus } : {};
+  const first = await supabase.rpc(`public_board_${board}`, args);
+  const { data, error } = first.error?.code === 'PGRST202' ? await supabase.rpc(`public_display_${board}`, args) : first;
+  if (error) throw error;
+  return (data ?? []) as unknown[];
+}
+
 export function useDisplayEvents(campus?: Campus, focusEventId = '') {
   return useQuery({
     queryKey: ['display', 'events', campus ?? 'all', focusEventId],
     ...LIVE_QUERY,
     queryFn: async (): Promise<DisplayEvent[]> => {
-      const { data, error } = await supabase.rpc('public_display_events', campus ? { p_campus: campus } : {});
-      if (error) throw error;
-      const events = (data ?? []) as DisplayEvent[];
+      const events = (await readBoardFeed('events', campus)) as DisplayEvent[];
       // Drop events once their last scheduled day has passed, so the board
       // only shows today's and upcoming events.
       const today = localToday();
@@ -60,11 +73,7 @@ export function useDisplayRequests(campus?: Campus) {
   return useQuery({
     queryKey: ['display', 'requests', campus ?? 'all'],
     ...LIVE_QUERY,
-    queryFn: async (): Promise<DisplayRequest[]> => {
-      const { data, error } = await supabase.rpc('public_display_requests', campus ? { p_campus: campus } : {});
-      if (error) throw error;
-      return (data ?? []) as DisplayRequest[];
-    }
+    queryFn: async (): Promise<DisplayRequest[]> => (await readBoardFeed('requests', campus)) as DisplayRequest[]
   });
 }
 

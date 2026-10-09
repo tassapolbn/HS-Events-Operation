@@ -19,6 +19,7 @@ import { CAMPUSES, CAMPUS_NAMES, PRIORITIES, REQUEST_STATUSES } from '../lib/con
 import { supabase } from '../lib/supabase';
 import { ATTACHMENT_CACHE_CONTROL, getSignedUrl } from '../hooks/useAttachments';
 import { MAX_FILE_SIZE, randomId } from '../lib/utils';
+import { shrinkImage } from '../lib/imageShrink';
 import type { Attachment, Campus, Priority, TaskStatus } from '../types';
 
 interface RequestFormValues {
@@ -161,9 +162,10 @@ export function RequestFormPage() {
 
   const uploadPendingPhotos = async (requestId: string) => {
     for (const photo of pendingPhotos) {
-      const safeName = photo.file.name.replace(/[^\w.\-() ]+/g, '_');
+      const file = await shrinkImage(photo.file);
+      const safeName = file.name.replace(/[^\w.\-() ]+/g, '_');
       const path = `request/${requestId}/${randomId()}-${safeName}`;
-      const { error: storageError } = await supabase.storage.from('attachments').upload(path, photo.file, {
+      const { error: storageError } = await supabase.storage.from('attachments').upload(path, file, {
         cacheControl: ATTACHMENT_CACHE_CONTROL,
         upsert: false
       });
@@ -171,10 +173,10 @@ export function RequestFormPage() {
       const { error: rowError } = await supabase.from('attachments').insert({
         entity_type: 'request',
         entity_id: requestId,
-        file_name: photo.file.name,
+        file_name: file.name,
         storage_path: path,
-        mime_type: photo.file.type,
-        size_bytes: photo.file.size,
+        mime_type: file.type,
+        size_bytes: file.size,
         uploaded_by: profile?.id ?? null
       });
       if (rowError) throw rowError;

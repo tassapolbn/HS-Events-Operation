@@ -1,8 +1,26 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 
+// Netlify names each build after its commit (COMMIT_REF); local builds get a timestamp
+const buildEnv = (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
+const BUILD_ID = buildEnv.COMMIT_REF || `local-${Date.now().toString(36)}`;
+
+/** Writes version.json, which open display boards check to notice a new release */
+function versionFile(): Plugin {
+  return {
+    name: 'version-file',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD_ID }) });
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), versionFile()],
+  define: {
+    __BUILD_ID__: JSON.stringify(BUILD_ID)
+  },
   build: {
     target: 'es2020',
     chunkSizeWarningLimit: 1200,
