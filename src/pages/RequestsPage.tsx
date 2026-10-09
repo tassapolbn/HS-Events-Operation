@@ -19,7 +19,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { ArchiveItemButton, ArchiveSweep, useArchiveFeedback } from '../components/archive/ArchiveControls';
 import { PRIORITIES, REQUEST_STATUSES, departmentIcon } from '../lib/constants';
-import { requestArchiveReason, schoolToday } from '../lib/archive';
+import { hasArchiveColumns, requestArchiveReason, schoolToday } from '../lib/archive';
 
 export function RequestsPage() {
   const { t, deptName, lang } = useLanguage();
@@ -59,8 +59,9 @@ export function RequestsPage() {
 
   // Completed, cancelled or past requests in the list as currently filtered can move to the Archive
   const today = schoolToday();
+  // No Archive buttons until the database has the archive columns (migration run)
   const archivable = useMemo(
-    () => (requests ?? []).flatMap((request) => {
+    () => (hasArchiveColumns(requests) ? requests ?? [] : []).flatMap((request) => {
       const reason = requestArchiveReason(request, today);
       return reason ? [{ id: request.id, label: request.title, reason }] : [];
     }),

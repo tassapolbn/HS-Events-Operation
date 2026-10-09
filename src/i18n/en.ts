@@ -632,7 +632,8 @@ export const en = {
     archiveConfirmTitle: 'Archive "{name}"?',
     eventBanner: 'This event is in the Archive. It no longer shows in the Events list or on the display board.',
     requestBanner: 'This request is in the Archive. It no longer shows in the Requests list or on the display board.',
-    openArchive: 'Open Archive'
+    openArchive: 'Open Archive',
+    needsSetup: 'The Archive needs a one-time database update before it can be used: run supabase/migrations/20261009090000_archive_folder.sql in Supabase. Everything else works as usual.'
   },
   errors: {
     notFound: 'Page not found',

@@ -19,7 +19,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useArchiveFeedback, type ResultKey } from '../components/archive/ArchiveControls';
 import { departmentIcon } from '../lib/constants';
-import { eventLastDay, restoreStatus } from '../lib/archive';
+import { eventLastDay, isArchiveSchemaMissing, restoreStatus } from '../lib/archive';
 import { scheduleLabel } from '../lib/requestSchedule';
 import { cn, fillTemplate, formatDate } from '../lib/utils';
 import type { Department } from '../types';
@@ -210,6 +210,10 @@ export function ArchivePage() {
 
       {active.isLoading ? (
         <Spinner />
+      ) : active.error && isArchiveSchemaMissing(active.error as { code?: string; message?: string; details?: string }) ? (
+        <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          {t('archive.needsSetup')}
+        </p>
       ) : active.error ? (
         <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
           {t('errors.loadFailed')}

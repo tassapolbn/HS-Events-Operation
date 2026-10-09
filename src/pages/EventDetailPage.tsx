@@ -165,7 +165,7 @@ export function EventDetailPage() {
   };
 
   const isArchived = event.status === 'archived';
-  const canArchive = isEventsTeam && !!eventArchiveReason(event);
+  const canArchive = isEventsTeam && 'archived_at' in event && !!eventArchiveReason(event);
 
   /** Back to the status it had before, or completed when that is not known */
   const handleRestore = async () => {

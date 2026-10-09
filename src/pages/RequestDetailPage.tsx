@@ -68,7 +68,7 @@ export function RequestDetailPage() {
   };
 
   const isArchived = !!request.archived_at;
-  const canArchive = isEventsTeam && !!requestArchiveReason(request);
+  const canArchive = isEventsTeam && 'archived_at' in request && !!requestArchiveReason(request);
 
   const handleRestore = async () => {
     try {

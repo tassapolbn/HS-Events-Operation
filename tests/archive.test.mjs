@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   schoolDay, schoolToday, eventLastDay, eventArchiveReason, requestLastDay, requestArchiveReason,
-  restoreStatus, groupByRestoreStatus
+  restoreStatus, groupByRestoreStatus, isArchiveSchemaMissing, hasArchiveColumns
 } from '../src/lib/archive.ts';
 
 test('school days follow Bangkok, not UTC or the device', () => {
@@ -71,4 +71,19 @@ test('restored events go back to the status they had, or completed when unknown'
     { id: 'd', status_before_archive: 'scheduled' }
   ]);
   assert.deepEqual(Object.fromEntries(groups), { active: ['a', 'c'], completed: ['b'], scheduled: ['d'] });
+});
+
+test('before the archive migration, only archive-column errors are recognised as "not set up yet"', () => {
+  // What Supabase answers when the archive columns or foreign key do not exist yet
+  assert.equal(isArchiveSchemaMissing({ code: '42703', message: 'column department_requests.archived_at does not exist' }), true);
+  assert.equal(isArchiveSchemaMissing({ code: 'PGRST200', message: "Could not find a relationship between 'events' and 'profiles' in the schema cache",
+    details: "Searched for a foreign key relationship between 'events' and 'profiles' using the hint 'events_archived_by_fkey' in the schema 'public', but no matches were found." }), true);
+  assert.equal(isArchiveSchemaMissing({ code: 'PGRST204', message: "Could not find the 'archived_at' column of 'department_requests' in the schema cache" }), true);
+  // Anything else still counts as a real failure
+  assert.equal(isArchiveSchemaMissing({ code: '42703', message: 'column events.colour does not exist' }), false);
+  assert.equal(isArchiveSchemaMissing({ code: '42501', message: 'permission denied for archived_at' }), false);
+  assert.equal(isArchiveSchemaMissing(null), false);
+  assert.equal(hasArchiveColumns([{ id: 'a', archived_at: null }]), true);
+  assert.equal(hasArchiveColumns([{ id: 'a' }]), false);
+  assert.equal(hasArchiveColumns([]), false);
 });

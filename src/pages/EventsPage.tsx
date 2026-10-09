@@ -18,7 +18,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { ArchiveItemButton, ArchiveSweep, useArchiveFeedback } from '../components/archive/ArchiveControls';
 import { ACTIVE_EVENT_STATUSES, departmentIcon } from '../lib/constants';
-import { eventArchiveReason, schoolToday } from '../lib/archive';
+import { eventArchiveReason, hasArchiveColumns, schoolToday } from '../lib/archive';
 import { cn, formatDate } from '../lib/utils';
 import type { EventStatus } from '../types';
 
@@ -62,8 +62,9 @@ export function EventsPage() {
 
   // Past or completed events in the list as currently filtered can move to the Archive
   const today = schoolToday();
+  // No Archive buttons until the database has the archive columns (migration run)
   const archivable = useMemo(
-    () => (events ?? []).flatMap((event) => {
+    () => (hasArchiveColumns(events) ? events ?? [] : []).flatMap((event) => {
       const reason = eventArchiveReason(event, today);
       return reason ? [{ id: event.id, label: event.name, reason, status: event.status }] : [];
     }),

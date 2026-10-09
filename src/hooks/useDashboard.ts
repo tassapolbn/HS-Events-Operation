@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { addDays, format } from 'date-fns';
 import { supabase } from '../lib/supabase';
+import { isArchiveSchemaMissing } from '../lib/archive';
 import type { Campus, EventWithTasks, TaskStatus } from '../types';
 
 export interface DashboardData {
@@ -43,11 +44,11 @@ export function useDashboard(campus?: Campus) {
         .is('deleted_at', null)
         .is('events.deleted_at', null)
         .neq('events.status', 'archived');
-      let requestsQ = supabase
-        .from('department_requests')
-        .select('department_id, status')
-        .is('deleted_at', null)
-        .is('archived_at', null);
+      const requestsQuery = (hideArchived: boolean) => {
+        let query = supabase.from('department_requests').select('department_id, status').is('deleted_at', null);
+        if (hideArchived) query = query.is('archived_at', null);
+        return campus ? query.eq('campus', campus) : query;
+      };
       let monthQ = supabase
         .from('events')
         .select('id, event_date, status')
@@ -58,11 +59,12 @@ export function useDashboard(campus?: Campus) {
       if (campus) {
         eventsQ = eventsQ.eq('campus', campus);
         tasksQ = tasksQ.eq('events.campus', campus);
-        requestsQ = requestsQ.eq('campus', campus);
         monthQ = monthQ.eq('campus', campus);
       }
 
-      const [eventsRes, tasksRes, requestsRes, monthRes] = await Promise.all([eventsQ, tasksQ, requestsQ, monthQ]);
+      const [eventsRes, tasksRes, firstRequestsRes, monthRes] = await Promise.all([eventsQ, tasksQ, requestsQuery(true), monthQ]);
+      // Until the archive migration runs there is no archived_at, and nothing is archived
+      const requestsRes = isArchiveSchemaMissing(firstRequestsRes.error) ? await requestsQuery(false) : firstRequestsRes;
 
       if (eventsRes.error) throw eventsRes.error;
 

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
+import { isArchiveSchemaMissing } from '../lib/archive';
 import type { DepartmentRequest } from '../types';
 
 export interface RequestFilters {
@@ -16,26 +17,31 @@ export function useRequests(filters: RequestFilters = {}) {
   return useQuery({
     queryKey: ['requests', filters],
     queryFn: async (): Promise<DepartmentRequest[]> => {
-      // Archived requests live in the Archive folder, out of every working list
-      let query = supabase
-        .from('department_requests')
-        .select('*')
-        .is('deleted_at', null)
-        .is('archived_at', null)
-        .order('request_date', { ascending: false });
+      const build = (hideArchived: boolean) => {
+        let query = supabase
+          .from('department_requests')
+          .select('*')
+          .is('deleted_at', null)
+          .order('request_date', { ascending: false });
+        // Archived requests live in the Archive folder, out of every working list
+        if (hideArchived) query = query.is('archived_at', null);
 
-      if (filters.search) {
-        const s = filters.search.replace(/[%,()]/g, ' ').trim();
-        if (s) query = query.or(`title.ilike.%${s}%,reference.ilike.%${s}%,location.ilike.%${s}%`);
-      }
-      if (filters.departmentId) query = query.eq('department_id', filters.departmentId);
-      if (filters.campus) query = query.eq('campus', filters.campus);
-      if (filters.status) query = query.eq('status', filters.status);
-      if (filters.priority) query = query.eq('priority', filters.priority);
-      if (filters.dateFrom) query = query.gte('request_date', filters.dateFrom);
-      if (filters.dateTo) query = query.lte('request_date', filters.dateTo);
+        if (filters.search) {
+          const s = filters.search.replace(/[%,()]/g, ' ').trim();
+          if (s) query = query.or(`title.ilike.%${s}%,reference.ilike.%${s}%,location.ilike.%${s}%`);
+        }
+        if (filters.departmentId) query = query.eq('department_id', filters.departmentId);
+        if (filters.campus) query = query.eq('campus', filters.campus);
+        if (filters.status) query = query.eq('status', filters.status);
+        if (filters.priority) query = query.eq('priority', filters.priority);
+        if (filters.dateFrom) query = query.gte('request_date', filters.dateFrom);
+        if (filters.dateTo) query = query.lte('request_date', filters.dateTo);
+        return query;
+      };
 
-      const { data, error } = await query;
+      let { data, error } = await build(true);
+      // Until the archive migration runs there is no archived_at, and nothing is archived
+      if (isArchiveSchemaMissing(error)) ({ data, error } = await build(false));
       if (error) throw error;
       return (data ?? []) as DepartmentRequest[];
     }

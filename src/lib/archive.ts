@@ -96,3 +96,22 @@ export function groupByRestoreStatus<T extends { id: string; status_before_archi
   }
   return groups;
 }
+
+const ARCHIVE_COLUMNS = /archived_at|archived_by|status_before_archive/;
+
+/**
+ * True when Supabase refused a query only because the archive migration has not
+ * been run yet (an unknown archive column or relationship). The app then carries
+ * on without the Archive instead of failing, so it is safe to deploy first.
+ */
+export function isArchiveSchemaMissing(
+  error: { code?: string; message?: string; details?: string; hint?: string } | null | undefined
+): boolean {
+  if (!error || !['42703', 'PGRST200', 'PGRST204'].includes(error.code ?? '')) return false;
+  return ARCHIVE_COLUMNS.test(`${error.message ?? ''} ${error.details ?? ''} ${error.hint ?? ''}`);
+}
+
+/** Rows read with select('*') carry archived_at once the archive migration has run. */
+export function hasArchiveColumns(rows: object[] | null | undefined): boolean {
+  return (rows ?? []).some((row) => 'archived_at' in row);
+}
