@@ -6,6 +6,8 @@ import ts from 'typescript';
 
 const source = readFileSync(new URL('../supabase/functions/send-notification/index.ts', import.meta.url), 'utf8').replace(/^import .*;$/m, '');
 const script = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.None } }).outputText;
+// Bumped by hand whenever the email changes, so tests read it rather than repeat it
+const TEMPLATE_VERSION = source.match(/const TEMPLATE_VERSION = '([^']+)'/)[1];
 
 async function run(payload, options = {}) {
   const sent = [], records = [], queries = [];
@@ -26,11 +28,13 @@ async function run(payload, options = {}) {
   if (options.schedule) Object.assign(tables.department_requests[0], options.schedule);
   const admin = { from(table) {
     const filters = [];
-    queries.push({table, filters});
+    // update stays null for reads, so tests can tell reading a task from marking it
+    const query = {table, filters, update: null};
+    queries.push(query);
     let single = false, inserted = null, changed = null;
     const builder = {
       select() { return builder; },
-      update(value) { changed = value; return builder; },
+      update(value) { changed = value; query.update = value; return builder; },
       eq(field, value) { filters.push([field, value]); return builder; },
       is(field, value) { filters.push([field, value]); return builder; },
       in(field, values) { filters.push([field, values]); return builder; },
@@ -68,7 +72,17 @@ test('task notification ignores supplied recipients, sends only chosen saved tas
   assert.equal(result.records[0].kind,'event');
   assert.equal(result.records[0].department_id,'hk');
   assert.equal(result.records[0].event_id,'event');
-  assert.equal(result.queries.filter(query=>query.table==='event_tasks').length,1);
+  // Reads only the chosen task, then marks only that task as sent once the email went out
+  const taskQueries = result.queries.filter(query=>query.table==='event_tasks');
+  const reads = taskQueries.filter(query=>!query.update);
+  const writes = taskQueries.filter(query=>query.update);
+  assert.equal(reads.length,1);
+  assert.ok(reads[0].filters.some(([field,value])=>field==='id' && value==='chosen'));
+  assert.equal(writes.length,1);
+  assert.deepEqual(Object.keys(writes[0].update),['notified_at']);
+  // The id list is built inside the vm sandbox, so compare it as plain data
+  assert.deepEqual(JSON.parse(JSON.stringify(writes[0].filters)),[['id',['chosen']]]);
+  assert.equal(result.body.notified,1);
 });
 test('added task has its own clear action label', async () => {
   const result = await run({type:'task',id:'chosen',changeKind:'added'});
@@ -87,6 +101,9 @@ test('transport and recording failures are reported without claiming full delive
   const result = await run({type:'task',id:'chosen',changeKind:'updated'}, {emailError:true});
   assert.match(result.body.results[0].error,/transport unavailable/);
   assert.equal(result.records[0].email_sent,false);
+  // A task whose email never arrived must stay counted as unsent
+  assert.equal(result.body.notified,0);
+  assert.equal(result.queries.filter(query=>query.table==='event_tasks' && query.update).length,0);
   const failedRecord = await run({type:'task',id:'chosen',changeKind:'updated'}, {recordError:true});
   assert.match(failedRecord.body.results[0].error,/in-app/);
 });
@@ -132,7 +149,9 @@ test('request email separates work and due times from automatic posted time in B
   assert.match(html, /17 September 2026.*15:30/);
   assert.match(html, /Posted \/ วันลงงาน: 14 September 2026.*09:00/);
   assert.match(html, /Thailand time \(UTC\+7\)/);
-  assert.equal(result.body.templateVersion, 'support-board-20260916');
+  // The response names the template the email was actually built from
+  assert.equal(result.body.templateVersion, TEMPLATE_VERSION);
+  assert.ok(html.includes(`<!-- email-template: ${TEMPLATE_VERSION} -->`));
 });
 
 test('date-only legacy requests do not acquire a fabricated deadline time', async () => {
