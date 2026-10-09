@@ -26,7 +26,9 @@ export function useDashboard(campus?: Campus) {
 
       // Campus scoping: events and department_requests carry campus directly.
       // event_tasks has no campus column, so we scope it through its parent
-      // event via an inner join when a single campus is selected.
+      // event via an inner join. The same join leaves out tasks of archived or
+      // deleted events, and archived requests drop out too, so filed-away work
+      // never counts as pending.
       let eventsQ = supabase
         .from('events')
         .select('*, event_tasks(id, department_id, status, assigned_staff, title, deleted_at)')
@@ -37,9 +39,15 @@ export function useDashboard(campus?: Campus) {
         .order('event_date');
       let tasksQ = supabase
         .from('event_tasks')
-        .select(campus ? 'department_id, status, events!inner(campus)' : 'department_id, status')
-        .is('deleted_at', null);
-      let requestsQ = supabase.from('department_requests').select('department_id, status').is('deleted_at', null);
+        .select('department_id, status, events!inner(campus, status, deleted_at)')
+        .is('deleted_at', null)
+        .is('events.deleted_at', null)
+        .neq('events.status', 'archived');
+      let requestsQ = supabase
+        .from('department_requests')
+        .select('department_id, status')
+        .is('deleted_at', null)
+        .is('archived_at', null);
       let monthQ = supabase
         .from('events')
         .select('id, event_date, status')

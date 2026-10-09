@@ -11,18 +11,22 @@ export interface EventFilters {
   dateTo?: string;
   staff?: string;
   campus?: string;
+  /** Archived events live in the Archive folder; only the calendar keeps showing them. */
+  includeArchived?: boolean;
 }
 
 export function useEvents(filters: EventFilters = {}) {
   return useQuery({
     queryKey: ['events', filters],
     queryFn: async (): Promise<EventWithTasks[]> => {
+      // Session dates tell when a multi-day event is really over
       let query = supabase
         .from('events')
-        .select('*, event_tasks(id, department_id, status, assigned_staff, title, deleted_at)')
+        .select('*, event_tasks(id, department_id, status, assigned_staff, title, deleted_at), event_sessions(session_date)')
         .is('deleted_at', null)
         .order('event_date', { ascending: false });
 
+      if (!filters.includeArchived) query = query.neq('status', 'archived');
       if (filters.search) {
         const s = filters.search.replace(/[%,()]/g, ' ').trim();
         if (s) query = query.or(`name.ilike.%${s}%,location.ilike.%${s}%`);
@@ -85,6 +89,8 @@ export function useEventMutations() {
     queryClient.invalidateQueries({ queryKey: ['events'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     queryClient.invalidateQueries({ queryKey: ['display'] });
+    // Choosing "Archived" in the event form files the event away too
+    queryClient.invalidateQueries({ queryKey: ['archive'] });
   };
 
   const createEvent = useMutation({

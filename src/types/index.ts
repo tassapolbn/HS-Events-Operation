@@ -85,6 +85,11 @@ export interface EventRow {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  /** When the event moved to the Archive folder. Kept in step with status 'archived' by the database. */
+  archived_at?: string | null;
+  archived_by?: string | null;
+  /** The status a restore returns to. Null means completed. */
+  status_before_archive?: EventStatus | null;
 }
 
 export interface EventSession {
@@ -161,6 +166,9 @@ export interface DepartmentRequest {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  /** When the request moved to the Archive folder. Null while it is active; its status is kept as it was. */
+  archived_at?: string | null;
+  archived_by?: string | null;
 }
 
 export interface Attachment {

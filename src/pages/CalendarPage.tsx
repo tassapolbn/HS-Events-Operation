@@ -47,10 +47,12 @@ export function CalendarPage() {
     return { from: cursor, to: cursor };
   }, [view, cursor]);
 
+  // The calendar is a record of what happened, so archived events stay on it (greyed by status)
   const { data: events } = useEvents({
     dateFrom: format(range.from, 'yyyy-MM-dd'),
     dateTo: format(range.to, 'yyyy-MM-dd'),
-    campus: campusFilter
+    campus: campusFilter,
+    includeArchived: true
   });
 
   const eventsByDay = useMemo(() => {

@@ -2,11 +2,13 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CalendarDays, MapPin, Plus, Search, SlidersHorizontal, ClipboardList } from 'lucide-react';
 import { useEvents, type EventFilters } from '../hooks/useEvents';
+import { useArchiveMutations } from '../hooks/useArchive';
 import { useDepartments } from '../hooks/useDepartments';
 import { useDebounce } from '../hooks/useDebounce';
 import { useLanguage } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
 import { useCampus } from '../contexts/CampusContext';
+import { useToast } from '../components/ui/Toast';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Select, Input } from '../components/ui/Input';
@@ -14,8 +16,11 @@ import { EventStatusBadge } from '../components/ui/Badge';
 import { CampusBadge } from '../components/ui/CampusBadge';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
-import { EVENT_STATUSES, departmentIcon } from '../lib/constants';
+import { ArchiveItemButton, ArchiveSweep, useArchiveFeedback } from '../components/archive/ArchiveControls';
+import { ACTIVE_EVENT_STATUSES, departmentIcon } from '../lib/constants';
+import { eventArchiveReason, schoolToday } from '../lib/archive';
 import { cn, formatDate } from '../lib/utils';
+import type { EventStatus } from '../types';
 
 export function EventsPage() {
   const { t, deptName, lang } = useLanguage();
@@ -51,6 +56,39 @@ export function EventsPage() {
   const { data: events, isLoading } = useEvents(filters);
   const hasFilters = !!(status || departmentId || dateFrom || dateTo || staff);
 
+  const { toast } = useToast();
+  const report = useArchiveFeedback();
+  const { archiveEvents, restoreEvents } = useArchiveMutations();
+
+  // Past or completed events in the list as currently filtered can move to the Archive
+  const today = schoolToday();
+  const archivable = useMemo(
+    () => (events ?? []).flatMap((event) => {
+      const reason = eventArchiveReason(event, today);
+      return reason ? [{ id: event.id, label: event.name, reason, status: event.status }] : [];
+    }),
+    [events, today]
+  );
+  const archivableIds = new Set(archivable.map((item) => item.id));
+
+  /** Archive, with Undo putting each event back to the status it had */
+  const archive = async (rows: Array<{ id: string; status: EventStatus }>) => {
+    const ids = rows.map((row) => row.id);
+    try {
+      const changed = await archiveEvents.mutateAsync(ids);
+      report(changed, ids.length, 'archive.archivedCount', async () => {
+        try {
+          const restored = await restoreEvents.mutateAsync(rows.map((row) => ({ id: row.id, status_before_archive: row.status })));
+          report(restored, ids.length, 'archive.restoredCount');
+        } catch {
+          toast(t('common.errorGeneric'), 'error');
+        }
+      });
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    }
+  };
+
   const clearFilters = () => {
     setStatus(''); setDepartmentId(''); setDateFrom(''); setDateTo(''); setStaff('');
   };
@@ -60,9 +98,12 @@ export function EventsPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-extrabold tracking-tight text-navy-800 dark:text-white lg:text-3xl">{t('events.title')}</h1>
         {isEventsTeam && (
-          <Link to="/events/new">
-            <Button variant="gold"><Plus className="h-4 w-4" /> {t('events.newEvent')}</Button>
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <ArchiveSweep kind="events" items={archivable} onArchive={() => archive(archivable)} busy={archiveEvents.isPending} />
+            <Link to="/events/new">
+              <Button variant="gold"><Plus className="h-4 w-4" /> {t('events.newEvent')}</Button>
+            </Link>
+          </div>
         )}
       </div>
 
@@ -87,7 +128,7 @@ export function EventsPage() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Select label={t('common.status')} value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="">{t('common.all')}</option>
-              {EVENT_STATUSES.map((s) => <option key={s} value={s}>{t(`eventStatus.${s}`)}</option>)}
+              {ACTIVE_EVENT_STATUSES.map((s) => <option key={s} value={s}>{t(`eventStatus.${s}`)}</option>)}
             </Select>
             <Select label={t('common.department')} value={departmentId} onChange={(e) => setDepartmentId(e.target.value)}>
               <option value="">{t('common.all')}</option>
@@ -144,6 +185,13 @@ export function EventsPage() {
                   <div className="flex items-center gap-2">
                     <CampusBadge campus={event.campus} />
                     <EventStatusBadge status={event.status} />
+                    {isEventsTeam && archivableIds.has(event.id) && (
+                      <ArchiveItemButton
+                        label={`${t('archive.archive')}: ${event.name}`}
+                        disabled={archiveEvents.isPending}
+                        onArchive={() => archive([{ id: event.id, status: event.status }])}
+                      />
+                    )}
                   </div>
                 </div>
                 {deptSummary.length > 0 && (

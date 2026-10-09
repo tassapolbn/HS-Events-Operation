@@ -171,6 +171,7 @@ export function useMyDepartmentTasks(departmentId: string | null | undefined) {
         .eq('department_id', departmentId!)
         .is('deleted_at', null)
         .is('events.deleted_at', null)
+        .neq('events.status', 'archived')
         .order('created_at', { ascending: false });
       if (error) throw error;
       type Row = EventTask & {

@@ -63,6 +63,14 @@ See **DEPLOYMENT_GUIDE.md** for the complete step-by-step setup (Supabase, Resen
 - Apply `supabase/migrations/20260913140925_worksheet_row_insertion.sql` for transactional row insertion. `tests/worksheet-rows.sql` exercises it with sample records inside a rolled-back transaction, including ordering, authorization and invalid inputs.
 - Apply `supabase/migrations/20260913081415_session_floor_plans_and_grid.sql` before deploying this version. It adds a nullable session attachment reference and an authenticated, RLS-respecting worksheet update function. It retains the public board's existing visibility rules and storage permissions.
 
+### Archive
+
+- **Archive** in the sidebar (Admin and Events Team) holds past and completed work, out of the working lists. An event can be archived once it is completed or its last day, sessions included, has passed. A department request can be archived once it is completed or cancelled, or its last scheduled day has passed. Days follow Bangkok time.
+- Archive one item from its card or its detail page, or use **Archive past & completed** on the Events or Department Requests list to file everything eligible in the current view. Each archive offers Undo.
+- In the Archive, tick items (or Select all) to **Restore** or **Delete** them. A restored event returns to the status it had before. Delete is the same soft delete as elsewhere and offers Undo for a few seconds.
+- Archived items leave the Events and Requests lists, My Department, the dashboard counts and the display board. The calendar still shows archived events. Choosing "Archived" in the event form files an event away the same way.
+- Apply `supabase/migrations/20261009090000_archive_folder.sql` **before** deploying this version, because the app reads its new `archived_at` column. It is additive, works with the previous app version, and has a rollback block at the bottom.
+
 ### Verification
 
 Run `npm test` with Node 22.18+ and `npm run build`. The local-only fixture at `/tests/ui.html` (after `npm run dev`) allows checking worksheet edits, paste, undo, failure recovery, and session plans against sample data. Its database writes and notification sends are mocked and it is not included in the production bundle. Enter `FAIL` as a task title to simulate a failed save. The fixture includes interleaved sessions, inline editing, dialog Enter submission, and task notifications; add `?readonly` to check viewer permissions. The automated suite verifies global session ordering and notification authorization, recipient isolation, deleted records, transport failures, and existing event/request flows without sending email.

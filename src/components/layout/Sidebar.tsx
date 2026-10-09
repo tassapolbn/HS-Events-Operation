@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, CalendarDays, ClipboardList, Inbox, LayoutTemplate, Building2, X, MonitorPlay, ExternalLink,
-  UsersRound
+  UsersRound, FolderArchive
 } from 'lucide-react';
 import { useLanguage } from '../../i18n';
 import { useAuth } from '../../contexts/AuthContext';
@@ -22,6 +22,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     { to: '/requests', icon: Inbox, label: t('nav.requests'), show: true },
     { to: '/calendar', icon: CalendarDays, label: t('nav.calendar'), show: true },
     { to: '/templates', icon: LayoutTemplate, label: t('nav.templates'), show: isEventsTeam },
+    { to: '/archive', icon: FolderArchive, label: t('nav.archive'), show: isEventsTeam },
     { to: '/my-department', icon: Building2, label: t('nav.myDepartment'), show: !!profile?.department_id },
     { to: '/users', icon: UsersRound, label: t('nav.users'), show: isAdmin }
   ];

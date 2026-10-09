@@ -93,6 +93,11 @@ export function isRichTextEmpty(html: string): boolean {
   return stripped.length === 0;
 }
 
+/** Fill {placeholders} in a translated string, e.g. fillTemplate('{n} selected', { n: 3 }) */
+export function fillTemplate(template: string, values: Record<string, string | number>): string {
+  return template.replace(/\{(\w+)\}/g, (match, key: string) => (key in values ? String(values[key]) : match));
+}
+
 export type FileKind = 'image' | 'pdf' | 'office' | 'other';
 
 export function getFileKind(mimeType: string): FileKind {

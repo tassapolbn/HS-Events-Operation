@@ -2,8 +2,9 @@ import { useSendNotification } from '../hooks/useNotifications';
 import { scheduleLabel } from '../lib/requestSchedule';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Bell, CalendarDays, Clock, MapPin, Pencil, Trash2, User, Ban } from 'lucide-react';
+import { ArrowLeft, Bell, CalendarDays, Clock, MapPin, Pencil, Trash2, User, Ban, Archive } from 'lucide-react';
 import { useRequest, useRequestMutations } from '../hooks/useRequests';
+import { useArchiveMutations } from '../hooks/useArchive';
 import { useDepartments } from '../hooks/useDepartments';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../i18n';
@@ -18,7 +19,9 @@ import { RichTextViewer } from '../components/editor/RichTextViewer';
 import { NotifyModal } from '../components/events/NotifyModal';
 import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
+import { ArchivedBanner, useArchiveFeedback } from '../components/archive/ArchiveControls';
 import { departmentIcon, REQUEST_STATUSES } from '../lib/constants';
+import { requestArchiveReason } from '../lib/archive';
 import { isRichTextEmpty } from '../lib/utils';
 import type { TaskStatus } from '../types';
 
@@ -32,6 +35,8 @@ export function RequestDetailPage() {
   const { data: request, isLoading, error } = useRequest(id);
   const { data: departments } = useDepartments();
   const { updateRequest, deleteRequest } = useRequestMutations();
+  const { archiveRequests, restoreRequests } = useArchiveMutations();
+  const reportArchive = useArchiveFeedback();
 
   const cancelRequest = useSendNotification();
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -62,10 +67,30 @@ export function RequestDetailPage() {
     }
   };
 
+  const isArchived = !!request.archived_at;
+  const canArchive = isEventsTeam && !!requestArchiveReason(request);
+
+  const handleRestore = async () => {
+    try {
+      reportArchive(await restoreRequests.mutateAsync([request.id]), 1, 'archive.restoredCount');
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    }
+  };
+
+  const handleArchive = async () => {
+    try {
+      const changed = await archiveRequests.mutateAsync([request.id]);
+      reportArchive(changed, 1, 'archive.archivedCount', handleRestore);
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    }
+  };
+
   return (
     <div className="animate-fade-in mx-auto max-w-4xl space-y-5">
       <div className="flex flex-wrap items-center gap-3">
-        <Link to="/requests">
+        <Link to={isArchived ? '/archive?tab=requests' : '/requests'}>
           <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /> {t('common.back')}</Button>
         </Link>
         <div className="min-w-0 flex-1" />
@@ -78,6 +103,18 @@ export function RequestDetailPage() {
             <Link to={`/requests/${request.id}/edit`}>
               <Button variant="outline" size="sm"><Pencil className="h-4 w-4" /> {t('common.edit')}</Button>
             </Link>
+            {canArchive && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleArchive}
+                loading={archiveRequests.isPending}
+                title={t('archive.archive')}
+                aria-label={t('archive.archive')}
+              >
+                {!archiveRequests.isPending && <Archive className="h-4 w-4" />}
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -89,6 +126,10 @@ export function RequestDetailPage() {
           </div>
         )}
       </div>
+
+      {isArchived && (
+        <ArchivedBanner kind="request" canRestore={isEventsTeam} restoring={restoreRequests.isPending} onRestore={handleRestore} />
+      )}
 
       {request.status === 'cancelled' && <div role="status" className="rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
         <p className="font-bold">{lang === 'th' ? 'งานนี้ถูกยกเลิกแล้ว ไม่ต้องดำเนินการต่อ' : 'This request is cancelled. No further work is required.'}</p>

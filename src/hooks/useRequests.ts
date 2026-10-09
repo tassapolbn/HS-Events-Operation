@@ -16,10 +16,12 @@ export function useRequests(filters: RequestFilters = {}) {
   return useQuery({
     queryKey: ['requests', filters],
     queryFn: async (): Promise<DepartmentRequest[]> => {
+      // Archived requests live in the Archive folder, out of every working list
       let query = supabase
         .from('department_requests')
         .select('*')
         .is('deleted_at', null)
+        .is('archived_at', null)
         .order('request_date', { ascending: false });
 
       if (filters.search) {
@@ -64,6 +66,7 @@ export function useRequestMutations() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['requests'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    queryClient.invalidateQueries({ queryKey: ['archive'] });
   };
 
   const createRequest = useMutation({

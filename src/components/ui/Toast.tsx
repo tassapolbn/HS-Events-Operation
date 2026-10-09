@@ -5,14 +5,21 @@ import { cn, randomId } from '../../lib/utils';
 
 type ToastKind = 'success' | 'error' | 'info';
 
+/** A button on the toast, such as Undo. The toast closes once it is pressed. */
+export interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface ToastItem {
   id: string;
   kind: ToastKind;
   message: string;
+  action?: ToastAction;
 }
 
 interface ToastContextValue {
-  toast: (message: string, kind?: ToastKind) => void;
+  toast: (message: string, kind?: ToastKind, action?: ToastAction) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -31,10 +38,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toast = useCallback(
-    (message: string, kind: ToastKind = 'success') => {
+    (message: string, kind: ToastKind = 'success', action?: ToastAction) => {
       const id = randomId();
-      setItems((prev) => [...prev, { id, kind, message }]);
-      setTimeout(() => dismiss(id), 4200);
+      setItems((prev) => [...prev, { id, kind, message, action }]);
+      // Leave time to reach the button on a toast that offers one
+      setTimeout(() => dismiss(id), action ? 8000 : 4200);
     },
     [dismiss]
   );
@@ -57,6 +65,17 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             >
               {icons[item.kind]}
               <p className="flex-1 text-sm text-slate-700 dark:text-slate-200">{item.message}</p>
+              {item.action && (
+                <button
+                  onClick={() => {
+                    dismiss(item.id);
+                    item.action?.onClick();
+                  }}
+                  className="shrink-0 rounded-lg px-2 py-0.5 text-sm font-bold text-navy-700 hover:bg-navy-50 dark:text-gold-400 dark:hover:bg-slate-800"
+                >
+                  {item.action.label}
+                </button>
+              )}
               <button onClick={() => dismiss(item.id)} className="text-slate-400 hover:text-slate-600">
                 <X className="h-4 w-4" />
               </button>

@@ -3,11 +3,13 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { CalendarDays, Inbox, MapPin, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { useRequests, type RequestFilters } from '../hooks/useRequests';
+import { useArchiveMutations } from '../hooks/useArchive';
 import { useDepartments } from '../hooks/useDepartments';
 import { useDebounce } from '../hooks/useDebounce';
 import { useLanguage } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
 import { useCampus } from '../contexts/CampusContext';
+import { useToast } from '../components/ui/Toast';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { Input, Select } from '../components/ui/Input';
@@ -15,7 +17,9 @@ import { PriorityBadge, TaskStatusBadge } from '../components/ui/Badge';
 import { CampusBadge } from '../components/ui/CampusBadge';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
+import { ArchiveItemButton, ArchiveSweep, useArchiveFeedback } from '../components/archive/ArchiveControls';
 import { PRIORITIES, REQUEST_STATUSES, departmentIcon } from '../lib/constants';
+import { requestArchiveReason, schoolToday } from '../lib/archive';
 
 export function RequestsPage() {
   const { t, deptName, lang } = useLanguage();
@@ -49,6 +53,36 @@ export function RequestsPage() {
   const { data: requests, isLoading } = useRequests(filters);
   const hasFilters = !!(departmentId || status || priority || dateFrom || dateTo);
 
+  const { toast } = useToast();
+  const report = useArchiveFeedback();
+  const { archiveRequests, restoreRequests } = useArchiveMutations();
+
+  // Completed, cancelled or past requests in the list as currently filtered can move to the Archive
+  const today = schoolToday();
+  const archivable = useMemo(
+    () => (requests ?? []).flatMap((request) => {
+      const reason = requestArchiveReason(request, today);
+      return reason ? [{ id: request.id, label: request.title, reason }] : [];
+    }),
+    [requests, today]
+  );
+  const archivableIds = new Set(archivable.map((item) => item.id));
+
+  const archive = async (ids: string[]) => {
+    try {
+      const changed = await archiveRequests.mutateAsync(ids);
+      report(changed, ids.length, 'archive.archivedCount', async () => {
+        try {
+          report(await restoreRequests.mutateAsync(ids), ids.length, 'archive.restoredCount');
+        } catch {
+          toast(t('common.errorGeneric'), 'error');
+        }
+      });
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    }
+  };
+
   return (
     <div className="animate-fade-in space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -57,9 +91,12 @@ export function RequestsPage() {
           <p className="text-sm text-slate-500 dark:text-slate-400">{t('requests.subtitle')}</p>
         </div>
         {isEventsTeam && (
-          <Link to="/requests/new">
-            <Button variant="gold"><Plus className="h-4 w-4" /> {t('requests.newRequest')}</Button>
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <ArchiveSweep kind="requests" items={archivable} onArchive={archive} busy={archiveRequests.isPending} />
+            <Link to="/requests/new">
+              <Button variant="gold"><Plus className="h-4 w-4" /> {t('requests.newRequest')}</Button>
+            </Link>
+          </div>
         )}
       </div>
 
@@ -142,6 +179,13 @@ export function RequestsPage() {
                     <CampusBadge campus={request.campus} />
                     <PriorityBadge priority={request.priority} />
                     <TaskStatusBadge status={request.status} />
+                    {isEventsTeam && archivableIds.has(request.id) && (
+                      <ArchiveItemButton
+                        label={`${t('archive.archive')}: ${request.title}`}
+                        disabled={archiveRequests.isPending}
+                        onArchive={() => archive([request.id])}
+                      />
+                    )}
                   </div>
                 </div>
               </Card>

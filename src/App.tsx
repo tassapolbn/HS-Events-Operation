@@ -19,6 +19,7 @@ import { RequestFormPage } from './pages/RequestFormPage';
 import { RequestDetailPage } from './pages/RequestDetailPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { TemplatesPage } from './pages/TemplatesPage';
+import { ArchivePage } from './pages/ArchivePage';
 import { MyDepartmentPage } from './pages/MyDepartmentPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { DisplayBoardPage } from './pages/DisplayBoardPage';
@@ -100,6 +101,7 @@ export default function App() {
                         <Route path="/requests/new" element={<RequestFormPage />} />
                         <Route path="/requests/:id/edit" element={<RequestFormPage />} />
                         <Route path="/templates" element={<TemplatesPage />} />
+                        <Route path="/archive" element={<ArchivePage />} />
                       </Route>
                       <Route path="*" element={<NotFoundPage />} />
                     </Route>

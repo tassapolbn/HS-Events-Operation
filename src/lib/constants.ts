@@ -77,6 +77,8 @@ export const TASK_STATUS_DOTS: Record<TaskStatus, string> = {
 
 export const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 export const EVENT_STATUSES: EventStatus[] = ['draft', 'scheduled', 'active', 'completed', 'archived'];
+/** Statuses the Events list can filter by. Archived events live in the Archive folder instead. */
+export const ACTIVE_EVENT_STATUSES: EventStatus[] = EVENT_STATUSES.filter((status) => status !== 'archived');
 export const TASK_STATUSES: TaskStatus[] = ['not_started', 'in_progress', 'waiting', 'completed', 'cancelled'];
 /** Statuses used by General Department Requests */
 export const REQUEST_STATUSES: TaskStatus[] = ['new', 'acknowledged', 'needs_revision', 'in_progress', 'completed', 'cancelled'];

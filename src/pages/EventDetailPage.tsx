@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Bell, CalendarDays, Clock, Import, LayoutTemplate, Layers, MapPin, Pencil, Plus,
-  Table2, Trash2, Eye, LayoutGrid
+  Table2, Trash2, Eye, LayoutGrid, Archive
 } from 'lucide-react';
 import { useEvent, useEventMutations } from '../hooks/useEvents';
+import { useArchiveMutations } from '../hooks/useArchive';
 import { useDepartments } from '../hooks/useDepartments';
 import { useAttachments } from '../hooks/useAttachments';
 import { useTaskMutations } from '../hooks/useTasks';
@@ -32,6 +33,8 @@ import { SessionNotifyModal, unsentTasks } from '../components/events/SessionNot
 import { SessionImportModal } from '../components/events/SessionImportModal';
 import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
+import { ArchivedBanner, useArchiveFeedback } from '../components/archive/ArchiveControls';
+import { eventArchiveReason } from '../lib/archive';
 import { cn, combineDateTime, formatDate, formatTime, isRichTextEmpty } from '../lib/utils';
 import { normalizeTimeInput } from '../lib/grid';
 import { sessionColor } from '../lib/sessionColors';
@@ -64,6 +67,8 @@ export function EventDetailPage() {
   const { data: departments } = useDepartments();
   const { data: attachments } = useAttachments('event', id);
   const { deleteEvent, updateEvent } = useEventMutations();
+  const { archiveEvents, restoreEvents } = useArchiveMutations();
+  const reportArchive = useArchiveFeedback();
   const { createTask, createTasks, updateTask, deleteTask } = useTaskMutations(id);
   const { deleteSession } = useSessionMutations(id ?? '');
 
@@ -157,6 +162,35 @@ export function EventDetailPage() {
     await deleteEvent.mutateAsync(event.id);
     toast(t('common.deletedSuccess'));
     navigate('/events');
+  };
+
+  const isArchived = event.status === 'archived';
+  const canArchive = isEventsTeam && !!eventArchiveReason(event);
+
+  /** Back to the status it had before, or completed when that is not known */
+  const handleRestore = async () => {
+    try {
+      const changed = await restoreEvents.mutateAsync([{ id: event.id, status_before_archive: event.status_before_archive }]);
+      reportArchive(changed, 1, 'archive.restoredCount');
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    }
+  };
+
+  const handleArchive = async () => {
+    const previous = event.status;
+    try {
+      const changed = await archiveEvents.mutateAsync([event.id]);
+      reportArchive(changed, 1, 'archive.archivedCount', async () => {
+        try {
+          reportArchive(await restoreEvents.mutateAsync([{ id: event.id, status_before_archive: previous }]), 1, 'archive.restoredCount');
+        } catch {
+          toast(t('common.errorGeneric'), 'error');
+        }
+      });
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    }
   };
 
   /** Put a task on the app clipboard so it can be pasted into any department, session or event */
@@ -361,7 +395,7 @@ export function EventDetailPage() {
         style={{ borderTop: `4px solid ${event.header_color || '#1a3c5e'}` }}
       >
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2">
-          <Link to="/events" className="no-print">
+          <Link to={isArchived ? '/archive' : '/events'} className="no-print">
             <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /></Button>
           </Link>
           <div className="min-w-0 flex-1">
@@ -402,6 +436,18 @@ export function EventDetailPage() {
               <Button variant="outline" size="sm" onClick={() => setTemplateOpen(true)} title={t('events.saveAsTemplate')}>
                 <LayoutTemplate className="h-4 w-4" />
               </Button>
+              {canArchive && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleArchive}
+                  loading={archiveEvents.isPending}
+                  title={t('archive.archive')}
+                  aria-label={t('archive.archive')}
+                >
+                  {!archiveEvents.isPending && <Archive className="h-4 w-4" />}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -415,6 +461,10 @@ export function EventDetailPage() {
           )}
         </div>
       </div>
+
+      {isArchived && (
+        <ArchivedBanner kind="event" canRestore={isEventsTeam} restoring={restoreEvents.isPending} onRestore={handleRestore} />
+      )}
 
       {/* Timeline */}
       <Card>
