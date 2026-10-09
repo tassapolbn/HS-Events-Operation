@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Globe, LogOut, Menu, Moon, Sun, Mail } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -7,6 +8,16 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../i18n';
 import { useNotificationsFeed, useMarkNotificationsRead } from '../../hooks/useNotifications';
 import { cn, formatDateTime } from '../../lib/utils';
+
+/**
+ * Covers the page while a header menu is open, so a tap anywhere else only closes it.
+ * Rendered on the page rather than inside the header: the header's backdrop blur would
+ * otherwise shrink a fixed layer to the header's own size. It sits just below the header,
+ * which keeps the open menu and the header buttons above it.
+ */
+function TapOutside({ onClose }: { onClose: () => void }) {
+  return createPortal(<div className="fixed inset-0 z-[15]" aria-hidden="true" onClick={onClose} />, document.body);
+}
 
 export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
   const { profile, signOut } = useAuth();
@@ -42,15 +53,17 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
     .toUpperCase();
 
   return (
-    <header className="sticky top-0 z-20 flex h-16 items-center gap-3 border-b border-slate-200 bg-white/85 px-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85 lg:px-6">
-      <button onClick={onMenuClick} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden" aria-label="Menu">
+    // Phones get tighter spacing, a short campus label and the theme switch inside the
+    // account menu, so the bell and the account menu stay on screen down to 320px
+    <header className="sticky top-0 z-20 flex h-16 items-center gap-1 border-b border-slate-200 bg-white/85 px-2 backdrop-blur dark:border-slate-800 dark:bg-slate-950/85 min-[360px]:gap-1.5 min-[360px]:px-3 sm:gap-3 sm:px-4 lg:px-6">
+      <button onClick={onMenuClick} className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden" aria-label="Menu">
         <Menu className="h-5 w-5" />
       </button>
       <div className="flex-1" />
 
       {/* Campus switcher: filters every admin list. All manages both campuses. */}
       <div
-        className="flex items-center rounded-xl bg-slate-100 p-0.5 dark:bg-slate-800"
+        className="flex shrink-0 items-center rounded-xl bg-slate-100 p-0.5 dark:bg-slate-800"
         role="group"
         aria-label={t('campus.label')}
       >
@@ -60,13 +73,18 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
             onClick={() => setCampus(c)}
             aria-pressed={campus === c}
             className={cn(
-              'rounded-lg px-2.5 py-1.5 text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500',
+              'whitespace-nowrap rounded-lg px-2 py-1.5 text-xs font-bold transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 sm:px-2.5',
               campus === c
                 ? 'bg-white text-navy-800 shadow-sm dark:bg-slate-900 dark:text-white'
                 : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'
             )}
           >
-            {c === 'ALL' ? t('campus.all') : c}
+            {c === 'ALL' ? (
+              <>
+                <span className="sm:hidden">{t('common.all')}</span>
+                <span className="hidden sm:inline">{t('campus.all')}</span>
+              </>
+            ) : c}
           </button>
         ))}
       </div>
@@ -74,24 +92,24 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
       {/* Language toggle */}
       <button
         onClick={() => setLang(lang === 'en' ? 'th' : 'en')}
-        className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        className="flex shrink-0 items-center gap-1.5 rounded-xl px-2 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 sm:px-3"
         title={t('common.language')}
       >
-        <Globe className="h-4 w-4" />
+        <Globe className="hidden h-4 w-4 sm:block" />
         {lang === 'en' ? 'EN' : 'ไทย'}
       </button>
 
-      {/* Theme toggle */}
+      {/* Theme toggle (in the account menu on phones) */}
       <button
         onClick={toggleTheme}
-        className="rounded-xl p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        className="hidden shrink-0 rounded-xl p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 sm:block"
         title={theme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
       >
         {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
       </button>
 
       {/* Notifications */}
-      <div className="relative">
+      <div className="relative shrink-0">
         <button
           onClick={openNotifications}
           className="relative rounded-xl p-2 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
@@ -106,8 +124,9 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
         </button>
         {notifOpen && (
           <>
-            <div className="fixed inset-0 z-30" onClick={() => setNotifOpen(false)} />
-            <div className="absolute right-0 z-40 mt-2 w-80 animate-scale-in overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900 sm:w-96">
+            <TapOutside onClose={() => setNotifOpen(false)} />
+            {/* A full-width sheet under the header on phones, a dropdown from the bell on larger screens */}
+            <div className="fixed inset-x-2 top-[4.5rem] z-40 animate-scale-in overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900 sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96">
               <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
                 <p className="text-sm font-semibold">{t('notifications.title')}</p>
                 {unreadCount > 0 && (
@@ -155,7 +174,7 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
       </div>
 
       {/* User menu */}
-      <div className="relative">
+      <div className="relative shrink-0">
         <button
           onClick={() => { setMenuOpen((v) => !v); setNotifOpen(false); }}
           className="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800"
@@ -169,12 +188,19 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
         </button>
         {menuOpen && (
           <>
-            <div className="fixed inset-0 z-30" onClick={() => setMenuOpen(false)} />
+            <TapOutside onClose={() => setMenuOpen(false)} />
             <div className="absolute right-0 z-40 mt-2 w-56 animate-scale-in overflow-hidden rounded-2xl border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
               <div className="border-b border-slate-100 px-4 py-3 dark:border-slate-800">
                 <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{profile?.full_name}</p>
                 <p className="truncate text-xs text-slate-400">{profile?.email}</p>
               </div>
+              <button
+                onClick={toggleTheme}
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800 sm:hidden"
+              >
+                {theme === 'dark' ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {theme === 'dark' ? t('common.lightMode') : t('common.darkMode')}
+              </button>
               <button
                 onClick={() => signOut()}
                 className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/50"
