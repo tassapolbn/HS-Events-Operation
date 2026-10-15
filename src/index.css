@@ -46,6 +46,7 @@ html[lang='th'] body {
 }
 .rich-text a {
   @apply text-navy-500 underline hover:text-navy-700 dark:text-gold-400 dark:hover:text-gold-300;
+  overflow-wrap: anywhere;
 }
 .rich-text strong {
   @apply font-semibold;

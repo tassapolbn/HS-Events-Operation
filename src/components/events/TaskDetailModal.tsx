@@ -16,6 +16,7 @@ import { useChecklist, useChecklistMutations, useTaskMutations } from '../../hoo
 import { TASK_STATUSES } from '../../lib/constants';
 import { cn, formatTime, isRichTextEmpty } from '../../lib/utils';
 import type { Department, EventTask, TaskStatus } from '../../types';
+import { LinkifiedText } from '../ui/LinkifiedText';
 
 interface TaskDetailModalProps {
   open: boolean;
@@ -78,7 +79,7 @@ export function TaskDetailModal({ open, onClose, task, department, eventId, onEd
         <span className="mt-0.5 text-slate-400">{icon}</span>
         <div>
           <p className="text-xs text-slate-400">{label}</p>
-          <p className="font-medium text-slate-700 dark:text-slate-200">{value}</p>
+          <p className="font-medium text-slate-700 dark:text-slate-200"><LinkifiedText text={value} /></p>
         </div>
       </div>
     ) : null;

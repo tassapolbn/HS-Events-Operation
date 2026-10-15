@@ -8,6 +8,7 @@ import { useEventMutations } from '../../hooks/useEvents';
 import { useToast } from '../ui/Toast';
 import { RichTextEditor } from '../editor/RichTextEditor';
 import { RichTextViewer } from '../editor/RichTextViewer';
+import { LinkifiedText } from '../ui/LinkifiedText';
 
 type Target = { entity: 'task'; field: 'title' | 'description' | 'notes' | 'assigned_staff' | 'instructions' | 'work_location' | 'setup_location' }
   | { entity: 'session'; field: 'title' | 'location' | 'time_note' | 'note' }
@@ -49,9 +50,9 @@ export function BoardEditableText({ entity, field, id, eventId, value, label, ri
       aria-label={isEventsTeam ? `${t('common.edit')}: ${label}` : undefined}
       title={isEventsTeam ? (lang === 'th' ? 'คลิกเพื่อแก้ไข · Enter บันทึก' : 'Click to edit · Enter to save') : undefined}
       className={isEventsTeam ? 'cursor-text rounded outline-none hover:ring-1 hover:ring-current focus-visible:ring-2' : ''}
-      onClick={isEventsTeam ? e => { e.stopPropagation(); setDraft(displayed); setEditing(true); } : undefined}
-      onKeyDown={isEventsTeam ? e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setDraft(displayed); setEditing(true); } } : undefined}>
-      {rich ? <RichTextViewer html={displayed} /> : displayed || placeholder || (isEventsTeam ? '—' : '')}
+      onClick={isEventsTeam ? e => { e.stopPropagation(); if (e.target instanceof Element && e.target.closest('a')) return; setDraft(displayed); setEditing(true); } : undefined}
+      onKeyDown={isEventsTeam ? e => { if (e.target instanceof Element && e.target.closest('a')) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setDraft(displayed); setEditing(true); } } : undefined}>
+      {rich ? <RichTextViewer html={displayed} /> : displayed ? <LinkifiedText text={displayed} /> : placeholder || (isEventsTeam ? '—' : '')}
     </span>
   </span>;
   return <span className={`inline-block max-w-full rounded-xl bg-white p-2 text-sm font-normal text-slate-800 shadow-lg ring-2 ring-teal-500 ${className}`}
