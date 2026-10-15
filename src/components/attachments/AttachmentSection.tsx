@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { TaskPhotos } from '../display/TaskPhotos';
-import { FileText, FileSpreadsheet, Image as ImageIcon, File as FileIcon, Trash2, Download, Eye, UploadCloud, ExternalLink } from 'lucide-react';
+import { FileText, FileSpreadsheet, Image as ImageIcon, File as FileIcon, Presentation, Trash2, Download, Eye, UploadCloud, ExternalLink } from 'lucide-react';
 import { useAttachments, useAttachmentMutations, getSignedUrl, downloadAttachment } from '../../hooks/useAttachments';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../i18n';
@@ -9,22 +9,25 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { Spinner } from '../ui/Spinner';
-import { ACCEPTED_FILE_TYPES, MAX_FILE_SIZE, cn, formatFileSize, getFileKind } from '../../lib/utils';
+import { MAX_FILE_SIZE, cn, formatFileSize, getFileKind } from '../../lib/utils';
+import { attachmentAccept, canAttach, fileType, isAppleMobile, needsConversion } from '../../lib/fileTypes';
+import { reportProblem } from '../../lib/problemReporting';
+import { fileFacts } from '../../lib/problemLog';
 import type { Attachment, EntityType } from '../../types';
 
-const ALLOWED_MIME = new Set([
-  'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-]);
+/** A picture to convert may start out bigger than the 20 MB a stored file is allowed */
+const MAX_PICTURE_BEFORE_CONVERSION = 60 * 1024 * 1024;
+
+const ACCEPT = attachmentAccept(
+  typeof navigator !== 'undefined' && isAppleMobile(navigator.userAgent, navigator.maxTouchPoints)
+);
 
 function kindIcon(mime: string) {
   const kind = getFileKind(mime);
   if (kind === 'image') return <ImageIcon className="h-5 w-5 text-purple-500" />;
   if (kind === 'pdf') return <FileText className="h-5 w-5 text-red-500" />;
   if (mime.includes('spreadsheet')) return <FileSpreadsheet className="h-5 w-5 text-emerald-600" />;
+  if (mime.includes('presentation') || mime === 'application/vnd.ms-powerpoint') return <Presentation className="h-5 w-5 text-orange-500" />;
   if (kind === 'office') return <FileText className="h-5 w-5 text-sky-600" />;
   return <FileIcon className="h-5 w-5 text-slate-400" />;
 }
@@ -51,18 +54,22 @@ export function AttachmentSection({ entityType, entityId, canManage, compact }: 
   const handleFiles = async (files: FileList | null) => {
     if (!files || !profile || !entityId) return;
     for (const file of Array.from(files)) {
-      if (!ALLOWED_MIME.has(file.type)) {
+      const type = fileType(file);
+      if (!canAttach(type)) {
         toast(`${file.name}: ${t('attachments.unsupported')}`, 'error');
+        reportProblem('upload', `File type not accepted: ${type || 'unknown'}`, fileFacts(file));
         continue;
       }
-      if (file.size > MAX_FILE_SIZE) {
+      if (file.size > (needsConversion(type) ? MAX_PICTURE_BEFORE_CONVERSION : MAX_FILE_SIZE)) {
         toast(`${file.name}: ${t('attachments.tooLarge')}`, 'error');
+        reportProblem('upload', 'File larger than 20 MB', fileFacts(file));
         continue;
       }
       try {
         await upload.mutateAsync({ file, userId: profile.id });
-      } catch {
-        toast(`${file.name}: ${t('attachments.uploadFailed')}`, 'error');
+      } catch (error) {
+        const unreadable = error instanceof Error && error.name === 'UnreadablePictureError';
+        toast(`${file.name}: ${t(unreadable ? 'attachments.cannotConvert' : 'attachments.uploadFailed')}`, 'error');
       }
     }
     if (inputRef.current) inputRef.current.value = '';
@@ -107,7 +114,7 @@ export function AttachmentSection({ entityType, entityId, canManage, compact }: 
             ref={inputRef}
             type="file"
             multiple
-            accept={ACCEPTED_FILE_TYPES}
+            accept={ACCEPT}
             className="hidden"
             onChange={(e) => handleFiles(e.target.files)}
           />

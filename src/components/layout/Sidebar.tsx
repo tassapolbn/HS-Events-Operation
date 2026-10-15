@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom';
 import {
   LayoutDashboard, CalendarDays, ClipboardList, Inbox, LayoutTemplate, Building2, X, MonitorPlay, ExternalLink,
-  UsersRound, FolderArchive
+  UsersRound, FolderArchive, BookUser, Search
 } from 'lucide-react';
 import { useLanguage } from '../../i18n';
 import { useAuth } from '../../contexts/AuthContext';
 import { cn } from '../../lib/utils';
+import { openGlobalSearch } from './GlobalSearch';
 
 interface SidebarProps {
   open: boolean;
@@ -21,6 +22,7 @@ export function Sidebar({ open, onClose }: SidebarProps) {
     { to: '/events', icon: ClipboardList, label: t('nav.events'), show: true },
     { to: '/requests', icon: Inbox, label: t('nav.requests'), show: true },
     { to: '/calendar', icon: CalendarDays, label: t('nav.calendar'), show: true },
+    { to: '/contacts', icon: BookUser, label: t('nav.contacts'), show: true },
     { to: '/templates', icon: LayoutTemplate, label: t('nav.templates'), show: isEventsTeam },
     { to: '/archive', icon: FolderArchive, label: t('nav.archive'), show: isEventsTeam },
     { to: '/my-department', icon: Building2, label: t('nav.myDepartment'), show: !!profile?.department_id },
@@ -47,6 +49,18 @@ export function Sidebar({ open, onClose }: SidebarProps) {
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold-400">{t('app.name')}</p>
         </div>
         <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-6">
+          {/* On a phone the search is also here, for screens too narrow for the top bar icon */}
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              openGlobalSearch();
+            }}
+            className="mb-2 flex w-full items-center gap-3 rounded-xl border border-white/15 px-3 py-2.5 text-sm font-medium text-white/80 transition-colors hover:bg-white/10 hover:text-white lg:hidden"
+          >
+            <Search className="h-[18px] w-[18px]" />
+            {t('search.button')}
+          </button>
           {items
             .filter((item) => item.show)
             .map((item) => (

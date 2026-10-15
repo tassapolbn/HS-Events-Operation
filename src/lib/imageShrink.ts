@@ -1,3 +1,5 @@
+import { fileType, isHeic, needsConversion } from './fileTypes.ts';
+
 /**
  * Shrinks photos and screenshots in the browser before they are uploaded.
  *
@@ -8,9 +10,11 @@
  * The result is JPEG, or PNG when the picture has see-through parts. Never
  * WebP: the attachments bucket only accepts PNG and JPEG pictures, and task
  * emails show the photos, which some email programs (Outlook on Windows)
- * cannot do for WebP. Anything else (PDFs, GIFs, small pictures, formats the
- * browser cannot open) is uploaded exactly as it was, and so is any picture
- * that would not get much smaller.
+ * cannot do for WebP. PDFs, small pictures and anything that would not get
+ * much smaller are uploaded exactly as they were.
+ *
+ * Pictures in other formats (HEIC, WebP, AVIF, GIF, BMP) are always turned
+ * into JPEG or PNG, because the bucket would refuse them (see prepareUpload).
  */
 
 /** Longest side, in pixels, after shrinking */
@@ -48,7 +52,7 @@ export function hasTransparency(rgba: ArrayLike<number>): boolean {
   return false;
 }
 
-function loadImage(file: File): Promise<HTMLImageElement> {
+function loadImage(file: Blob): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
     const image = new Image();
@@ -95,4 +99,68 @@ export async function shrinkImage(file: File): Promise<File> {
   } catch {
     return file;
   }
+}
+
+/** A picture in a format the bucket refuses, which this browser could not convert either */
+export class UnreadablePictureError extends Error {
+  constructor(fileName: string) {
+    super(`Could not convert the picture ${fileName} to JPEG or PNG`);
+    this.name = 'UnreadablePictureError';
+  }
+}
+
+/**
+ * Opens a picture the browser may not show by itself. Chrome, Edge and
+ * Firefox cannot open an iPhone's HEIC photos, so a decoder is fetched for
+ * them, only when such a photo is actually chosen.
+ */
+async function openPicture(file: File, type: string): Promise<HTMLImageElement> {
+  try {
+    return await loadImage(file);
+  } catch (error) {
+    if (!isHeic(type)) throw error;
+    const { default: heic2any } = await import('heic2any');
+    const converted = await heic2any({ blob: file, toType: 'image/jpeg', quality: JPEG_QUALITY });
+    return loadImage(Array.isArray(converted) ? converted[0] : converted);
+  }
+}
+
+/** A HEIC, WebP, AVIF, GIF or BMP picture as a JPEG, or a PNG when it has see-through parts */
+async function convertPicture(file: File, type: string): Promise<File> {
+  let image: HTMLImageElement;
+  try {
+    image = await openPicture(file, type);
+  } catch {
+    throw new UnreadablePictureError(file.name);
+  }
+  const { width, height } = fitWithin(image.naturalWidth, image.naturalHeight);
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) throw new UnreadablePictureError(file.name);
+  context.drawImage(image, 0, 0, width, height);
+  // Photos never have see-through parts; web pictures and GIFs can
+  const mayBeClear = !isHeic(type) && type !== 'image/bmp' && type !== 'image/x-ms-bmp';
+  const transparent = mayBeClear && hasTransparency(context.getImageData(0, 0, width, height).data);
+  const target: ShrunkType = transparent ? 'image/png' : 'image/jpeg';
+  const blob = await encode(canvas, target);
+  if (!blob || blob.type !== target) throw new UnreadablePictureError(file.name);
+  return new File([blob], renameForType(file.name, target), { type: target, lastModified: file.lastModified });
+}
+
+/**
+ * The file to upload: a picture the bucket would refuse is converted, a big
+ * photo is shrunk, and a file whose type the browser left blank gets the type
+ * its extension says. Throws UnreadablePictureError when a picture cannot be
+ * converted; anything else that goes wrong uploads the original.
+ */
+export async function prepareUpload(file: File): Promise<File> {
+  const type = fileType(file);
+  if (needsConversion(type)) {
+    if (typeof document === 'undefined') throw new UnreadablePictureError(file.name);
+    return convertPicture(file, type);
+  }
+  const typed = type && type !== file.type ? new File([file], file.name, { type, lastModified: file.lastModified }) : file;
+  return shrinkImage(typed);
 }

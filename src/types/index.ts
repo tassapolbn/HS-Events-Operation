@@ -50,6 +50,8 @@ export interface EventContact {
   role?: string;
   phone?: string;
   email?: string;
+  /** The saved contact this was ticked from, if any (see lib/savedContacts) */
+  contact_id?: string;
 }
 
 export interface EventRow {

@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MutationCache, QueryCache, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { CampusProvider } from './contexts/CampusContext';
@@ -21,11 +21,27 @@ import { CalendarPage } from './pages/CalendarPage';
 import { TemplatesPage } from './pages/TemplatesPage';
 import { ArchivePage } from './pages/ArchivePage';
 import { MyDepartmentPage } from './pages/MyDepartmentPage';
+import { ContactsPage } from './pages/ContactsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { DisplayBoardPage } from './pages/DisplayBoardPage';
 import { DisplayPickerPage } from './pages/DisplayPickerPage';
+import { reportProblem } from './lib/problemReporting';
+import { fileFacts } from './lib/problemLog';
 
 const queryClient = new QueryClient({
+  // Anything that fails to load or save is also reported for admins to see
+  queryCache: new QueryCache({
+    onError: (error, query) => {
+      reportProblem('load', error, { data: String(query.queryKey[0] ?? '') });
+    }
+  }),
+  mutationCache: new MutationCache({
+    onError: (error, variables, _result, mutation) => {
+      const upload = mutation.meta?.problem === 'upload';
+      const file = upload ? (variables as { file?: File } | undefined)?.file : undefined;
+      reportProblem(upload ? 'upload' : 'save', error, fileFacts(file));
+    }
+  }),
   defaultOptions: {
     queries: {
       staleTime: 30_000,
@@ -95,6 +111,7 @@ export default function App() {
                       <Route path="/requests/:id" element={<RequestDetailPage />} />
                       <Route path="/calendar" element={<CalendarPage />} />
                       <Route path="/my-department" element={<MyDepartmentPage />} />
+                      <Route path="/contacts" element={<ContactsPage />} />
                       <Route element={<RequireEventsTeam />}>
                         <Route path="/events/new" element={<EventFormPage />} />
                         <Route path="/events/:id/edit" element={<EventFormPage />} />

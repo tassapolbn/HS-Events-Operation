@@ -22,7 +22,11 @@ export function useDisplayLiveUpdates(campus?: Campus): LiveStatus {
     setStatus('connecting');
     const live = createDisplayLive({
       campus,
-      reload: (board) => void queryClient.invalidateQueries({ queryKey: ['display', board] }),
+      reload: (board) => {
+        void queryClient.invalidateQueries({ queryKey: ['display', board] });
+        // Announcements travel with the events signal
+        if (board === 'events') void queryClient.invalidateQueries({ queryKey: ['display', 'announcements'] });
+      },
       reloadAll: () => void queryClient.invalidateQueries({ queryKey: ['display'] }),
       fetchSignals: async () => {
         let query = supabase.from('display_signals').select('campus, board, version');

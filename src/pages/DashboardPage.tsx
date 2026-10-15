@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  CalendarDays, CheckCircle2, ClipboardList, Clock, Inbox, MapPin, Plus, TrendingUp
+  CalendarDays, CheckCircle2, ClipboardList, Clock, Inbox, MapPin, Megaphone, Plus, TrendingUp
 } from 'lucide-react';
 import { useDashboard } from '../hooks/useDashboard';
 import { useDepartments } from '../hooks/useDepartments';
@@ -12,18 +13,22 @@ import { Button } from '../components/ui/Button';
 import { Card, CardBody, CardHeader, CardTitle } from '../components/ui/Card';
 import { EventStatusBadge } from '../components/ui/Badge';
 import { Spinner } from '../components/ui/Spinner';
+import { ProblemLogCard } from '../components/dashboard/ProblemLogCard';
+import { DashboardAnnouncements } from '../components/announcements/DashboardAnnouncements';
+import { AnnouncementsManager } from '../components/announcements/AnnouncementsManager';
 import { departmentIcon } from '../lib/constants';
 import { formatDate, formatDateTime, formatTime } from '../lib/utils';
 import type { EventWithTasks } from '../types';
 
 export function DashboardPage() {
   const { t, deptName, lang } = useLanguage();
-  const { profile, isEventsTeam } = useAuth();
+  const { profile, isEventsTeam, isAdmin } = useAuth();
   const navigate = useNavigate();
   const { campusFilter } = useCampus();
   const { data, isLoading } = useDashboard(campusFilter);
   const { data: departments } = useDepartments();
   const { data: activity } = useRecentActivity(8);
+  const [managingAnnouncements, setManagingAnnouncements] = useState(false);
 
   if (isLoading || !data) return <Spinner />;
 
@@ -79,7 +84,10 @@ export function DashboardPage() {
           </p>
         </div>
         {isEventsTeam && (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => setManagingAnnouncements(true)}>
+              <Megaphone className="h-4 w-4" /> {t('announcements.title')}
+            </Button>
             <Link to="/events/new">
               <Button variant="gold" size="sm"><Plus className="h-4 w-4" /> {t('dashboard.quickCreateEvent')}</Button>
             </Link>
@@ -89,6 +97,10 @@ export function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Notices from the Events team, for today and this campus */}
+      <DashboardAnnouncements campus={campusFilter} />
+      {isEventsTeam && <AnnouncementsManager open={managingAnnouncements} onClose={() => setManagingAnnouncements(false)} />}
 
       {/* Stat cards */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -138,6 +150,9 @@ export function DashboardPage() {
         </div>
 
         <div className="space-y-5">
+          {/* Problems people met in the app, for whoever looks after it */}
+          {isAdmin && <ProblemLogCard />}
+
           {/* Department workload */}
           <Card>
             <CardHeader><CardTitle>{t('dashboard.departmentWorkload')}</CardTitle></CardHeader>

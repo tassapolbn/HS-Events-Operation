@@ -1,9 +1,17 @@
 import { useAttachments, useAttachmentMutations } from '../../hooks/useAttachments';
 import { FloorPlanPreview } from '../display/FloorPlanPreview';
 import { MAX_FILE_SIZE } from '../../lib/utils';
+import { fileType, isAppleMobile, needsConversion, PDF, pictureAccept } from '../../lib/fileTypes';
+import { reportProblem } from '../../lib/problemReporting';
+import { fileFacts } from '../../lib/problemLog';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../i18n';
 import { useToast } from '../ui/Toast';
+
+const PLAN_ACCEPT = pictureAccept(
+  typeof navigator !== 'undefined' && isAppleMobile(navigator.userAgent, navigator.maxTouchPoints),
+  true
+);
 
 export function SessionFloorPlanPicker({ eventId, value, onChange, onUploading }: {
   eventId: string; value: string; onChange: (id: string) => void; onUploading: (busy: boolean) => void;
@@ -24,18 +32,27 @@ export function SessionFloorPlanPicker({ eventId, value, onChange, onUploading }
         {plans.map(file => <option key={file.id} value={file.id}>{file.file_name}</option>)}
       </select>
       <label className="block text-xs font-semibold">
-        {lang === 'th' ? 'อัปโหลด PNG, JPG หรือ PDF (สูงสุด 20 MB)' : 'Upload PNG, JPG or PDF (up to 20 MB)'}
-        <input type="file" accept="image/png,image/jpeg,application/pdf" disabled={upload.isPending} className="mt-2 block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-teal-700 file:px-3 file:py-2 file:text-white" onChange={async event => {
+        {lang === 'th' ? 'อัปโหลดรูปภาพหรือ PDF (สูงสุด 20 MB)' : 'Upload a picture or PDF (up to 20 MB)'}
+        <input type="file" accept={PLAN_ACCEPT} disabled={upload.isPending} className="mt-2 block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-teal-700 file:px-3 file:py-2 file:text-white" onChange={async event => {
           const file = event.target.files?.[0];
           event.target.value = '';
           if (!file || !profile) return;
-          if (!['image/png', 'image/jpeg', 'application/pdf'].includes(file.type)) { toast(t('attachments.unsupported'), 'error'); return; }
-          if (file.size > MAX_FILE_SIZE) { toast(t('attachments.tooLarge'), 'error'); return; }
+          const type = fileType(file);
+          // Pictures in other formats are turned into JPEG or PNG on the way up
+          if (!['image/png', 'image/jpeg', PDF].includes(type) && !needsConversion(type)) {
+            toast(t('attachments.unsupported'), 'error');
+            reportProblem('upload', `File type not accepted: ${type || 'unknown'}`, fileFacts(file));
+            return;
+          }
+          if (file.size > MAX_FILE_SIZE && !needsConversion(type)) { toast(t('attachments.tooLarge'), 'error'); return; }
           onUploading(true);
           try {
             const attached = await upload.mutateAsync({ file, userId: profile.id });
             onChange(attached.id);
-          } catch { toast(t('attachments.uploadFailed'), 'error'); }
+          } catch (error) {
+            const unreadable = error instanceof Error && error.name === 'UnreadablePictureError';
+            toast(t(unreadable ? 'attachments.cannotConvert' : 'attachments.uploadFailed'), 'error');
+          }
           finally { onUploading(false); }
         }} />
       </label>

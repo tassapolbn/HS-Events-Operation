@@ -8,6 +8,7 @@ import { useTheme } from '../../contexts/ThemeContext';
 import { useLanguage } from '../../i18n';
 import { useNotificationsFeed, useMarkNotificationsRead } from '../../hooks/useNotifications';
 import { cn, formatDateTime } from '../../lib/utils';
+import { GlobalSearch } from './GlobalSearch';
 
 /**
  * Covers the page while a header menu is open, so a tap anywhere else only closes it.
@@ -59,7 +60,12 @@ export function Topbar({ onMenuClick }: { onMenuClick: () => void }) {
       <button onClick={onMenuClick} className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 lg:hidden" aria-label="Menu">
         <Menu className="h-5 w-5" />
       </button>
-      <div className="flex-1" />
+      {/* Search everything (Ctrl+K). A full field on wider screens, an icon on
+          phones. The narrowest phones open it from the menu instead. */}
+      <div className="hidden shrink-0 min-[360px]:block md:flex md:min-w-0 md:flex-1 md:items-center md:pr-2">
+        <GlobalSearch />
+      </div>
+      <div className="flex-1 md:hidden" />
 
       {/* Campus switcher: filters every admin list. All manages both campuses. */}
       <div

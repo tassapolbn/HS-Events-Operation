@@ -1,4 +1,6 @@
-import { Component, type ReactNode } from 'react';
+import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { reportProblem } from '../../lib/problemReporting';
+import { firstLines } from '../../lib/problemLog';
 
 interface Props {
   children: ReactNode;
@@ -14,6 +16,10 @@ export class ErrorBoundary extends Component<Props, State> {
 
   static getDerivedStateFromError(): State {
     return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown, info: ErrorInfo) {
+    reportProblem('crash', error, { component: firstLines(info.componentStack, 3) });
   }
 
   render() {

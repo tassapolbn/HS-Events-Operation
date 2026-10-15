@@ -4,6 +4,8 @@ import { useDeferredValue, useEffect, useMemo, useState, type ComponentType } fr
 import { CalendarDays, Inbox } from 'lucide-react';
 import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../hooks/usePublicDisplay';
 import { useDisplayLiveUpdates } from '../hooks/useDisplayLiveUpdates';
+import { useBoardAnnouncements } from '../hooks/useAnnouncements';
+import { AnnouncementBanner } from '../components/announcements/AnnouncementBanner';
 import { useAutoUpdate } from '../hooks/useAutoUpdate';
 import { DisplayShell, type DisplayScale, type DisplayTab } from '../components/display/DisplayShell';
 import { EventsBoard } from '../components/display/EventsBoard';
@@ -133,6 +135,8 @@ export function DisplayBoardPage({
   }, []);
 
   const { data: departments } = useDisplayDepartments();
+  const announcementsQuery = useBoardAnnouncements(campus);
+  const announcements = announcementsQuery.data;
   const rawEventsQuery = useDisplayEvents(campus, eventId);
   const rawRequestsQuery = useDisplayRequests(campus);
   const filteredEvents = useMemo(() => searchEvents(rawEventsQuery.data ?? [], deferredSearch, departments ?? []), [rawEventsQuery.data, deferredSearch, departments]);
@@ -212,6 +216,7 @@ export function DisplayBoardPage({
       onRefresh={() => {
         eventsQuery.refetch();
         requestsQuery.refetch();
+        announcementsQuery.refetch();
       }}
       refreshing={active.isFetching}
       updatedAt={active.dataUpdatedAt ? new Date(active.dataUpdatedAt) : null}
@@ -219,6 +224,14 @@ export function DisplayBoardPage({
       canEdit={canEdit}
       campusName={campus ? CAMPUS_NAMES[campus] : undefined}
     >
+      {/* Today's notices from the Events team */}
+      {!focused && (announcements ?? []).length > 0 && (
+        <div className="mb-5 space-y-2" data-board-announcements>
+          {(announcements ?? []).map((item) => (
+            <AnnouncementBanner key={item.id} message={item.message} tone={item.tone} size="board" />
+          ))}
+        </div>
+      )}
       {search.trim() && <p role="status" className="mb-4 text-sm text-slate-600">{lang === 'th' ? 'ผลการค้นหาในบอร์ดนี้' : 'Search results on this board'}: “{search}” <button className="ml-2 rounded-lg px-3 py-2 font-semibold text-navy-800 underline" onClick={() => setSearch('')}>{lang === 'th' ? 'ล้างคำค้น' : 'Clear'}</button></p>}
       {active.isError && !focused && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">{lang === 'th' ? 'โหลดข้อมูลไม่สำเร็จ กรุณากดรีเฟรช' : 'Could not load work. Please refresh.'}</p>}
       {focused ? (

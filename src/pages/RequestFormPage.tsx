@@ -2,7 +2,7 @@ import { bangkokInput, fromBangkokInput, deadlineBeforeWork, scheduleLabel } fro
 import { useEffect, useRef, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ImagePlus, X } from 'lucide-react';
+import { ArrowLeft, FileText, ImagePlus, X } from 'lucide-react';
 import { useRequest, useRequestMutations } from '../hooks/useRequests';
 import { useDepartments } from '../hooks/useDepartments';
 import { useAttachments, useAttachmentMutations } from '../hooks/useAttachments';
@@ -19,7 +19,10 @@ import { CAMPUSES, CAMPUS_NAMES, PRIORITIES, REQUEST_STATUSES } from '../lib/con
 import { supabase } from '../lib/supabase';
 import { ATTACHMENT_CACHE_CONTROL, getSignedUrl } from '../hooks/useAttachments';
 import { MAX_FILE_SIZE, randomId } from '../lib/utils';
-import { shrinkImage } from '../lib/imageShrink';
+import { prepareUpload } from '../lib/imageShrink';
+import { canAttachToRequestPhotos, fileType, isAppleMobile, needsConversion, PDF, pictureAccept } from '../lib/fileTypes';
+import { reportProblem } from '../lib/problemReporting';
+import { fileFacts } from '../lib/problemLog';
 import type { Attachment, Campus, Priority, TaskStatus } from '../types';
 
 interface RequestFormValues {
@@ -41,12 +44,36 @@ interface RequestFormValues {
 interface PendingPhoto {
   id: string;
   file: File;
+  /** Empty for a PDF, which has no picture to show */
   previewUrl: string;
 }
 
-/** Existing image attachment with a resolved preview URL (edit mode) */
+const PHOTO_ACCEPT = pictureAccept(
+  typeof navigator !== 'undefined' && isAppleMobile(navigator.userAgent, navigator.maxTouchPoints),
+  true
+);
+
+/** A PDF, or a picture this browser cannot show (HEIC outside Safari): an icon and the name */
+function FileTile({ name, pdf }: { name: string; pdf: boolean }) {
+  return (
+    <span className="flex h-full w-full flex-col items-center justify-center gap-1 p-1.5 text-center">
+      {pdf ? <FileText className="h-7 w-7 text-red-500" /> : <ImagePlus className="h-7 w-7 text-slate-400" />}
+      <span className="line-clamp-2 break-all text-[10px] font-semibold leading-tight text-slate-600 dark:text-slate-300">{name}</span>
+    </span>
+  );
+}
+
+/** A picture chosen but not uploaded yet, or its name when it cannot be shown */
+function PendingPreview({ photo }: { photo: PendingPhoto }) {
+  const [failed, setFailed] = useState(false);
+  if (!photo.previewUrl || failed) return <FileTile name={photo.file.name} pdf={!photo.previewUrl && fileType(photo.file) === PDF} />;
+  return <img src={photo.previewUrl} alt={photo.file.name} onError={() => setFailed(true)} className="h-full w-full object-cover" />;
+}
+
+/** Existing image or PDF attachment with a resolved link (edit mode) */
 function ExistingPhoto({ attachment, onRemove }: { attachment: Attachment; onRemove: () => void }) {
   const [url, setUrl] = useState('');
+  const pdf = attachment.mime_type === PDF;
   useEffect(() => {
     let mounted = true;
     getSignedUrl(attachment.storage_path).then((signed) => mounted && setUrl(signed)).catch(() => undefined);
@@ -56,7 +83,13 @@ function ExistingPhoto({ attachment, onRemove }: { attachment: Attachment; onRem
   }, [attachment.storage_path]);
   return (
     <div className="group relative h-24 w-24 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
-      {url && <img src={url} alt={attachment.file_name} className="h-full w-full object-cover" />}
+      {pdf ? (
+        <a href={url || undefined} target="_blank" rel="noopener noreferrer" className="block h-full w-full" title={attachment.file_name}>
+          <FileTile name={attachment.file_name} pdf />
+        </a>
+      ) : (
+        url && <img src={url} alt={attachment.file_name} className="h-full w-full object-cover" />
+      )}
       <button
         type="button"
         onClick={onRemove}
@@ -84,7 +117,7 @@ export function RequestFormPage() {
   // Existing image attachments (edit mode)
   const { data: attachments } = useAttachments('request', isEdit ? id : undefined);
   const { remove: removeAttachment } = useAttachmentMutations('request', isEdit ? id : undefined);
-  const existingPhotos = (attachments ?? []).filter((a) => a.mime_type.startsWith('image/'));
+  const existingPhotos = (attachments ?? []).filter((a) => a.mime_type.startsWith('image/') || a.mime_type === PDF);
 
   // New photos chosen but not yet uploaded
   const [pendingPhotos, setPendingPhotos] = useState<PendingPhoto[]>([]);
@@ -130,7 +163,7 @@ export function RequestFormPage() {
   }, [existing, isEdit, reset]);
 
   useEffect(() => {
-    return () => pendingPhotos.forEach((photo) => URL.revokeObjectURL(photo.previewUrl));
+    return () => pendingPhotos.forEach((photo) => photo.previewUrl && URL.revokeObjectURL(photo.previewUrl));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -138,15 +171,18 @@ export function RequestFormPage() {
     if (!files) return;
     const next: PendingPhoto[] = [];
     for (const file of Array.from(files)) {
-      if (!file.type.startsWith('image/')) {
+      const type = fileType(file);
+      if (!canAttachToRequestPhotos(type)) {
         toast(`${file.name}: ${t('attachments.unsupported')}`, 'error');
+        reportProblem('upload', `File type not accepted: ${type || 'unknown'}`, fileFacts(file));
         continue;
       }
-      if (file.size > MAX_FILE_SIZE) {
+      if (file.size > MAX_FILE_SIZE && !needsConversion(type)) {
         toast(`${file.name}: ${t('attachments.tooLarge')}`, 'error');
+        reportProblem('upload', 'File larger than 20 MB', fileFacts(file));
         continue;
       }
-      next.push({ id: randomId(), file, previewUrl: URL.createObjectURL(file) });
+      next.push({ id: randomId(), file, previewUrl: type === PDF ? '' : URL.createObjectURL(file) });
     }
     setPendingPhotos((prev) => [...prev, ...next]);
     if (photoInputRef.current) photoInputRef.current.value = '';
@@ -155,32 +191,44 @@ export function RequestFormPage() {
   const removePending = (photoId: string) => {
     setPendingPhotos((prev) => {
       const target = prev.find((photo) => photo.id === photoId);
-      if (target) URL.revokeObjectURL(target.previewUrl);
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
       return prev.filter((photo) => photo.id !== photoId);
     });
   };
 
-  const uploadPendingPhotos = async (requestId: string) => {
+  /** Uploads the chosen photos and PDFs; returns the names of any that failed */
+  const uploadPendingPhotos = async (requestId: string): Promise<string[]> => {
+    const failed: string[] = [];
     for (const photo of pendingPhotos) {
-      const file = await shrinkImage(photo.file);
-      const safeName = file.name.replace(/[^\w.\-() ]+/g, '_');
-      const path = `request/${requestId}/${randomId()}-${safeName}`;
-      const { error: storageError } = await supabase.storage.from('attachments').upload(path, file, {
-        cacheControl: ATTACHMENT_CACHE_CONTROL,
-        upsert: false
-      });
-      if (storageError) throw storageError;
-      const { error: rowError } = await supabase.from('attachments').insert({
-        entity_type: 'request',
-        entity_id: requestId,
-        file_name: file.name,
-        storage_path: path,
-        mime_type: file.type,
-        size_bytes: file.size,
-        uploaded_by: profile?.id ?? null
-      });
-      if (rowError) throw rowError;
+      try {
+        // Big photos shrink; HEIC, WebP and other pictures become JPEG or PNG
+        const file = await prepareUpload(photo.file);
+        const safeName = file.name.replace(/[^\w.\-() ]+/g, '_');
+        const path = `request/${requestId}/${randomId()}-${safeName}`;
+        const { error: storageError } = await supabase.storage.from('attachments').upload(path, file, {
+          cacheControl: ATTACHMENT_CACHE_CONTROL,
+          upsert: false
+        });
+        if (storageError) throw storageError;
+        const { error: rowError } = await supabase.from('attachments').insert({
+          entity_type: 'request',
+          entity_id: requestId,
+          file_name: file.name,
+          storage_path: path,
+          mime_type: file.type,
+          size_bytes: file.size,
+          uploaded_by: profile?.id ?? null
+        });
+        if (rowError) {
+          await supabase.storage.from('attachments').remove([path]);
+          throw rowError;
+        }
+      } catch (error) {
+        failed.push(photo.file.name);
+        reportProblem('upload', error, fileFacts(photo.file));
+      }
     }
+    return failed;
   };
 
   const onSubmit = async (values: RequestFormValues) => {
@@ -226,10 +274,11 @@ export function RequestFormPage() {
         const created = await createRequest.mutateAsync({ ...payload, requested_by: profile?.id ?? null });
         requestId = created.id;
       }
-      if (requestId && pendingPhotos.length > 0) {
-        await uploadPendingPhotos(requestId);
-      }
-      toast(t('common.savedSuccess'));
+      // The request is saved by now, so a file that fails does not keep the
+      // form open: saving again would create the request a second time.
+      const failed = requestId && pendingPhotos.length > 0 ? await uploadPendingPhotos(requestId) : [];
+      if (failed.length > 0) toast(`${t('requests.someFilesFailed')} ${failed.join(', ')}`, 'error');
+      else toast(t('common.savedSuccess'));
       navigate(`/requests/${requestId}`);
     } catch {
       toast(t('common.errorGeneric'), 'error');
@@ -315,8 +364,8 @@ export function RequestFormPage() {
                   <ExistingPhoto key={photo.id} attachment={photo} onRemove={() => removeAttachment.mutate(photo)} />
                 ))}
                 {pendingPhotos.map((photo) => (
-                  <div key={photo.id} className="group relative h-24 w-24 overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-                    <img src={photo.previewUrl} alt={photo.file.name} className="h-full w-full object-cover" />
+                  <div key={photo.id} className="group relative h-24 w-24 overflow-hidden rounded-xl border border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800">
+                    <PendingPreview photo={photo} />
                     <button
                       type="button"
                       onClick={() => removePending(photo.id)}
@@ -338,7 +387,7 @@ export function RequestFormPage() {
                 <input
                   ref={photoInputRef}
                   type="file"
-                  accept="image/png,image/jpeg"
+                  accept={PHOTO_ACCEPT}
                   multiple
                   className="hidden"
                   onChange={(e) => addPhotos(e.target.files)}

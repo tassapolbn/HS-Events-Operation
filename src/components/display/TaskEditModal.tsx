@@ -10,6 +10,7 @@ import { useTaskMutations } from '../../hooks/useTasks';
 import { TASK_STATUSES } from '../../lib/constants';
 import { combineDateTime, extractDate, extractTime, formatDate } from '../../lib/utils';
 import type { DisplayDepartment, DisplayEvent, DisplayTask, TaskStatus } from '../../types';
+import { SAVED_CONTACT_NAMES, SavedContactNames } from '../events/SavedContactNames';
 
 interface TaskEditValues {
   title: string;
@@ -141,7 +142,8 @@ export function TaskEditModal({ open, onClose, event, task, departments }: TaskE
             ))}
           </Select>
         )}
-        <Input label={t('tasks.assignedStaff')} {...register('assigned_staff')} />
+        <Input label={t('tasks.assignedStaff')} list={SAVED_CONTACT_NAMES} autoComplete="off" {...register('assigned_staff')} />
+        <SavedContactNames />
         <Select label={t('common.status')} {...register('status')}>
           {TASK_STATUSES.map((s) => (
             <option key={s} value={s}>

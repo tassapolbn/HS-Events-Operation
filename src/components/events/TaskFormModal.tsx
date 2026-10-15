@@ -13,6 +13,7 @@ import { PRIORITIES, TASK_STATUSES } from '../../lib/constants';
 import { combineDateTime, extractTime } from '../../lib/utils';
 import type { Department, EventSession, EventTask, Priority, TaskStatus } from '../../types';
 import { formatDate } from '../../lib/utils';
+import { SAVED_CONTACT_NAMES, SavedContactNames } from './SavedContactNames';
 
 interface TaskFormValues {
   title: string;
@@ -159,7 +160,8 @@ export function TaskFormModal({ open, onClose, eventId, eventDate, departments, 
               ))}
             </Select>
           )}
-          <Input label={t('tasks.assignedStaff')} {...register('assigned_staff')} />
+          <Input label={t('tasks.assignedStaff')} list={SAVED_CONTACT_NAMES} autoComplete="off" {...register('assigned_staff')} />
+          <SavedContactNames />
           <Input label={t('tasks.workLocation')} {...register('work_location')} />
           <Input label={t('tasks.setupLocation')} {...register('setup_location')} />
           <Input label={t('tasks.startTime')} type="time" {...register('start_time')} />

@@ -1,6 +1,12 @@
 [build]
-  command = "npm run build"
+  # The automated checks run before every build. If one fails, the build
+  # stops and the site keeps the version it already has.
+  command = "npm test && npm run build"
   publish = "dist"
+
+[build.environment]
+  # Node 22.18 and later run the TypeScript tests directly
+  NODE_VERSION = "22"
 
 [[redirects]]
   from = "/*"

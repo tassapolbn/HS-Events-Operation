@@ -10,9 +10,13 @@ A modern, bilingual (English/Thai) web application for HeadStart International S
 - **Notifications**: in-app notification feed plus notification emails per department via a Supabase Edge Function, delivered from the school Gmail account through Google Apps Script (no domain setup needed), with Resend supported as an alternative.
 - **Public display boards**: no-login pages for TVs and tablets showing event tasks per department (with tap-to-complete) and open department requests (with tap-to-update status).
 - **Templates**: save any event as a reusable template (tasks, schedule, instructions, checklists, optional attachments) and create new events from it in seconds.
-- **Attachments**: PDF, PNG, JPG, DOCX, XLSX with in-app preview (images and PDF natively, Office files via Microsoft Office viewer).
+- **Attachments**: PDF, PNG, JPG, DOCX, XLSX, PPTX with in-app preview (images and PDF natively, Office files via Microsoft Office viewer). HEIC, WebP, AVIF, GIF and BMP pictures are converted to JPEG (or PNG when see-through) in the browser before upload; iPhone HEIC photos are decoded by a small library that loads only when such a photo is chosen in a browser that cannot open it.
 - **Rich text** everywhere it matters: bold, italic, underline, lists, alignment, links.
 - **Dashboard**: today's events, upcoming events, department workload, pending/completed counters, recent activity.
+- **Announcements**: the Events Team posts short notices (General, Important or Urgent) with a first and last day, for one campus or both. They show at the top of the Dashboard and, when ticked, on the display board, and disappear by themselves after their last day.
+- **Search everything**: the top bar search (Ctrl+K, or Cmd+K on a Mac) finds events, tasks, requests (archived ones too), saved contacts and people, within what the person may see.
+- **Saved contacts**: people and suppliers kept once (Contacts in the sidebar) and ticked into an event's "Who to ask" list instead of being typed again. Anyone signed in can look a number up; the Events Team keeps the list.
+- **Problem log**: refused uploads, failed saves and crashes in anyone's browser are recorded and shown to admins on the Dashboard, so a problem is seen before someone reports it.
 - **Calendar**: month, week, and day views.
 - **Search and filters**: by name, department, location, status, priority, date range, assigned staff.
 - **Audit history**: every create/update/delete recorded with user, time, previous and updated values.
@@ -47,7 +51,7 @@ src/
 
 ## Production build
 
-`npm run build` (TypeScript check + Vite build, output in `dist/`).
+`npm run build` (TypeScript check + Vite build, output in `dist/`). Netlify runs `npm test && npm run build`, so a failing test stops the build and the live site keeps its current version.
 
 See **DEPLOYMENT_GUIDE.md** for the complete step-by-step setup (Supabase, Resend, Netlify).
 
@@ -63,7 +67,7 @@ See **DEPLOYMENT_GUIDE.md** for the complete step-by-step setup (Supabase, Resen
 - Apply `supabase/migrations/20260913140925_worksheet_row_insertion.sql` for transactional row insertion. `tests/worksheet-rows.sql` exercises it with sample records inside a rolled-back transaction, including ordering, authorization and invalid inputs.
 - Apply `supabase/migrations/20260913081415_session_floor_plans_and_grid.sql` before deploying this version. It adds a nullable session attachment reference and an authenticated, RLS-respecting worksheet update function. It retains the public board's existing visibility rules and storage permissions.
 - **Board feeds and updates:** the board reads `public_board_events` and `public_board_requests`. The old names, `public_display_events` and `public_display_requests`, now return a single "please press F5" card. Only board pages opened before this release still call them, so the card shows exactly the screens that need a refresh. An open board checks `/version.json` (from Netlify) every 10 minutes and reloads itself when a newer release is live, once no editor is open and nobody has touched it for two minutes. Apply `supabase/migrations/20261009120000_board_feeds_refresh_notice.sql` **after** deploying; until then the app falls back to the old names.
-- **Photos:** pictures over 400 KB are shrunk in the browser before upload (longest side 3000 px, WebP or JPEG), so they cost less to store and to download on every board. PDFs, GIFs and small pictures are uploaded unchanged.
+- **Photos:** pictures over 400 KB are shrunk in the browser before upload (longest side 3000 px, JPEG, or PNG when see-through), so they cost less to store and to download on every board. PDFs and small JPEG/PNG pictures are uploaded unchanged. Never WebP: the attachments bucket only stores JPEG and PNG pictures.
 
 ### Archive
 

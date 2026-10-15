@@ -115,14 +115,13 @@ export function getFileKind(mimeType: string): FileKind {
   if (mimeType === 'application/pdf') return 'pdf';
   if (
     mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-    mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+    mimeType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+    mimeType === 'application/vnd.ms-powerpoint'
   )
     return 'office';
   return 'other';
 }
-
-export const ACCEPTED_FILE_TYPES =
-  '.pdf,.png,.jpg,.jpeg,.docx,.xlsx,application/pdf,image/png,image/jpeg,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 export const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 

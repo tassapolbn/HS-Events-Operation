@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   KeyRound, Mail, ShieldCheck, Trash2, UserPlus, UserRoundCheck, UserRoundX
 } from 'lucide-react';
@@ -50,7 +51,13 @@ export function UsersPage() {
   const [passwordFor, setPasswordFor] = useState<ManagedUser | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [deleting, setDeleting] = useState<ManagedUser | null>(null);
-  const [search, setSearch] = useState('');
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
+  // The top bar search opens this page on a person
+  useEffect(() => {
+    const q = searchParams.get('q');
+    if (q !== null) setSearch(q);
+  }, [searchParams]);
 
   const departmentList = departments ?? [];
   const visible = useMemo(() => {
