@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { IDLE_MS, RETRY_MS, fetchLiveBuild, parseAttempt, shouldReload } from '../src/lib/appVersion.ts';
-import { KEEP_RATIO, MAX_SIDE, MIN_BYTES, fitWithin, isShrinkable, renameForType } from '../src/lib/imageShrink.ts';
+import { KEEP_RATIO, MAX_SIDE, MIN_BYTES, fitWithin, hasTransparency, isShrinkable, renameForType } from '../src/lib/imageShrink.ts';
 
 const NOW = 10_000_000_000;
 const idle = NOW - IDLE_MS - 1;
@@ -61,10 +61,16 @@ test('pictures are scaled down to fit, never up', () => {
   assert.deepEqual(fitWithin(0, 0), { width: 1, height: 1 });
 });
 
-test('a shrunk file gets the extension of its new format', () => {
-  assert.equal(renameForType('IMG_1234.HEIC', 'image/webp'), 'IMG_1234.webp');
-  assert.equal(renameForType('Floor plan (1).png', 'image/jpeg'), 'Floor plan (1).jpg');
-  assert.equal(renameForType('photo', 'image/webp'), 'photo.webp');
-  assert.equal(renameForType('my.event.photo.jpeg', 'image/webp'), 'my.event.photo.webp');
+test('a shrunk file gets the extension of its new format, JPEG or PNG only', () => {
+  assert.equal(renameForType('IMG_1234.HEIC', 'image/jpeg'), 'IMG_1234.jpg');
+  assert.equal(renameForType('Screenshot 2026-10-14 094857.png', 'image/jpeg'), 'Screenshot 2026-10-14 094857.jpg');
+  assert.equal(renameForType('photo', 'image/jpeg'), 'photo.jpg');
+  assert.equal(renameForType('my.event.logo.webp', 'image/png'), 'my.event.logo.png');
   assert.equal(renameForType('scan.png', 'image/png'), 'scan.png', 'unchanged format keeps its name');
+});
+
+test('see-through pictures are recognised, so they stay PNG', () => {
+  assert.equal(hasTransparency([1, 2, 3, 255, 4, 5, 6, 255]), false);
+  assert.equal(hasTransparency([1, 2, 3, 255, 4, 5, 6, 0]), true);
+  assert.equal(hasTransparency([]), false);
 });
