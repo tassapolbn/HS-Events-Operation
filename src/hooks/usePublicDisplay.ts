@@ -31,9 +31,9 @@ function localToday(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** The last day an event is active: its own date or the latest session date. */
+/** The last day an event is active: its end date, its own date or the latest session date. */
 function eventLastDate(event: DisplayEvent): string {
-  let last = event.event_date;
+  let last = event.end_date && event.end_date > event.event_date ? event.end_date : event.event_date;
   for (const session of event.sessions ?? []) {
     if (session.session_date && session.session_date > last) last = session.session_date;
   }

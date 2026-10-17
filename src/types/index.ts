@@ -61,7 +61,10 @@ export interface EventRow {
   name: string;
   category: string;
   campus: Campus;
+  /** The first day of the event */
   event_date: string;
+  /** The last day of an event that runs over several days. Null for a one-day event. */
+  end_date?: string | null;
   location: string;
   setup_start: string | null;
   venue_ready: string | null;
@@ -205,6 +208,8 @@ export interface TemplateData {
     internal_notes: string;
     priority: Priority;
     times: Record<string, string | null>; // HH:mm per milestone field
+    /** Days after the first day that the event ends; missing or 0 for a one-day event */
+    duration_days?: number;
   };
   /**
    * Sessions stored relative to the event date, so the same template can be used
@@ -344,6 +349,8 @@ export interface DisplayEvent {
   category: string;
   campus: Campus;
   event_date: string;
+  /** The last day of a multi-day event; null or missing for a one-day event */
+  end_date?: string | null;
   location: string;
   setup_start: string | null;
   venue_ready: string | null;

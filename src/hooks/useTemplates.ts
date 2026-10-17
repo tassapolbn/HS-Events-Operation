@@ -54,7 +54,9 @@ export function useTemplateMutations() {
             event_finish: extractTime(args.event.event_finish),
             breakdown_start: extractTime(args.event.breakdown_start),
             breakdown_deadline: extractTime(args.event.breakdown_deadline)
-          }
+          },
+          // A three-day event makes three-day events
+          duration_days: args.event.end_date ? Math.max(0, dayDiff(args.event.event_date, args.event.end_date)) : 0
         },
         sessions: sessions.map((session) => ({
           title: session.title,
@@ -132,6 +134,7 @@ export function useTemplateMutations() {
           name: d.event.name,
           category: d.event.category,
           event_date: eventDate,
+          end_date: (d.event.duration_days ?? 0) > 0 ? shiftDate(eventDate, d.event.duration_days ?? 0) : null,
           location: d.event.location,
           description: d.event.description,
           additional_notes: d.event.additional_notes,

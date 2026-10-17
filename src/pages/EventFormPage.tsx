@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Controller, useForm, type Path } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { useEvent, useEventMutations } from '../hooks/useEvents';
 import { useAuth } from '../contexts/AuthContext';
@@ -15,6 +16,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { cleanContacts, EventContactsField } from '../components/events/EventContactsField';
 import { CAMPUSES, CAMPUS_NAMES, EVENT_CATEGORIES, EVENT_STATUSES } from '../lib/constants';
 import { combineDateTime, extractDate, extractTime } from '../lib/utils';
+import { sessionDaysForNewEvent, storedEndDate } from '../lib/eventDays';
 import { supabase } from '../lib/supabase';
 import type { Campus, EventContact, EventStatus } from '../types';
 
@@ -41,6 +43,8 @@ interface EventFormValues {
   category: string;
   campus: Campus;
   event_date: string;
+  /** Last day of a multi-day event; empty for a one-day event */
+  end_date: string;
   location: string;
   schedule: Record<ScheduleFieldName, ScheduleSlot>;
   description: string;
@@ -71,13 +75,15 @@ export function EventFormPage() {
   const { campusFilter } = useCampus();
   const { data: existing, isLoading } = useEvent(id);
   const { createEvent, updateEvent } = useEventMutations();
+  const queryClient = useQueryClient();
 
-  const { register, handleSubmit, control, reset, formState } = useForm<EventFormValues>({
+  const { register, handleSubmit, control, reset, formState, watch } = useForm<EventFormValues>({
     defaultValues: {
       name: '',
       category: 'general',
       campus: campusFilter ?? 'HSC',
       event_date: '',
+      end_date: '',
       location: '',
       schedule: emptySchedule(),
       description: '',
@@ -111,6 +117,7 @@ export function EventFormPage() {
         category: existing.category,
         campus: existing.campus ?? 'HSC',
         event_date: existing.event_date,
+        end_date: existing.end_date ?? '',
         location: existing.location,
         schedule,
         description: existing.description,
@@ -135,6 +142,7 @@ export function EventFormPage() {
       category: values.category,
       campus: values.campus,
       event_date: values.event_date,
+      end_date: storedEndDate(values.event_date, values.end_date),
       location: values.location.trim(),
       setup_start: milestone('setup_start'),
       venue_ready: milestone('venue_ready'),
@@ -164,19 +172,26 @@ export function EventFormPage() {
         navigate(`/events/${id}`);
       } else {
         const created = await createEvent.mutateAsync({ ...payload, created_by: profile?.id ?? null });
-        // Every new event starts with a ready-to-use session (same date and place)
+        // Every new event starts with a ready-to-use session for each of its
+        // days (same place). The first day keeps the event's own times.
+        const sessionDays = sessionDaysForNewEvent({ event_date: values.event_date, end_date: payload.end_date });
         try {
-          await supabase.from('event_sessions').insert({
-            event_id: created.id,
-            session_date: values.event_date,
-            location: values.location.trim(),
-            start_time: milestone('event_start'),
-            end_time: milestone('event_finish'),
-            sort_order: 0
-          });
+          await supabase.from('event_sessions').insert(
+            sessionDays.map((day, index) => ({
+              event_id: created.id,
+              session_date: day,
+              location: values.location.trim(),
+              start_time: index === 0 ? milestone('event_start') : null,
+              end_time: index === 0 ? milestone('event_finish') : null,
+              sort_order: 0
+            }))
+          );
         } catch {
           /* non-critical */
         }
+        // The new days' sessions belong on the calendar, the alert bar and the board too
+        queryClient.invalidateQueries({ queryKey: ['calendar'] });
+        queryClient.invalidateQueries({ queryKey: ['display'] });
         toast(t('common.savedSuccess'));
         navigate(`/events/${created.id}`);
       }
@@ -184,6 +199,8 @@ export function EventFormPage() {
       toast(t('common.errorGeneric'), 'error');
     }
   };
+
+  const startDate = watch('event_date');
 
   if (isEdit && isLoading) return <Spinner />;
 
@@ -232,11 +249,22 @@ export function EventFormPage() {
               {CAMPUSES.map((c) => <option key={c} value={c}>{c} - {CAMPUS_NAMES[c]}</option>)}
             </Select>
             <Input
-              label={t('events.eventDate')}
+              label={t('events.startDate')}
               type="date"
               required
               error={formState.errors.event_date && t('validation.dateRequired')}
               {...register('event_date', { required: true })}
+            />
+            {/* Several days: the event shows on every one of them in the calendar */}
+            <Input
+              label={t('events.endDate')}
+              type="date"
+              min={startDate || undefined}
+              hint={t('events.endDateHint')}
+              error={formState.errors.end_date && t('events.endBeforeStart')}
+              {...register('end_date', {
+                validate: (value, form) => !value || !form.event_date || value >= form.event_date
+              })}
             />
             <Input label={t('events.eventLocation')} {...register('location')} className="sm:col-span-2" />
             <Select label={t('common.status')} {...register('status')}>

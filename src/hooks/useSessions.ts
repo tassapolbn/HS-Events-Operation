@@ -10,6 +10,8 @@ export function useSessionMutations(eventId: string) {
     queryClient.invalidateQueries({ queryKey: ['events', 'detail', eventId] });
     queryClient.invalidateQueries({ queryKey: ['events'] });
     queryClient.invalidateQueries({ queryKey: ['display'] });
+    // The calendar and the today / tomorrow bar
+    queryClient.invalidateQueries({ queryKey: ['calendar'] });
     queryClient.invalidateQueries({ queryKey: ['session-sources'] });
   };
 

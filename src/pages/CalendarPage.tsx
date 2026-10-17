@@ -1,20 +1,22 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Wrench } from 'lucide-react';
 import {
   addDays, addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek,
   format, isSameMonth, isToday, startOfMonth, startOfWeek
 } from 'date-fns';
 import { enGB } from 'date-fns/locale/en-GB';
 import { th as thLocale } from 'date-fns/locale/th';
-import { useEvents } from '../hooks/useEvents';
+import { useCalendarData } from '../hooks/useCalendar';
 import { useCampus } from '../contexts/CampusContext';
 import { useLanguage } from '../i18n';
 import { Button } from '../components/ui/Button';
 import { Card } from '../components/ui/Card';
 import { EventStatusBadge } from '../components/ui/Badge';
-import { cn, formatTime } from '../lib/utils';
-import type { EventWithTasks } from '../types';
+import { buildCalendarDays, prepLabel as labelPrep, type CalendarEntry, type CalendarSession } from '../lib/calendarDays';
+import { prepWords } from '../components/calendar/calendarWords';
+import { cn, fillTemplate, formatTime, type Lang } from '../lib/utils';
+import type { EventStatus } from '../types';
 
 type ViewMode = 'month' | 'week' | 'day';
 
@@ -47,26 +49,16 @@ export function CalendarPage() {
     return { from: cursor, to: cursor };
   }, [view, cursor]);
 
-  // The calendar is a record of what happened, so archived events stay on it (greyed by status)
-  const { data: events } = useEvents({
-    dateFrom: format(range.from, 'yyyy-MM-dd'),
-    dateTo: format(range.to, 'yyyy-MM-dd'),
-    campus: campusFilter,
-    includeArchived: true
-  });
-
-  const eventsByDay = useMemo(() => {
-    const map = new Map<string, EventWithTasks[]>();
-    for (const event of events ?? []) {
-      const key = event.event_date;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(event);
-    }
-    for (const list of map.values()) {
-      list.sort((a, b) => (a.event_start ?? '').localeCompare(b.event_start ?? ''));
-    }
-    return map;
-  }, [events]);
+  // Every day an event runs, its sessions, and the setup days before it.
+  // The calendar is a record of what happened, so archived events stay on it.
+  const from = format(range.from, 'yyyy-MM-dd');
+  const to = format(range.to, 'yyyy-MM-dd');
+  const { data } = useCalendarData(from, to, campusFilter);
+  const entriesByDay = useMemo(
+    () => buildCalendarDays(data?.events ?? [], data?.sessions ?? [], from, to),
+    [data, from, to]
+  );
+  const open = (entry: CalendarEntry) => navigate(`/events/${entry.event.id}`);
 
   const days = eachDayOfInterval({ start: range.from, end: range.to });
 
@@ -129,10 +121,11 @@ export function CalendarPage() {
           <div className="grid grid-cols-7">
             {days.map((day) => {
               const key = format(day, 'yyyy-MM-dd');
-              const dayEvents = eventsByDay.get(key) ?? [];
+              const dayEntries = entriesByDay.get(key) ?? [];
               return (
                 <div
                   key={key}
+                  data-calendar-day={key}
                   onClick={() => { setCursor(day); setView('day'); }}
                   className={cn(
                     'min-h-[92px] cursor-pointer border-b border-r border-slate-50 p-1.5 transition-colors last:border-r-0 hover:bg-slate-50 dark:border-slate-800/60 dark:hover:bg-slate-800/40',
@@ -152,18 +145,32 @@ export function CalendarPage() {
                     {format(day, 'd')}
                   </span>
                   <div className="mt-1 space-y-1">
-                    {dayEvents.slice(0, 3).map((event) => (
+                    {dayEntries.slice(0, 3).map((entry) => (
                       <button
-                        key={event.id}
-                        onClick={(e) => { e.stopPropagation(); navigate(`/events/${event.id}`); }}
-                        className="flex w-full items-center gap-1 truncate rounded-md bg-navy-50 px-1.5 py-0.5 text-left text-[11px] font-medium text-navy-800 hover:bg-navy-100 dark:bg-navy-900/60 dark:text-navy-100 dark:hover:bg-navy-800"
+                        key={entry.key}
+                        data-calendar-entry={entry.kind}
+                        onClick={(e) => { e.stopPropagation(); open(entry); }}
+                        title={entryTitle(entry, t, lang)}
+                        className={cn(
+                          'flex w-full items-center gap-1 truncate rounded-md px-1.5 py-0.5 text-left text-[11px] font-medium',
+                          entry.kind === 'prep'
+                            ? 'bg-amber-50 text-amber-900 ring-1 ring-inset ring-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-800'
+                            : 'bg-navy-50 text-navy-800 hover:bg-navy-100 dark:bg-navy-900/60 dark:text-navy-100 dark:hover:bg-navy-800'
+                        )}
                       >
-                        <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', STATUS_DOT[event.status])} />
-                        <span className="truncate">{event.name}</span>
+                        {entry.kind === 'prep' ? (
+                          <Wrench className="h-3 w-3 shrink-0" />
+                        ) : (
+                          <span className={cn('h-1.5 w-1.5 shrink-0 rounded-full', STATUS_DOT[entry.event.status])} />
+                        )}
+                        <span className="truncate">{entry.kind === 'prep' ? `${prepLabel(entry, t)} · ${entry.event.name}` : entry.event.name}</span>
+                        {entry.kind === 'event' && entry.dayCount > 1 && (
+                          <span className="ml-auto shrink-0 text-[10px] font-semibold opacity-70">{entry.dayIndex}/{entry.dayCount}</span>
+                        )}
                       </button>
                     ))}
-                    {dayEvents.length > 3 && (
-                      <p className="px-1 text-[10px] text-slate-400">+{dayEvents.length - 3}</p>
+                    {dayEntries.length > 3 && (
+                      <p className="px-1 text-[10px] text-slate-400">+{dayEntries.length - 3}</p>
                     )}
                   </div>
                 </div>
@@ -177,7 +184,7 @@ export function CalendarPage() {
         <div className="grid gap-3 md:grid-cols-7">
           {days.map((day) => {
             const key = format(day, 'yyyy-MM-dd');
-            const dayEvents = eventsByDay.get(key) ?? [];
+            const dayEntries = entriesByDay.get(key) ?? [];
             return (
               <Card key={key} className={cn('p-3', isToday(day) && 'ring-2 ring-gold-400')}>
                 <p className="text-xs font-bold uppercase text-slate-400">{format(day, 'EEE', { locale })}</p>
@@ -185,14 +192,28 @@ export function CalendarPage() {
                   {format(day, 'd')}
                 </p>
                 <div className="mt-2 space-y-1.5">
-                  {dayEvents.map((event) => (
+                  {dayEntries.map((entry) => (
                     <button
-                      key={event.id}
-                      onClick={() => navigate(`/events/${event.id}`)}
-                      className="w-full rounded-lg bg-navy-50 px-2 py-1.5 text-left text-xs font-medium text-navy-800 hover:bg-navy-100 dark:bg-navy-900/60 dark:text-navy-100"
+                      key={entry.key}
+                      data-calendar-entry={entry.kind}
+                      onClick={() => open(entry)}
+                      className={cn(
+                        'w-full rounded-lg px-2 py-1.5 text-left text-xs font-medium',
+                        entry.kind === 'prep'
+                          ? 'bg-amber-50 text-amber-900 ring-1 ring-inset ring-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-100 dark:ring-amber-800'
+                          : 'bg-navy-50 text-navy-800 hover:bg-navy-100 dark:bg-navy-900/60 dark:text-navy-100'
+                      )}
                     >
-                      <span className="block truncate">{event.name}</span>
-                      {event.event_start && <span className="text-[10px] text-slate-400">{formatTime(event.event_start, lang)}</span>}
+                      {entry.kind === 'prep' ? (
+                        <span className="flex items-center gap-1 font-semibold">
+                          <Wrench className="h-3 w-3 shrink-0" /> <span className="truncate">{prepLabel(entry, t)}</span>
+                        </span>
+                      ) : null}
+                      <span className="block truncate">{entry.event.name}</span>
+                      {entry.kind === 'event' && entry.dayCount > 1 && (
+                        <span className="block text-[10px] opacity-70">{fillTemplate(t('calendar.dayOf'), { n: entry.dayIndex, total: entry.dayCount })}</span>
+                      )}
+                      <SessionLines entry={entry} lang={lang} t={t} compact />
                     </button>
                   ))}
                 </div>
@@ -204,29 +225,46 @@ export function CalendarPage() {
 
       {view === 'day' && (
         <Card className="p-4">
-          {(eventsByDay.get(format(cursor, 'yyyy-MM-dd')) ?? []).length === 0 ? (
+          {(entriesByDay.get(format(cursor, 'yyyy-MM-dd')) ?? []).length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-400">{t('calendar.noEvents')}</p>
           ) : (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-              {(eventsByDay.get(format(cursor, 'yyyy-MM-dd')) ?? []).map((event) => (
+              {(entriesByDay.get(format(cursor, 'yyyy-MM-dd')) ?? []).map((entry) => (
                 <li
-                  key={event.id}
-                  onClick={() => navigate(`/events/${event.id}`)}
-                  className="flex cursor-pointer flex-wrap items-center gap-3 px-2 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                  key={entry.key}
+                  data-calendar-entry={entry.kind}
+                  onClick={() => open(entry)}
+                  className={cn(
+                    'flex cursor-pointer flex-wrap items-start gap-3 px-2 py-3',
+                    entry.kind === 'prep' ? 'bg-amber-50/60 hover:bg-amber-50 dark:bg-amber-950/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  )}
                 >
                   <div className="w-16 text-center">
-                    <p className="text-sm font-bold text-navy-800 dark:text-gold-300">
-                      {event.event_start ? formatTime(event.event_start, lang) : '--:--'}
+                    <p className={cn('text-sm font-bold', entry.kind === 'prep' ? 'text-amber-700 dark:text-amber-300' : 'text-navy-800 dark:text-gold-300')}>
+                      {entry.time ?? '--:--'}
                     </p>
-                    {event.event_finish && (
-                      <p className="text-[11px] text-slate-400">{formatTime(event.event_finish, lang)}</p>
+                    {entry.kind === 'event' && entry.dayIndex === entry.dayCount && entry.event.event_finish && (
+                      <p className="text-[11px] text-slate-400">{formatTime(entry.event.event_finish, lang)}</p>
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-slate-800 dark:text-slate-100">{event.name}</p>
-                    {event.location && <p className="text-xs text-slate-400">{event.location}</p>}
+                    {entry.kind === 'prep' && (
+                      <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-300">
+                        <Wrench className="h-3.5 w-3.5" /> {prepLabel(entry, t)}
+                      </p>
+                    )}
+                    <p className="font-semibold text-slate-800 dark:text-slate-100">{entry.event.name}</p>
+                    <p className="text-xs text-slate-400">
+                      {[
+                        entry.kind === 'event' && entry.dayCount > 1
+                          ? fillTemplate(t('calendar.dayOf'), { n: entry.dayIndex, total: entry.dayCount })
+                          : '',
+                        entry.event.location ?? ''
+                      ].filter(Boolean).join(' · ')}
+                    </p>
+                    <SessionLines entry={entry} lang={lang} t={t} />
                   </div>
-                  <EventStatusBadge status={event.status} />
+                  <EventStatusBadge status={entry.event.status as EventStatus} />
                 </li>
               ))}
             </ul>
@@ -234,5 +272,54 @@ export function CalendarPage() {
         </Card>
       )}
     </div>
+  );
+}
+
+type Translate = ReturnType<typeof useLanguage>['t'];
+
+/** What a setup or pack-up day says it is: its session's name, or what kind of day it is */
+function prepLabel(entry: CalendarEntry, t: Translate): string {
+  return labelPrep(entry, prepWords(t));
+}
+
+function sessionWhen(session: CalendarSession, lang: Lang): string {
+  if (!session.start_time) return '';
+  return session.end_time ? `${formatTime(session.start_time, lang)}–${formatTime(session.end_time, lang)}` : formatTime(session.start_time, lang);
+}
+
+function entryTitle(entry: CalendarEntry, t: Translate, lang: Lang): string {
+  const lines = [entry.kind === 'prep' ? `${prepLabel(entry, t)} · ${entry.event.name}` : entry.event.name];
+  for (const session of entry.sessions) {
+    lines.push([sessionWhen(session, lang), session.title || t('calendar.session')].filter(Boolean).join(' '));
+  }
+  return lines.join('\n');
+}
+
+/** The sessions of an entry's day, with their times */
+function SessionLines({ entry, lang, t, compact }: { entry: CalendarEntry; lang: Lang; t: Translate; compact?: boolean }) {
+  const shown = entry.kind === 'prep' && entry.sessions.length <= 1 ? [] : entry.sessions;
+  if (shown.length === 0) {
+    if (entry.kind === 'prep' && entry.setupTime) {
+      return <span className={cn('block opacity-80', compact ? 'text-[10px]' : 'mt-1 text-xs')}>{entry.setupTime}</span>;
+    }
+    if (entry.kind === 'prep' && entry.sessions[0]) {
+      const when = sessionWhen(entry.sessions[0], lang);
+      return when ? <span className={cn('block opacity-80', compact ? 'text-[10px]' : 'mt-1 text-xs')}>{when}</span> : null;
+    }
+    return null;
+  }
+  return (
+    <span className={cn('block space-y-0.5', compact ? 'mt-0.5' : 'mt-1.5')}>
+      {shown.map((session) => (
+        <span
+          key={session.id}
+          data-calendar-session={session.id}
+          className={cn('flex gap-1.5 opacity-80', compact ? 'text-[10px]' : 'text-xs text-slate-600 dark:text-slate-300')}
+        >
+          {sessionWhen(session, lang) && <span className="shrink-0 tabular-nums">{sessionWhen(session, lang)}</span>}
+          <span className="truncate">{session.title || t('calendar.session')}</span>
+        </span>
+      ))}
+    </span>
   );
 }

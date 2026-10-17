@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { CalendarDays, Globe, Inbox, RefreshCw, Search, Settings2, X } from 'lucide-react';
 import { useLanguage } from '../../i18n';
 import { departmentIcon } from '../../lib/constants';
@@ -34,8 +34,18 @@ export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departmen
   const [now, setNow] = useState(new Date());
   const [settings, setSettings] = useState(false);
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(timer); }, []);
+  // How tall the pinned search bar is, so the board's day headers can pin just below it
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const [stickyHeight, setStickyHeight] = useState(0);
+  useEffect(() => {
+    const node = stickyRef.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => setStickyHeight(Math.round(node.getBoundingClientRect().height)));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
   const th = lang === 'th';
-  return <div className="support-board min-h-screen bg-[#f3f6fa] text-slate-800">
+  return <div className="support-board min-h-screen bg-[#f3f6fa] text-slate-800" style={{ '--board-sticky-top': `${stickyHeight}px` } as CSSProperties}>
     <header className="border-b-4 border-gold-400 bg-[#003057] text-white">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3 sm:gap-5">
@@ -51,7 +61,7 @@ export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departmen
         {settings && <div className="flex w-full flex-wrap items-center gap-2 border-t border-white/15 pt-3"><span className="mr-2 text-sm">{th ? 'ขนาดตัวอักษร' : 'Text size'}</span>{SCALES.map(size => <button key={size} aria-pressed={scale === size} onClick={() => onScaleChange(size)} className={cn('min-h-11 rounded-lg px-4 text-sm font-bold',scale === size ? 'bg-gold-400 text-navy-900' : 'bg-white/10')}>{t(`displaySize.${size}`)}</button>)}</div>}
       </div>
     </header>
-    <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+    <div ref={stickyRef} className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
       <div className="mx-auto max-w-[1600px] space-y-3 px-4 py-3 sm:px-6">
         <div className="flex flex-col gap-3 md:flex-row">
           <div className="flex shrink-0 gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label={t('display.chooseView')}>

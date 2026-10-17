@@ -34,7 +34,8 @@ export function useEvents(filters: EventFilters = {}) {
       if (filters.status) query = query.eq('status', filters.status);
       if (filters.priority) query = query.eq('priority', filters.priority);
       if (filters.campus) query = query.eq('campus', filters.campus);
-      if (filters.dateFrom) query = query.gte('event_date', filters.dateFrom);
+      // An event belongs to a period when any of its days falls in it
+      if (filters.dateFrom) query = query.or(`end_date.gte.${filters.dateFrom},event_date.gte.${filters.dateFrom}`);
       if (filters.dateTo) query = query.lte('event_date', filters.dateTo);
 
       const { data, error } = await query;
@@ -89,6 +90,8 @@ export function useEventMutations() {
     queryClient.invalidateQueries({ queryKey: ['events'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     queryClient.invalidateQueries({ queryKey: ['display'] });
+    // The calendar and the today / tomorrow bar
+    queryClient.invalidateQueries({ queryKey: ['calendar'] });
     // Choosing "Archived" in the event form files the event away too
     queryClient.invalidateQueries({ queryKey: ['archive'] });
   };

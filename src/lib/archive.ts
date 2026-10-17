@@ -31,13 +31,15 @@ export type ArchiveReason = 'completed' | 'cancelled' | 'past';
 export interface ArchivableEvent {
   status: EventStatus;
   event_date: string;
+  /** Last day of a multi-day event */
+  end_date?: string | null;
   /** Every session counts, hidden ones too: a later session means the event is not over. */
   event_sessions?: Array<{ session_date: string }> | null;
 }
 
-/** The last day an event runs: its own date or its latest session. */
+/** The last day an event runs: its end date, its own date or its latest session. */
 export function eventLastDay(event: ArchivableEvent): string {
-  let last = event.event_date;
+  let last = event.end_date && event.end_date > event.event_date ? event.end_date : event.event_date;
   for (const session of event.event_sessions ?? []) {
     if (session.session_date > last) last = session.session_date;
   }

@@ -87,3 +87,12 @@ test('before the archive migration, only archive-column errors are recognised as
   assert.equal(hasArchiveColumns([{ id: 'a' }]), false);
   assert.equal(hasArchiveColumns([]), false);
 });
+
+test('a multi-day event runs until its end date', () => {
+  const fair = { status: 'active', event_date: '2026-10-01', end_date: '2026-10-05', event_sessions: [{ session_date: '2026-10-03' }] };
+  assert.equal(eventLastDay(fair), '2026-10-05');
+  assert.equal(eventArchiveReason(fair, '2026-10-05'), null, 'not past on its last day');
+  assert.equal(eventArchiveReason(fair, '2026-10-06'), 'past');
+  assert.equal(eventLastDay({ ...fair, end_date: null }), '2026-10-03', 'without an end date the sessions decide');
+  assert.equal(eventLastDay({ ...fair, event_sessions: [{ session_date: '2026-10-09' }] }), '2026-10-09', 'a later session still counts');
+});

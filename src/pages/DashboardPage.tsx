@@ -17,7 +17,7 @@ import { ProblemLogCard } from '../components/dashboard/ProblemLogCard';
 import { DashboardAnnouncements } from '../components/announcements/DashboardAnnouncements';
 import { AnnouncementsManager } from '../components/announcements/AnnouncementsManager';
 import { departmentIcon } from '../lib/constants';
-import { formatDate, formatDateTime, formatTime } from '../lib/utils';
+import { formatDateTime, formatTime, formatDateRange } from '../lib/utils';
 import type { EventWithTasks } from '../types';
 
 export function DashboardPage() {
@@ -54,7 +54,7 @@ export function DashboardPage() {
         <p className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">{event.name}</p>
         <p className="flex flex-wrap items-center gap-x-3 text-xs text-slate-400">
           <span className="inline-flex items-center gap-1">
-            <CalendarDays className="h-3 w-3" /> {formatDate(event.event_date, lang)}
+            <CalendarDays className="h-3 w-3" /> {formatDateRange(event.event_date, event.end_date, lang)}
           </span>
           {event.event_start && (
             <span className="inline-flex items-center gap-1">

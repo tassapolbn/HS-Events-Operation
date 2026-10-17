@@ -11,6 +11,7 @@ import { useEventMutations } from '../../hooks/useEvents';
 import { EVENT_STATUSES } from '../../lib/constants';
 import { combineDateTime, extractDate, extractTime } from '../../lib/utils';
 import type { DisplayEvent, EventStatus } from '../../types';
+import { storedEndDate } from '../../lib/eventDays';
 
 const MILESTONES = [
   { key: 'setup_start', label: 'events.setupStart' },
@@ -33,6 +34,8 @@ interface EventEditValues {
   name: string;
   status: EventStatus;
   event_date: string;
+  /** Last day of a multi-day event; empty for a one-day event */
+  end_date: string;
   location: string;
   schedule: Record<MilestoneKey, Slot>;
 }
@@ -60,7 +63,7 @@ export function EventEditModal({ open, onClose, event }: EventEditModalProps) {
   const { toast } = useToast();
   const { updateEvent } = useEventMutations();
   const { register, handleSubmit, reset, formState } = useForm<EventEditValues>({
-    defaultValues: { name: '', status: 'scheduled', event_date: '', location: '', schedule: emptySchedule() }
+    defaultValues: { name: '', status: 'scheduled', event_date: '', end_date: '', location: '', schedule: emptySchedule() }
   });
 
   useEffect(() => {
@@ -79,6 +82,7 @@ export function EventEditModal({ open, onClose, event }: EventEditModalProps) {
       name: event.name,
       status: event.status,
       event_date: event.event_date,
+      end_date: event.end_date ?? '',
       location: event.location,
       schedule
     });
@@ -96,6 +100,7 @@ export function EventEditModal({ open, onClose, event }: EventEditModalProps) {
         name: values.name.trim(),
         status: values.status,
         event_date: values.event_date,
+        end_date: storedEndDate(values.event_date, values.end_date),
         location: values.location.trim(),
         setup_start: at('setup_start'),
         venue_ready: at('venue_ready'),
@@ -145,6 +150,14 @@ export function EventEditModal({ open, onClose, event }: EventEditModalProps) {
             {...register('name', { required: true })}
             className="sm:col-span-2"
           />
+          <Input label={t('events.startDate')} type="date" {...register('event_date', { required: true })} />
+          <Input
+            label={t('events.endDate')}
+            type="date"
+            hint={t('events.endDateHint')}
+            error={formState.errors.end_date && t('events.endBeforeStart')}
+            {...register('end_date', { validate: (value, form) => !value || !form.event_date || value >= form.event_date })}
+          />
           <Select label={t('common.status')} {...register('status')}>
             {EVENT_STATUSES.map((s) => (
               <option key={s} value={s}>
@@ -152,8 +165,7 @@ export function EventEditModal({ open, onClose, event }: EventEditModalProps) {
               </option>
             ))}
           </Select>
-          <Input label={t('events.eventDate')} type="date" {...register('event_date', { required: true })} />
-          <Input label={t('common.location')} className="sm:col-span-2" {...register('location')} />
+          <Input label={t('common.location')} {...register('location')} />
         </div>
 
         <div>

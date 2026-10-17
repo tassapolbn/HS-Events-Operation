@@ -5,7 +5,7 @@ import type { Campus, DepartmentRequest, EventRow, EventStatus } from '../types'
 
 /** An archived event as the Archive folder lists it. */
 export interface ArchivedEvent
-  extends Pick<EventRow, 'id' | 'name' | 'category' | 'campus' | 'event_date' | 'location' | 'status' | 'header_color'> {
+  extends Pick<EventRow, 'id' | 'name' | 'category' | 'campus' | 'event_date' | 'end_date' | 'location' | 'status' | 'header_color'> {
   archived_at: string | null;
   status_before_archive: EventStatus | null;
   archived_by_profile: { full_name: string } | null;
@@ -36,7 +36,7 @@ export function useArchivedEvents(campus?: Campus) {
       let query = supabase
         .from('events')
         .select(
-          'id, name, category, campus, event_date, location, status, header_color, archived_at, status_before_archive, ' +
+          'id, name, category, campus, event_date, end_date, location, status, header_color, archived_at, status_before_archive, ' +
             'archived_by_profile:profiles!events_archived_by_fkey(full_name), event_sessions(session_date), event_tasks(id, deleted_at)'
         )
         .eq('status', 'archived')

@@ -19,7 +19,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { ArchiveItemButton, ArchiveSweep, useArchiveFeedback } from '../components/archive/ArchiveControls';
 import { ACTIVE_EVENT_STATUSES, departmentIcon } from '../lib/constants';
 import { eventArchiveReason, hasArchiveColumns, schoolToday } from '../lib/archive';
-import { cn, formatDate } from '../lib/utils';
+import { cn, formatDateRange } from '../lib/utils';
 import type { EventStatus } from '../types';
 
 export function EventsPage() {
@@ -173,7 +173,7 @@ export function EventsPage() {
                     <h3 className="text-base font-bold text-slate-800 dark:text-slate-100">{event.name}</h3>
                     <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
                       <span className="inline-flex items-center gap-1.5">
-                        <CalendarDays className="h-3.5 w-3.5" /> {formatDate(event.event_date, lang)}
+                        <CalendarDays className="h-3.5 w-3.5" /> {formatDateRange(event.event_date, event.end_date, lang)}
                       </span>
                       {event.location && (
                         <span className="inline-flex items-center gap-1.5">

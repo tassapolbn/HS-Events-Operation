@@ -2,11 +2,13 @@ import { blockIsDone, blockIsOverdue, inScope, outstandingTasks, type BoardScope
 import { BoardEditableText } from './BoardEditableText';
 import { EventContacts } from '../events/EventContacts';
 import { sessionTimeline } from '../../lib/sessionTimeline';
+import { daysBetween, eventDayCount, eventDayIndex, eventEndDate, isMultiDay } from '../../lib/eventDays';
+import { schoolToday } from '../../lib/archive';
 import { FloorPlanPreview } from './FloorPlanPreview';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   AlarmClock, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CircleCheckBig, Clock, LayoutList,
-  ListChecks, Map as MapIcon, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, User
+  ListChecks, Map as MapIcon, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, User, Wrench
 } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
 import { useLanguage } from '../../i18n';
@@ -17,9 +19,7 @@ import {
 import { BoardSkeleton } from './BoardSkeleton';
 import { AskQuestionModal } from './AskQuestionModal';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
-import {
-  cn, darkenColor, extractDate, formatDate, formatTime, isRichTextEmpty, lightenColor, readableTextColor
-} from '../../lib/utils';
+import { cn, darkenColor, extractDate, fillTemplate, formatDate, formatTime, isRichTextEmpty, lightenColor, readableTextColor, formatDateRange } from '../../lib/utils';
 import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
 
 /**
@@ -54,7 +54,8 @@ function readBoardView(): BoardView {
   }
 }
 
-type TimelineEventGroup = { event: DisplayEvent; blocks: ReturnType<typeof sessionTimeline>[number]['block'][] };
+type TimelineEntry = ReturnType<typeof sessionTimeline>[number];
+type TimelineEventGroup = { event: DisplayEvent; blocks: TimelineEntry['block'][] };
 
 interface EventsBoardProps {
   events: DisplayEvent[] | undefined;
@@ -518,6 +519,33 @@ export function EventsBoard({
     );
   };
 
+  /**
+   * Where a day sits in its event: "Day 2 of 3", or a day before or after the
+   * event's own days, so a setup day is never read as the event itself.
+   */
+  const eventDayBadge = (evt: DisplayEvent, date: string): { text: string; tone: 'before' | 'after' | 'day' } | null => {
+    if (date < evt.event_date) {
+      return {
+        text: fillTemplate(t('display.beforeEvent'), { date: formatDate(evt.event_date, lang, 'EEE d MMM') }),
+        tone: 'before'
+      };
+    }
+    if (isMultiDay(evt)) {
+      if (date > eventEndDate(evt)) return { text: t('display.afterEvent'), tone: 'after' };
+      return {
+        text: fillTemplate(t('calendar.dayOf'), { n: eventDayIndex(evt, date), total: eventDayCount(evt) }),
+        tone: 'day'
+      };
+    }
+    // Without an end date, the days that have work count as the event's days, as they always have
+    const dates = workDates(evt).filter((day) => day >= evt.event_date);
+    if (dates.length < 2) return null;
+    return {
+      text: fillTemplate(t('calendar.dayOf'), { n: Math.max(1, dates.indexOf(date) + 1), total: dates.length }),
+      tone: 'day'
+    };
+  };
+
   /** One event's work on one day, inside the date ordered view */
   const renderTimelineGroup = (date: string, group: TimelineEventGroup, order = 0): ReactNode => {
     const evt = group.event;
@@ -529,8 +557,7 @@ export function EventsBoard({
     const headerColor = evt.header_color || '#1a3c5e';
     const headerText = evt.header_text_color || '#ffffff';
     const CategoryIcon = categoryIcon(evt.category);
-    const dates = workDates(evt);
-    const dayIndex = Math.max(1, dates.indexOf(date) + 1);
+    const dayBadge = eventDayBadge(evt, date);
     const dateOrder = Array.from(new Set((evt.sessions ?? []).map((session) => session.session_date)));
     const gradientFor = (sessionDate: string) =>
       SESSION_BAR_GRADIENTS[Math.max(0, dateOrder.indexOf(sessionDate)) % SESSION_BAR_GRADIENTS.length];
@@ -567,14 +594,17 @@ export function EventsBoard({
             <BoardEditableText entity="event" id={evt.id} eventId={evt.id} field="name" value={evt.name} label={t('events.eventName')} />
           </h3>
           <StatusBadge status={boardStatus(evt, nowMs)} />
-          {dates.length > 1 && (
+          {dayBadge && (
             <span
-              className="rounded-lg px-2.5 py-1 text-xs font-bold"
-              style={{ backgroundColor: headerText + '26' }}
+              data-event-day={dayBadge.tone}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold',
+                dayBadge.tone === 'before' && 'bg-amber-300 text-amber-950 shadow-sm'
+              )}
+              style={dayBadge.tone === 'before' ? undefined : { backgroundColor: headerText + '26' }}
             >
-              {lang === 'th'
-                ? 'วันที่ ' + dayIndex + ' จาก ' + dates.length
-                : 'day ' + dayIndex + ' of ' + dates.length}
+              {dayBadge.tone === 'before' && <Wrench className="h-3.5 w-3.5" aria-hidden="true" />}
+              {dayBadge.text}
             </span>
           )}
           {/* Its time has gone and the work is still open, so the board says so */}
@@ -657,14 +687,106 @@ export function EventsBoard({
     </div>
   );
 
+  /**
+   * The bar that opens each day of the date ordered view. On wider screens it
+   * stays pinned under the board's own header while that day scrolls past, so
+   * the day being read is always on screen.
+   */
+  const dayDivider = (date: string, dayEntries: TimelineEntry[]): ReactNode => {
+    const offset = daysBetween(schoolToday(boardNow), date);
+    const isToday = offset === 0;
+    const past = offset < 0;
+    const relative =
+      offset === 0
+        ? t('display.today')
+        : offset === 1
+          ? t('display.tomorrow')
+          : offset === -1
+            ? t('display.yesterday')
+            : offset > 1
+              ? fillTemplate(t('display.inDays'), { n: offset })
+              : fillTemplate(t('display.daysAgo'), { n: -offset });
+    const eventCount = new Set(dayEntries.map((entry) => entry.event.id)).size;
+    const taskCount = dayEntries.reduce((sum, entry) => sum + entry.block.tasks.length, 0);
+    return (
+      <div
+        data-board-day-header={date}
+        className={cn(
+          'z-10 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-l-[6px] px-4 py-3 shadow-md md:sticky',
+          // While pinned, the strip of board above it hides the cards scrolling past
+          "md:before:pointer-events-none md:before:absolute md:before:left-[-6px] md:before:right-[-1px] md:before:-top-2.5 md:before:h-2.5 md:before:bg-[#f3f6fa] md:before:content-['']",
+          isToday
+            ? 'border-gold-300 border-l-gold-500 bg-gold-50 dark:border-gold-800 dark:bg-gold-950'
+            : past
+              ? 'border-slate-200 border-l-slate-400 bg-slate-100 dark:border-slate-700 dark:bg-slate-800'
+              : 'border-slate-200 border-l-navy-700 bg-white dark:border-slate-700 dark:bg-slate-900'
+        )}
+        style={{ top: 'calc(var(--board-sticky-top, 0px) + 0.5rem)' }}
+      >
+        <span className="flex h-14 w-14 shrink-0 flex-col overflow-hidden rounded-xl bg-white shadow ring-1 ring-black/10">
+          <span
+            className={cn(
+              'flex h-[1.2rem] items-center justify-center text-[0.6rem] font-extrabold uppercase tracking-wide',
+              isToday ? 'bg-gold-500 text-navy-900' : past ? 'bg-slate-500 text-white' : 'bg-navy-800 text-white'
+            )}
+          >
+            {formatDate(date, lang, 'MMM')}
+          </span>
+          <span className="flex flex-1 items-center justify-center text-2xl font-black leading-none text-navy-900">
+            {formatDate(date, lang, 'd')}
+          </span>
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-lg font-black tracking-tight text-slate-900 sm:text-xl dark:text-white">
+            {formatDate(date, lang, 'EEEE d MMMM yyyy')}
+          </h2>
+          <p
+            className={cn(
+              'mt-0.5 text-sm font-extrabold',
+              isToday ? 'text-gold-700 dark:text-gold-300' : past ? 'text-slate-500' : 'text-navy-600 dark:text-navy-300'
+            )}
+          >
+            {relative}
+          </p>
+        </div>
+        <span className="ml-auto rounded-full bg-white px-3 py-1 text-sm font-extrabold text-slate-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700">
+          {fillTemplate(t(eventCount === 1 ? 'display.eventCountOne' : 'display.eventCount'), { n: eventCount })}
+          {' · '}
+          {fillTemplate(t(taskCount === 1 ? 'display.taskCountOne' : 'display.taskCount'), { n: taskCount })}
+        </span>
+      </div>
+    );
+  };
+
   const renderTimeline = (): ReactNode => {
     const entries = sessionTimeline(events, selectedDept).filter(({ date, event, block }) =>
       event.id === focusEventId || inScope(blockIsDone(block.session, block.session?.session_date ?? date ?? event.event_date, block.tasks, boardNow), scope)
     );
     if (entries.length === 0) return scopeEmptyState;
+    // The timeline is already in date order, so each day is one run of entries
+    const days: Array<{ date: string; entries: TimelineEntry[] }> = [];
+    for (const entry of entries) {
+      const last = days[days.length - 1];
+      if (last && last.date === entry.date) last.entries.push(entry);
+      else days.push({ date: entry.date, entries: [entry] });
+    }
+    let order = 0;
     return (
-      <div className="space-y-6">
-        {entries.map(({ date, event, block }, order) => renderTimelineGroup(date, { event, blocks: [block] }, order))}
+      <div className="space-y-10">
+        {days.map((day) => (
+          <section
+            key={day.date}
+            id={`board-day-${day.date}`}
+            data-board-day={day.date}
+            aria-label={formatDate(day.date, lang, 'EEEE d MMMM yyyy')}
+            className="space-y-5"
+          >
+            {dayDivider(day.date, day.entries)}
+            <div className="space-y-6 md:pl-3">
+              {day.entries.map(({ date, event, block }) => renderTimelineGroup(date, { event, blocks: [block] }, order++))}
+            </div>
+          </section>
+        ))}
       </div>
     );
   };
@@ -858,7 +980,7 @@ export function EventsBoard({
                     className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-bold"
                     style={{ backgroundColor: `${headerText}26` }}
                   >
-                    <CalendarDays className="h-4 w-4" /> {formatDate(event.event_date, lang, 'EEE d MMM yyyy')}
+                    <CalendarDays className="h-4 w-4" /> {formatDateRange(event.event_date, event.end_date, lang, 'EEE d MMM yyyy')}
                   </span>
                   <EventContacts contacts={event.contacts} tone="onDark" className="basis-full" />
                   {openWork > 0 && (

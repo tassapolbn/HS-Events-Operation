@@ -18,6 +18,22 @@ export function formatDate(value: string | Date | null | undefined, lang: Lang, 
   return format(date, pattern, { locale: locales[lang] });
 }
 
+/**
+ * A day, or a range of days for an event that runs over several:
+ * "Tue 28 Oct – Fri 31 Oct 2026". The year is written once when both days share it.
+ */
+export function formatDateRange(
+  start: string,
+  end: string | null | undefined,
+  lang: Lang,
+  pattern = 'EEE d MMM yyyy'
+): string {
+  if (!end || end <= start) return formatDate(start, lang, pattern);
+  const sameYear = start.slice(0, 4) === end.slice(0, 4);
+  const startPattern = sameYear ? pattern.replace(/\s*y+\s*/g, ' ').trim() : pattern;
+  return `${formatDate(start, lang, startPattern)} – ${formatDate(end, lang, pattern)}`;
+}
+
 export function formatTime(value: string | Date | null | undefined, lang: Lang): string {
   if (!value) return '-';
   const date = typeof value === 'string' ? parseISO(value) : value;

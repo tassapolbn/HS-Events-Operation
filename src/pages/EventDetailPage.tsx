@@ -35,7 +35,7 @@ import { AuditHistory } from '../components/events/AuditHistory';
 import { AttachmentSection } from '../components/attachments/AttachmentSection';
 import { ArchivedBanner, useArchiveFeedback } from '../components/archive/ArchiveControls';
 import { eventArchiveReason } from '../lib/archive';
-import { cn, combineDateTime, formatDate, formatTime, isRichTextEmpty } from '../lib/utils';
+import { cn, combineDateTime, formatDate, formatTime, isRichTextEmpty, formatDateRange } from '../lib/utils';
 import { normalizeTimeInput } from '../lib/grid';
 import { sessionColor } from '../lib/sessionColors';
 import { copyTasks, getTaskClipboard, taskToClipboardItem } from '../lib/taskClipboard';
@@ -402,7 +402,7 @@ export function EventDetailPage() {
             <h1 className="truncate text-lg font-bold text-navy-800 dark:text-white sm:text-xl">{event.name}</h1>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
               <span className="inline-flex items-center gap-1">
-                <CalendarDays className="h-3.5 w-3.5" /> {formatDate(event.event_date, lang)}
+                <CalendarDays className="h-3.5 w-3.5" /> {formatDateRange(event.event_date, event.end_date, lang)}
               </span>
               {event.location && (
                 <span className="inline-flex items-center gap-1">

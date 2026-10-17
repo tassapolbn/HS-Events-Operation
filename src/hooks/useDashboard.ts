@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { addDays, format } from 'date-fns';
 import { supabase } from '../lib/supabase';
 import { isArchiveSchemaMissing } from '../lib/archive';
+import { eventCoversDay } from '../lib/eventDays';
 import type { Campus, EventWithTasks, TaskStatus } from '../types';
 
 export interface DashboardData {
@@ -35,7 +36,8 @@ export function useDashboard(campus?: Campus) {
         .select('*, event_tasks(id, department_id, status, assigned_staff, title, deleted_at)')
         .is('deleted_at', null)
         .neq('status', 'archived')
-        .gte('event_date', today)
+        // Running today or starting within two weeks
+        .or(`end_date.gte.${today},event_date.gte.${today}`)
         .lte('event_date', horizon)
         .order('event_date');
       let tasksQ = supabase
@@ -87,7 +89,7 @@ export function useDashboard(campus?: Campus) {
       }
 
       return {
-        todayEvents: events.filter((event) => event.event_date === today),
+        todayEvents: events.filter((event) => eventCoversDay(event, today)),
         upcomingEvents: events.filter((event) => event.event_date > today),
         monthEvents: (monthRes.data ?? []) as { id: string; event_date: string; status: string }[],
         pendingTasks: combined.filter((item) => OPEN_STATUSES.includes(item.status)).length,

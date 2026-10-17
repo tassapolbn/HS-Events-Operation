@@ -6,6 +6,9 @@ import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../
 import { useDisplayLiveUpdates } from '../hooks/useDisplayLiveUpdates';
 import { useBoardAnnouncements } from '../hooks/useAnnouncements';
 import { AnnouncementBanner } from '../components/announcements/AnnouncementBanner';
+import { DayAlertBar } from '../components/calendar/DayAlertBar';
+import { calendarFromBoard, todayTomorrowAlerts } from '../lib/calendarDays';
+import { schoolToday } from '../lib/archive';
 import { useAutoUpdate } from '../hooks/useAutoUpdate';
 import { DisplayShell, type DisplayScale, type DisplayTab } from '../components/display/DisplayShell';
 import { EventsBoard } from '../components/display/EventsBoard';
@@ -128,7 +131,7 @@ export function DisplayBoardPage({
 
   // Re-read the clock every 30 seconds so the Active / Done counts follow the
   // time of day even when no new data arrives.
-  const [, setClockTick] = useState(0);
+  const [clockTick, setClockTick] = useState(0);
   useEffect(() => {
     const timer = window.setInterval(() => setClockTick((tick) => tick + 1), 30_000);
     return () => window.clearInterval(timer);
@@ -143,6 +146,13 @@ export function DisplayBoardPage({
   const filteredRequests = useMemo(() => searchRequests(rawRequestsQuery.data ?? [], deferredSearch, departments ?? []), [rawRequestsQuery.data, deferredSearch, departments]);
   const eventsQuery = { ...rawEventsQuery, data: focused ? rawEventsQuery.data : filteredEvents };
   const requestsQuery = { ...rawRequestsQuery, data: focused ? rawRequestsQuery.data : filteredRequests };
+
+  // What is on today and tomorrow, from everything on this board, whatever is searched or chosen
+  const boardAlerts = useMemo(() => {
+    const { events, sessions } = calendarFromBoard(rawEventsQuery.data ?? []);
+    return todayTomorrowAlerts(events, sessions, schoolToday());
+    // clockTick moves the bar on to the next day at midnight
+  }, [rawEventsQuery.data, clockTick]);
 
   const departmentList = departments ?? [];
   const active = requestId ? requestsQuery : eventId ? eventsQuery : tab === 'events' ? eventsQuery : requestsQuery;
@@ -224,6 +234,8 @@ export function DisplayBoardPage({
       canEdit={canEdit}
       campusName={campus ? CAMPUS_NAMES[campus] : undefined}
     >
+      {/* What is on today and tomorrow */}
+      {!focused && <DayAlertBar alerts={boardAlerts} size="board" />}
       {/* Today's notices from the Events team */}
       {!focused && (announcements ?? []).length > 0 && (
         <div className="mb-5 space-y-2" data-board-announcements>
