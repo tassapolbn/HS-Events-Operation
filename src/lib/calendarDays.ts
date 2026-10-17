@@ -212,7 +212,8 @@ export function prepLabel(entry: CalendarEntry, words: PrepWords): string {
       : isMultiDay(entry.event)
         ? words.after
         : words.session;
-  const name = entry.sessions[0]?.title?.trim() || fallback;
+  // The first session that has a name speaks for the day; the others are counted
+  const name = entry.sessions.map((session) => session.title?.trim()).find(Boolean) || fallback;
   return entry.sessions.length > 1 ? `${name} +${entry.sessions.length - 1}` : name;
 }
 

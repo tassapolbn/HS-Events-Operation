@@ -174,6 +174,17 @@ test('a named session gives the prep day its name; "Setup begins" when only the 
   );
   assert.equal(prepLabel(named.get('2026-10-27')[0], words), 'Setup +1');
 
+  // An untitled session first in the day does not hide the name of the next one
+  const untitledFirst = buildCalendarDays(
+    [event({})],
+    [
+      session({ id: 'u', session_date: '2026-10-27', title: '', start_time: '2026-10-27T01:00:00Z' }),
+      session({ id: 'n', session_date: '2026-10-27', title: 'Photo booth', start_time: '2026-10-27T03:00:00Z' })
+    ],
+    '2026-10-26', '2026-11-01'
+  );
+  assert.equal(prepLabel(untitledFirst.get('2026-10-27')[0], words), 'Photo booth +1');
+
   const setupOnly = buildCalendarDays([event({ setup_start: '2026-10-27T06:00:00Z' })], [], '2026-10-26', '2026-11-01');
   assert.equal(prepLabel(setupOnly.get('2026-10-27')[0], words), 'Setup begins');
   assert.equal(prepLabel(setupOnly.get('2026-10-28')[0], words), '', 'an event day is not a prep day');
