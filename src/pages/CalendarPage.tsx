@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ChevronRight, Wrench } from 'lucide-react';
+import { CalendarPlus, ChevronLeft, ChevronRight, Wrench } from 'lucide-react';
 import {
   addDays, addMonths, addWeeks, eachDayOfInterval, endOfMonth, endOfWeek,
   format, isSameMonth, isToday, startOfMonth, startOfWeek
@@ -15,6 +15,7 @@ import { Card } from '../components/ui/Card';
 import { EventStatusBadge } from '../components/ui/Badge';
 import { buildCalendarDays, prepLabel as labelPrep, type CalendarEntry, type CalendarSession } from '../lib/calendarDays';
 import { prepWords } from '../components/calendar/calendarWords';
+import { CalendarFeedModal } from '../components/calendar/CalendarFeedModal';
 import { cn, fillTemplate, formatTime, type Lang } from '../lib/utils';
 import type { EventStatus } from '../types';
 
@@ -34,6 +35,8 @@ export function CalendarPage() {
   const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>('month');
   const [cursor, setCursor] = useState(new Date());
+  // The Google Calendar links
+  const [feedOpen, setFeedOpen] = useState(false);
   const locale = lang === 'th' ? thLocale : enGB;
 
   const range = useMemo(() => {
@@ -84,7 +87,10 @@ export function CalendarPage() {
     <div className="animate-fade-in space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-extrabold tracking-tight text-navy-800 dark:text-white lg:text-3xl">{t('calendar.title')}</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setFeedOpen(true)} data-calendar-feed-button>
+            <CalendarPlus className="h-4 w-4" /> {t('calendarFeed.button')}
+          </Button>
           <div className="flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900">
             {(['month', 'week', 'day'] as ViewMode[]).map((mode) => (
               <button
@@ -271,6 +277,8 @@ export function CalendarPage() {
           )}
         </Card>
       )}
+
+      <CalendarFeedModal open={feedOpen} onClose={() => setFeedOpen(false)} />
     </div>
   );
 }
