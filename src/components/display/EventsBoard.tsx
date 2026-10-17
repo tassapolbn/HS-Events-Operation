@@ -4,7 +4,7 @@ import { EventContacts } from '../events/EventContacts';
 import { sessionTimeline } from '../../lib/sessionTimeline';
 import { daysBetween, eventDayCount, eventDayIndex, eventEndDate, isMultiDay } from '../../lib/eventDays';
 import { schoolToday } from '../../lib/archive';
-import { dayColor } from '../../lib/dayColors';
+import { dayColor, sessionBarGradient } from '../../lib/dayColors';
 import { useCurrentBoardDay } from '../../hooks/useCurrentBoardDay';
 import { FloorPlanPreview } from './FloorPlanPreview';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
@@ -23,21 +23,6 @@ import { AskQuestionModal } from './AskQuestionModal';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
 import { cn, darkenColor, extractDate, fillTemplate, formatDate, formatTime, isRichTextEmpty, lightenColor, readableTextColor, formatDateRange } from '../../lib/utils';
 import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
-
-/**
- * Distinct, deep gradients for session date bars. When one event runs across
- * several dates, each date gets its own colour so staff never confuse one day
- * with another. A single-date event keeps the default navy (index 0). All are
- * dark enough for white text to stay readable.
- */
-const SESSION_BAR_GRADIENTS = [
-  'linear-gradient(135deg, #0f2744 0%, #1a3c5e 55%, #2d5a87 100%)', // navy
-  'linear-gradient(135deg, #0f3d3e 0%, #115e59 55%, #0f766e 100%)', // teal
-  'linear-gradient(135deg, #3b1d4e 0%, #5b2a6e 55%, #7e3f9d 100%)', // plum
-  'linear-gradient(135deg, #14331f 0%, #166534 55%, #15803d 100%)', // forest
-  'linear-gradient(135deg, #3f1518 0%, #7f1d1d 55%, #b3341f 100%)', // brick
-  'linear-gradient(135deg, #1e1b4b 0%, #312e81 55%, #4f46e5 100%)'  // indigo
-];
 
 /**
  * How the board reads. 'date' merges every event into one running order by
@@ -347,7 +332,10 @@ export function EventsBoard({
     );
   };
 
-  /** A session states its own date, place and time once, above its panels. */
+  /**
+   * A session states its own date, place and time once, above its panels. Its bar
+   * wears the Thai colour of its weekday, like the day's banner and date tile.
+   */
   const sessionHeader = (
     session: DisplaySession,
     tasks: DisplayTask[],
@@ -357,6 +345,7 @@ export function EventsBoard({
     const done = tasks.filter((task) => task.status === 'completed').length;
     return (
       <div
+        data-session-bar={session.id}
         className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-4 py-3.5 text-white shadow-md"
         style={{ backgroundImage: barGradient }}
       >
@@ -583,9 +572,6 @@ export function EventsBoard({
     const headerText = evt.header_text_color || '#ffffff';
     const CategoryIcon = categoryIcon(evt.category);
     const dayBadge = eventDayBadge(evt, date);
-    const dateOrder = Array.from(new Set((evt.sessions ?? []).map((session) => session.session_date)));
-    const gradientFor = (sessionDate: string) =>
-      SESSION_BAR_GRADIENTS[Math.max(0, dateOrder.indexOf(sessionDate)) % SESSION_BAR_GRADIENTS.length];
     const plans = evt.attachments.filter((file) => file.mime_type.startsWith('image/') && !(evt.sessions ?? []).some(session => session.floor_plan_attachment_id === file.id));
 
     return (
@@ -673,7 +659,7 @@ export function EventsBoard({
             <div key={block.key} className="space-y-3">
               {block.session ? (
                 <>
-                  {sessionHeader(block.session, block.tasks, evt, gradientFor(block.session.session_date))}
+                  {sessionHeader(block.session, block.tasks, evt, sessionBarGradient(block.session.session_date))}
                   {sessionNoteBar(block.session, evt.id)}
                 </>
               ) : (
@@ -1005,10 +991,6 @@ export function EventsBoard({
               total + overdueCount(session, session.session_date, event.tasks.filter((task) => task.session_id === session.id)),
             0
           );
-        // Give every distinct session date its own bar colour (stable order).
-        const sessionDateOrder = Array.from(new Set(allSessions.map((s) => s.session_date)));
-        const barGradientFor = (date: string) =>
-          SESSION_BAR_GRADIENTS[Math.max(0, sessionDateOrder.indexOf(date)) % SESSION_BAR_GRADIENTS.length];
 
         return (
           <section
@@ -1188,7 +1170,7 @@ export function EventsBoard({
                             key={session.id}
                             className="space-y-4 rounded-2xl border border-navy-100 bg-slate-50 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40"
                           >
-                            {sessionHeader(session, sessionTasks, event, barGradientFor(session.session_date))}
+                            {sessionHeader(session, sessionTasks, event, sessionBarGradient(session.session_date))}
                             {/* Operational note for this session: OT, reminders, venue instructions */}
                             {sessionNoteBar(session, event.id)}
                             {session.floor_plan && <FloorPlanPreview file={session.floor_plan} label={`${t('display.floorPlan')} · ${session.title || formatDate(session.session_date, lang)}`} />}

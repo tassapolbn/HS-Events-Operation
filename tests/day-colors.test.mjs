@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dayColor, weekdayOf } from '../src/lib/dayColors.ts';
+import { dayColor, sessionBarGradient, weekdayOf } from '../src/lib/dayColors.ts';
 
 test('the weekday of a date does not depend on the time zone', () => {
   assert.equal(weekdayOf('2026-10-17'), 6, 'Saturday');
@@ -38,5 +38,15 @@ test('text on every day colour is easy to read', () => {
     assert.ok(contrast(color.solid, color.onSolid) >= 4.5, `${day}: date tile text`);
     assert.ok(contrast(color.deep, color.onSolid) >= 4.5, `${day}: date tile text where the tile is deepest`);
     assert.ok(contrast(color.tint, color.ink) >= 4.5, `${day}: weekday on the banner`);
+  }
+});
+
+test('a session bar is a dark gradient of its weekday colour, readable in white all the way across', () => {
+  assert.equal(sessionBarGradient('2026-10-19'), 'linear-gradient(135deg, #713f12 0%, #854d0e 55%, #a16207 100%)', 'Monday: dark gold');
+  for (let offset = 0; offset < 7; offset += 1) {
+    const day = `2026-10-${String(18 + offset).padStart(2, '0')}`;
+    const stops = sessionBarGradient(day).match(/#[0-9a-f]{6}/g);
+    assert.equal(stops.length, 3);
+    for (const stop of stops) assert.ok(contrast(stop, '#ffffff') >= 4.5, `${day}: white text on ${stop}`);
   }
 });
