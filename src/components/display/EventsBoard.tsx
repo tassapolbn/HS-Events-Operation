@@ -771,9 +771,13 @@ export function EventsBoard({
               'flex h-14 w-14 shrink-0 origin-top flex-col overflow-hidden rounded-2xl shadow-md ring-1 ring-black/10 sm:h-16 sm:w-16',
               arriving && 'motion-safe:animate-day-flip'
             )}
-            style={{ backgroundColor: color.solid, color: color.onSolid }}
+            style={{
+              backgroundColor: color.solid,
+              backgroundImage: `linear-gradient(155deg, ${color.solid} 0%, ${color.deep} 100%)`,
+              color: color.onSolid
+            }}
           >
-            <span className="flex h-5 items-center justify-center bg-black/15 text-[0.62rem] font-extrabold uppercase tracking-widest">
+            <span className="flex h-5 items-center justify-center bg-black/20 text-[0.62rem] font-extrabold uppercase tracking-widest">
               {formatDate(date, lang, 'MMM')}
             </span>
             <span className="flex flex-1 items-center justify-center text-[1.65rem] font-black leading-none sm:text-[1.9rem]">

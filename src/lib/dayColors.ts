@@ -3,13 +3,15 @@
  * light blue), so the board gives each day of the week its colour and two days
  * side by side never look alike.
  *
- * Text on every solid colour passes the WCAG AA contrast ratio of 4.5:1. The
- * light colours (yellow, orange, light blue) take dark text, the others white.
+ * The date tiles are a deep shade of the day's colour with white text, which
+ * passes the WCAG AA contrast ratio of 4.5:1 on every one of them.
  */
 export interface DayColor {
-  /** The date tile */
+  /** The date tile: a deep shade of the day's colour */
   solid: string;
-  /** Text on the solid colour */
+  /** A deeper shade, where the tile's gradient ends */
+  deep: string;
+  /** Text on the tile: always white */
   onSolid: string;
   /** The weekday written on the light background */
   ink: string;
@@ -23,19 +25,19 @@ export interface DayColor {
 
 const DAY_COLORS: DayColor[] = [
   // Sunday: red
-  { solid: '#dc2626', onSolid: '#ffffff', ink: '#b91c1c', tint: '#fef2f2', border: '#fecaca', rail: '#fca5a5' },
+  { solid: '#b91c1c', deep: '#991b1b', onSolid: '#ffffff', ink: '#b91c1c', tint: '#fef2f2', border: '#fecaca', rail: '#fca5a5' },
   // Monday: yellow
-  { solid: '#facc15', onSolid: '#422006', ink: '#a16207', tint: '#fefce8', border: '#fde68a', rail: '#fde047' },
+  { solid: '#a16207', deep: '#854d0e', onSolid: '#ffffff', ink: '#a16207', tint: '#fefce8', border: '#fde68a', rail: '#fde047' },
   // Tuesday: pink
-  { solid: '#db2777', onSolid: '#ffffff', ink: '#be185d', tint: '#fdf2f8', border: '#fbcfe8', rail: '#f9a8d4' },
+  { solid: '#be185d', deep: '#9d174d', onSolid: '#ffffff', ink: '#be185d', tint: '#fdf2f8', border: '#fbcfe8', rail: '#f9a8d4' },
   // Wednesday: green
-  { solid: '#15803d', onSolid: '#ffffff', ink: '#15803d', tint: '#f0fdf4', border: '#bbf7d0', rail: '#86efac' },
+  { solid: '#15803d', deep: '#166534', onSolid: '#ffffff', ink: '#15803d', tint: '#f0fdf4', border: '#bbf7d0', rail: '#86efac' },
   // Thursday: orange
-  { solid: '#f97316', onSolid: '#431407', ink: '#c2410c', tint: '#fff7ed', border: '#fed7aa', rail: '#fdba74' },
+  { solid: '#c2410c', deep: '#9a3412', onSolid: '#ffffff', ink: '#c2410c', tint: '#fff7ed', border: '#fed7aa', rail: '#fdba74' },
   // Friday: light blue
-  { solid: '#38bdf8', onSolid: '#082f49', ink: '#0369a1', tint: '#f0f9ff', border: '#bae6fd', rail: '#7dd3fc' },
+  { solid: '#0369a1', deep: '#075985', onSolid: '#ffffff', ink: '#0369a1', tint: '#f0f9ff', border: '#bae6fd', rail: '#7dd3fc' },
   // Saturday: purple
-  { solid: '#7c3aed', onSolid: '#ffffff', ink: '#6d28d9', tint: '#f5f3ff', border: '#ddd6fe', rail: '#c4b5fd' }
+  { solid: '#6d28d9', deep: '#5b21b6', onSolid: '#ffffff', ink: '#6d28d9', tint: '#f5f3ff', border: '#ddd6fe', rail: '#c4b5fd' }
 ];
 
 /** 0 for Sunday to 6 for Saturday, for a yyyy-MM-dd day, whatever time zone the device is in */

@@ -10,11 +10,11 @@ test('the weekday of a date does not depend on the time zone', () => {
 });
 
 test('each day of the week has the Thai day colour, and neighbours always differ', () => {
-  assert.equal(dayColor('2026-10-18').solid, '#dc2626', 'Sunday is red');
-  assert.equal(dayColor('2026-10-19').solid, '#facc15', 'Monday is yellow');
+  assert.equal(dayColor('2026-10-18').solid, '#b91c1c', 'Sunday is red');
+  assert.equal(dayColor('2026-10-19').solid, '#a16207', 'Monday is yellow');
   assert.equal(dayColor('2026-10-21').solid, '#15803d', 'Wednesday is green');
-  assert.equal(dayColor('2026-10-23').solid, '#38bdf8', 'Friday is light blue');
-  assert.equal(dayColor('2026-10-17').solid, '#7c3aed', 'Saturday is purple');
+  assert.equal(dayColor('2026-10-23').solid, '#0369a1', 'Friday is light blue');
+  assert.equal(dayColor('2026-10-17').solid, '#6d28d9', 'Saturday is purple');
   const week = ['2026-10-18', '2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24'];
   assert.equal(new Set(week.map((day) => dayColor(day).solid)).size, 7, 'seven different colours');
 });
@@ -34,7 +34,9 @@ test('text on every day colour is easy to read', () => {
   for (let offset = 0; offset < 7; offset += 1) {
     const day = `2026-10-${String(18 + offset).padStart(2, '0')}`;
     const color = dayColor(day);
+    assert.equal(color.onSolid, '#ffffff', `${day}: white text on a dark tile`);
     assert.ok(contrast(color.solid, color.onSolid) >= 4.5, `${day}: date tile text`);
+    assert.ok(contrast(color.deep, color.onSolid) >= 4.5, `${day}: date tile text where the tile is deepest`);
     assert.ok(contrast(color.tint, color.ink) >= 4.5, `${day}: weekday on the banner`);
   }
 });
