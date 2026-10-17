@@ -61,7 +61,7 @@ export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departmen
         {settings && <div className="flex w-full flex-wrap items-center gap-2 border-t border-white/15 pt-3"><span className="mr-2 text-sm">{th ? 'ขนาดตัวอักษร' : 'Text size'}</span>{SCALES.map(size => <button key={size} aria-pressed={scale === size} onClick={() => onScaleChange(size)} className={cn('min-h-11 rounded-lg px-4 text-sm font-bold',scale === size ? 'bg-gold-400 text-navy-900' : 'bg-white/10')}>{t(`displaySize.${size}`)}</button>)}</div>}
       </div>
     </header>
-    <div ref={stickyRef} className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+    <div ref={stickyRef} data-board-sticky className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
       <div className="mx-auto max-w-[1600px] space-y-3 px-4 py-3 sm:px-6">
         <div className="flex flex-col gap-3 md:flex-row">
           <div className="flex shrink-0 gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label={t('display.chooseView')}>

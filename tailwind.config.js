@@ -65,6 +65,24 @@ export default {
         sheen: {
           '0%': { transform: 'translateX(-130%)' },
           '55%,100%': { transform: 'translateX(240%)' }
+        },
+        /* A new day on the board: its date tile turns over like a desk
+           calendar page, a light sweeps across, and the banner glows once. */
+        'day-flip': {
+          '0%': { transform: 'perspective(600px) rotateX(-100deg)', opacity: '0' },
+          '55%': { transform: 'perspective(600px) rotateX(14deg)', opacity: '1' },
+          '80%': { transform: 'perspective(600px) rotateX(-5deg)' },
+          '100%': { transform: 'perspective(600px) rotateX(0deg)' }
+        },
+        'day-sweep': {
+          '0%': { transform: 'translateX(-120%) skewX(-14deg)', opacity: '0' },
+          '15%': { opacity: '1' },
+          '100%': { transform: 'translateX(380%) skewX(-14deg)', opacity: '0' }
+        },
+        'day-glow': {
+          '0%': { transform: 'scale(0.975)', boxShadow: '0 0 0 0 var(--day-glow)' },
+          '40%': { transform: 'scale(1.012)' },
+          '100%': { transform: 'scale(1)', boxShadow: '0 0 0 18px rgba(255,255,255,0)' }
         }
       },
       animation: {
@@ -74,7 +92,10 @@ export default {
         'rise-in': 'rise-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both',
         'tick-pop': 'tick-pop 0.28s ease-out',
         'live-ring': 'live-ring 2.4s ease-out infinite',
-        sheen: 'sheen 3.2s ease-in-out infinite'
+        sheen: 'sheen 3.2s ease-in-out infinite',
+        'day-flip': 'day-flip 0.75s cubic-bezier(0.2, 0.8, 0.2, 1)',
+        'day-sweep': 'day-sweep 0.9s ease-out 0.1s both',
+        'day-glow': 'day-glow 0.75s ease-out'
       }
     }
   },

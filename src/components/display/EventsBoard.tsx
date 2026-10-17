@@ -4,8 +4,10 @@ import { EventContacts } from '../events/EventContacts';
 import { sessionTimeline } from '../../lib/sessionTimeline';
 import { daysBetween, eventDayCount, eventDayIndex, eventEndDate, isMultiDay } from '../../lib/eventDays';
 import { schoolToday } from '../../lib/archive';
+import { dayColor } from '../../lib/dayColors';
+import { useCurrentBoardDay } from '../../hooks/useCurrentBoardDay';
 import { FloorPlanPreview } from './FloorPlanPreview';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   AlarmClock, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CircleCheckBig, Clock, LayoutList,
   ListChecks, Map as MapIcon, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, User, Wrench
@@ -113,6 +115,25 @@ export function EventsBoard({
   /** Which event the "Ask a question" dialog is open for */
   const [askEvent, setAskEvent] = useState<DisplayEvent | null>(null);
   const [viewMode, setViewMode] = useState<BoardView>(() => focusEventId ? 'event' : readBoardView());
+
+  // The day being read in the date view. When it changes on scrolling, that
+  // day's banner plays its "new day" animation once.
+  const currentDay = useCurrentBoardDay(
+    viewMode === 'date' && !isLoading,
+    `${scope}|${selectedDept}|${(events ?? []).map((event) => event.id).join(',')}`
+  );
+  const [arrivingDay, setArrivingDay] = useState<string | null>(null);
+  const previousDay = useRef<string | null>(null);
+  useEffect(() => {
+    const before = previousDay.current;
+    previousDay.current = currentDay;
+    if (currentDay && before && currentDay !== before) setArrivingDay(currentDay);
+  }, [currentDay]);
+  useEffect(() => {
+    if (!arrivingDay) return;
+    const timer = window.setTimeout(() => setArrivingDay(null), 1200);
+    return () => window.clearTimeout(timer);
+  }, [arrivingDay]);
 
   useEffect(() => {
     try {
@@ -340,7 +361,11 @@ export function EventsBoard({
         style={{ backgroundImage: barGradient }}
       >
         <span className="flex h-12 w-12 shrink-0 flex-col overflow-hidden rounded-lg bg-white shadow ring-1 ring-black/10">
-          <span className="flex h-[1.1rem] items-center justify-center bg-gold-700 text-[0.55rem] font-extrabold uppercase tracking-wide text-white">
+          {/* The month strip wears the Thai colour of the session's weekday */}
+          <span
+            className="flex h-[1.1rem] items-center justify-center text-[0.55rem] font-extrabold uppercase tracking-wide"
+            style={{ backgroundColor: dayColor(session.session_date).solid, color: dayColor(session.session_date).onSolid }}
+          >
             {formatDate(session.session_date, lang, 'MMM')}
           </span>
           <span className="flex flex-1 items-center justify-center text-xl font-extrabold leading-none text-navy-900">
@@ -688,14 +713,18 @@ export function EventsBoard({
   );
 
   /**
-   * The bar that opens each day of the date ordered view. On wider screens it
-   * stays pinned under the board's own header while that day scrolls past, so
-   * the day being read is always on screen.
+   * The banner that opens each day of the date ordered view, in the Thai
+   * colour of its weekday so one day never looks like the next. On wider
+   * screens it stays pinned under the board's search bar while its day
+   * scrolls past, and when a new day takes over it turns over like a page of
+   * a desk calendar.
    */
   const dayDivider = (date: string, dayEntries: TimelineEntry[]): ReactNode => {
+    const color = dayColor(date);
     const offset = daysBetween(schoolToday(boardNow), date);
     const isToday = offset === 0;
     const past = offset < 0;
+    const arriving = arrivingDay === date;
     const relative =
       offset === 0
         ? t('display.today')
@@ -706,54 +735,95 @@ export function EventsBoard({
             : offset > 1
               ? fillTemplate(t('display.inDays'), { n: offset })
               : fillTemplate(t('display.daysAgo'), { n: -offset });
+    const weekday = formatDate(date, lang, 'EEEE');
     const eventCount = new Set(dayEntries.map((entry) => entry.event.id)).size;
     const taskCount = dayEntries.reduce((sum, entry) => sum + entry.block.tasks.length, 0);
     return (
       <div
         data-board-day-header={date}
+        data-day-arriving={arriving ? 'true' : undefined}
         className={cn(
-          'z-10 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-l-[6px] px-4 py-3 shadow-md md:sticky',
+          'z-10 md:sticky',
           // While pinned, the strip of board above it hides the cards scrolling past
-          "md:before:pointer-events-none md:before:absolute md:before:left-[-6px] md:before:right-[-1px] md:before:-top-2.5 md:before:h-2.5 md:before:bg-[#f3f6fa] md:before:content-['']",
-          isToday
-            ? 'border-gold-300 border-l-gold-500 bg-gold-50 dark:border-gold-800 dark:bg-gold-950'
-            : past
-              ? 'border-slate-200 border-l-slate-400 bg-slate-100 dark:border-slate-700 dark:bg-slate-800'
-              : 'border-slate-200 border-l-navy-700 bg-white dark:border-slate-700 dark:bg-slate-900'
+          "md:before:pointer-events-none md:before:absolute md:before:inset-x-0 md:before:-top-3 md:before:h-3 md:before:bg-[#f3f6fa] md:before:content-['']"
         )}
         style={{ top: 'calc(var(--board-sticky-top, 0px) + 0.5rem)' }}
       >
-        <span className="flex h-14 w-14 shrink-0 flex-col overflow-hidden rounded-xl bg-white shadow ring-1 ring-black/10">
+        <div
+          className={cn(
+            'relative flex flex-wrap items-center gap-x-4 gap-y-2 overflow-hidden rounded-3xl border-2 py-3 pl-5 pr-4 shadow-lg sm:gap-x-5 sm:pl-6 sm:pr-5',
+            isToday && 'ring-4 ring-gold-400/80',
+            past && 'opacity-80 saturate-[0.4]',
+            arriving && 'motion-safe:animate-day-glow'
+          )}
+          style={
+            {
+              borderColor: color.border,
+              backgroundImage: `linear-gradient(105deg, ${color.tint} 0%, ${color.tint} 45%, #ffffff 100%)`,
+              '--day-glow': `${color.solid}66`
+            } as React.CSSProperties
+          }
+        >
+          {/* The day's colour down the left edge */}
+          <span aria-hidden="true" className="absolute inset-y-0 left-0 w-2" style={{ backgroundColor: color.solid }} />
           <span
             className={cn(
-              'flex h-[1.2rem] items-center justify-center text-[0.6rem] font-extrabold uppercase tracking-wide',
-              isToday ? 'bg-gold-500 text-navy-900' : past ? 'bg-slate-500 text-white' : 'bg-navy-800 text-white'
+              'flex h-14 w-14 shrink-0 origin-top flex-col overflow-hidden rounded-2xl shadow-md ring-1 ring-black/10 sm:h-16 sm:w-16',
+              arriving && 'motion-safe:animate-day-flip'
             )}
+            style={{ backgroundColor: color.solid, color: color.onSolid }}
           >
-            {formatDate(date, lang, 'MMM')}
+            <span className="flex h-5 items-center justify-center bg-black/15 text-[0.62rem] font-extrabold uppercase tracking-widest">
+              {formatDate(date, lang, 'MMM')}
+            </span>
+            <span className="flex flex-1 items-center justify-center text-[1.65rem] font-black leading-none sm:text-[1.9rem]">
+              {formatDate(date, lang, 'd')}
+            </span>
           </span>
-          <span className="flex flex-1 items-center justify-center text-2xl font-black leading-none text-navy-900">
-            {formatDate(date, lang, 'd')}
-          </span>
-        </span>
-        <div className="min-w-0">
-          <h2 className="text-lg font-black tracking-tight text-slate-900 sm:text-xl dark:text-white">
-            {formatDate(date, lang, 'EEEE d MMMM yyyy')}
+          <h2 className="min-w-0">
+            <span className="block text-2xl font-black leading-tight tracking-tight sm:text-[1.75rem]" style={{ color: color.ink }}>
+              {lang === 'th' ? `วัน${weekday}` : weekday}
+            </span>
+            <span className="block text-sm font-bold text-slate-600 sm:text-base">{formatDate(date, lang, 'd MMMM yyyy')}</span>
           </h2>
-          <p
+          <span
+            data-day-relative
             className={cn(
-              'mt-0.5 text-sm font-extrabold',
-              isToday ? 'text-gold-700 dark:text-gold-300' : past ? 'text-slate-500' : 'text-navy-600 dark:text-navy-300'
+              'inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-extrabold shadow-sm',
+              isToday
+                ? 'bg-gold-400 uppercase tracking-wide text-navy-900'
+                : offset === 1
+                  ? 'bg-navy-800 text-white'
+                  : past
+                    ? 'bg-slate-200 text-slate-600'
+                    : 'bg-white ring-1'
             )}
+            style={!isToday && offset !== 1 && !past ? ({ color: color.ink, '--tw-ring-color': color.border } as React.CSSProperties) : undefined}
           >
+            {isToday && (
+              <span aria-hidden="true" className="relative flex h-2.5 w-2.5">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-navy-900/50 motion-safe:animate-ping" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-navy-900" />
+              </span>
+            )}
             {relative}
-          </p>
+          </span>
+          <span
+            className="ml-auto rounded-full bg-white/90 px-3 py-1 text-sm font-extrabold text-slate-700 shadow-sm ring-1"
+            style={{ '--tw-ring-color': color.border } as React.CSSProperties}
+          >
+            {fillTemplate(t(eventCount === 1 ? 'display.eventCountOne' : 'display.eventCount'), { n: eventCount })}
+            {' · '}
+            {fillTemplate(t(taskCount === 1 ? 'display.taskCountOne' : 'display.taskCount'), { n: taskCount })}
+          </span>
+          {/* A light sweeps across when this day takes over */}
+          {arriving && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/80 to-transparent opacity-0 motion-safe:animate-day-sweep"
+            />
+          )}
         </div>
-        <span className="ml-auto rounded-full bg-white px-3 py-1 text-sm font-extrabold text-slate-600 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:ring-slate-700">
-          {fillTemplate(t(eventCount === 1 ? 'display.eventCountOne' : 'display.eventCount'), { n: eventCount })}
-          {' · '}
-          {fillTemplate(t(taskCount === 1 ? 'display.taskCountOne' : 'display.taskCount'), { n: taskCount })}
-        </span>
       </div>
     );
   };
@@ -772,17 +842,21 @@ export function EventsBoard({
     }
     let order = 0;
     return (
-      <div className="space-y-10">
+      <div className="space-y-12">
         {days.map((day) => (
           <section
             key={day.date}
             id={`board-day-${day.date}`}
             data-board-day={day.date}
             aria-label={formatDate(day.date, lang, 'EEEE d MMMM yyyy')}
-            className="space-y-5"
           >
             {dayDivider(day.date, day.entries)}
-            <div className="space-y-6 md:pl-3">
+            {/* A line in the day's colour runs down beside all of that day's work */}
+            <div
+              data-day-rail={day.date}
+              className="relative ml-2 space-y-6 border-l-4 pb-2 pl-3 pt-5 sm:ml-[3.25rem] sm:pl-6 after:absolute after:-bottom-1.5 after:-left-2 after:h-3 after:w-3 after:rounded-full after:border-[3px] after:border-[color:var(--day-rail)] after:bg-[#f3f6fa] after:content-['']"
+              style={{ borderColor: dayColor(day.date).rail, '--day-rail': dayColor(day.date).rail } as React.CSSProperties}
+            >
               {day.entries.map(({ date, event, block }) => renderTimelineGroup(date, { event, blocks: [block] }, order++))}
             </div>
           </section>
