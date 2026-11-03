@@ -83,6 +83,7 @@ export function TaskBoardGrid({
   const redoStack = useRef<BoardHistoryEntry[]>([]);
   const busyRef = useRef(false);
   const focusAfterCreate = useRef<string | null>(null);
+  const scrollAfterMove = useRef(false);
   const [depth, setDepth] = useState({ undo: 0, redo: 0 });
   /** column key + group key + row, the cell the cursor is on */
   const [cursor, setCursor] = useState<{ group: string; dept: string; row: number } | null>(null);
@@ -129,6 +130,8 @@ export function TaskBoardGrid({
   }, [clearSelectionSignal]);
 
   useEffect(() => {
+    if (!scrollAfterMove.current) return;
+    scrollAfterMove.current = false;
     if (!cursor) return;
     const target = focus?.group === cursor.group ? focus : cursor;
     const cell = containerRef.current?.querySelector<HTMLElement>(
@@ -202,6 +205,7 @@ export function TaskBoardGrid({
         const row = (group.columns.get(dept.id) ?? []).findIndex((task) => task.id === id);
         if (row !== -1) {
           focusAfterCreate.current = null;
+          scrollAfterMove.current = true;
           setCursor({ group: group.key, dept: dept.id, row });
           containerRef.current?.focus();
           return;
@@ -594,6 +598,7 @@ export function TaskBoardGrid({
     try {
       await updateTasks.mutateAsync(patches);
       pushUndo({ kind: 'placement', patches: undo });
+      scrollAfterMove.current = false;
       setCursor({ group: target.group, dept: target.dept, row: at });
       setFocus(null);
       toast(t('grid.taskMoved'));
@@ -626,6 +631,7 @@ export function TaskBoardGrid({
       event.preventDefault();
       const group = groupByKey.get(cursor?.group ?? '') ?? groups[0];
       if (group && flatColumns.length > 0) {
+        scrollAfterMove.current = true;
         setCursor({ group: group.key, dept: flatColumns[0], row: 0 });
         setFocus({ group: group.key, dept: flatColumns[flatColumns.length - 1], row: Math.max(0, group.rows - 1) });
       }
@@ -675,13 +681,14 @@ export function TaskBoardGrid({
       }
       if (event.shiftKey && cursor) {
         // A block always stays inside its original session band.
-        if (target.group === cursor.group) setFocus(target);
-      } else { setFocus(null); setCursor(target); }
+        if (target.group === cursor.group) { scrollAfterMove.current = true; setFocus(target); }
+      } else { scrollAfterMove.current = true; setFocus(null); setCursor(target); }
       return;
     }
     if (mod) return;
     if (event.shiftKey && cursor && (key === 'ArrowDown' || key === 'ArrowUp' || key === 'ArrowLeft' || key === 'ArrowRight')) {
       event.preventDefault();
+      scrollAfterMove.current = true;
       const from = focus && focus.group === cursor.group ? focus : cursor;
       const column = flatColumns.indexOf(from.dept);
       const limit = groups.find((group) => group.key === cursor.group)?.rows ?? 0;
@@ -694,10 +701,10 @@ export function TaskBoardGrid({
       }
       return;
     }
-    if (key === 'ArrowDown') { event.preventDefault(); setFocus(null); move(1, 0); return; }
-    if (key === 'ArrowUp') { event.preventDefault(); setFocus(null); move(-1, 0); return; }
-    if (key === 'ArrowLeft') { event.preventDefault(); setFocus(null); move(0, -1); return; }
-    if (key === 'ArrowRight' || key === 'Tab') { event.preventDefault(); setFocus(null); move(0, event.shiftKey && key === 'Tab' ? -1 : 1); return; }
+    if (key === 'ArrowDown') { event.preventDefault(); scrollAfterMove.current = true; setFocus(null); move(1, 0); return; }
+    if (key === 'ArrowUp') { event.preventDefault(); scrollAfterMove.current = true; setFocus(null); move(-1, 0); return; }
+    if (key === 'ArrowLeft') { event.preventDefault(); scrollAfterMove.current = true; setFocus(null); move(0, -1); return; }
+    if (key === 'ArrowRight' || key === 'Tab') { event.preventDefault(); scrollAfterMove.current = true; setFocus(null); move(0, event.shiftKey && key === 'Tab' ? -1 : 1); return; }
     if (key === 'Escape') { if (cursor) event.preventDefault(); setCursor(null); setFocus(null); return; }
     if ((key === 'Enter' || key === 'F2') && cursor && canEdit) {
       event.preventDefault();
@@ -774,9 +781,11 @@ export function TaskBoardGrid({
       if (after === 'stay') return;
       setFocus(null);
       if (after === 'left' || after === 'right') {
+        scrollAfterMove.current = true;
         const column = Math.max(0, Math.min(flatColumns.length - 1, flatColumns.indexOf(cell.dept) + (after === 'right' ? 1 : -1)));
         setCursor({ ...cell, dept: flatColumns[column] });
       } else if (after === 'down') {
+        scrollAfterMove.current = true;
         if (task) move(1, 0);
         else setCursor({ ...cell, row: (groupByKey.get(cell.group)?.columns.get(cell.dept)?.length ?? 0) + 1 });
       }
@@ -986,6 +995,7 @@ export function TaskBoardGrid({
                             data-board-cell={`${group.key || 'general'}|${dept.id}|${row}`}
                             style={{ scrollMarginTop: headerHeight + 44 }}
                             onMouseDown={(event) => {
+                              scrollAfterMove.current = false;
                               if (isEditing || event.button !== 0) return;
                               containerRef.current?.focus();
                               dragMode.current = 'select';
@@ -998,6 +1008,7 @@ export function TaskBoardGrid({
                             }}
                             onMouseEnter={() => {
                               if (dragMode.current === 'select' && cursor?.group === group.key) {
+                                scrollAfterMove.current = false;
                                 setFocus({ group: group.key, dept: dept.id, row });
                               }
                               if (dragMode.current === 'fill') setFillTo({ group: group.key, dept: dept.id, row });
@@ -1019,6 +1030,7 @@ export function TaskBoardGrid({
                             }}
                             onDoubleClick={() => canEdit && setEditing({ group: group.key, dept: dept.id, row, initial: null })}
                             onContextMenu={(event) => {
+                              scrollAfterMove.current = false;
                               if (isEditing) return;
                               event.preventDefault();
                               setCursor({ group: group.key, dept: dept.id, row });
