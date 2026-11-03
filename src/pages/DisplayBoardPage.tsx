@@ -14,6 +14,7 @@ import { schoolToday } from '../lib/archive';
 import { useAutoUpdate } from '../hooks/useAutoUpdate';
 import { DisplayShell, type DisplayScale, type DisplayTab } from '../components/display/DisplayShell';
 import { EventsBoard } from '../components/display/EventsBoard';
+import { BoardInlineEditContext } from '../components/display/BoardEditableText';
 import { RequestsBoard } from '../components/display/RequestsBoard';
 import { BoardScopeToggle } from '../components/display/BoardScopeToggle';
 import { BOARD_SCOPE_KEY, blockIsDone, readBoardScope, requestIsDone, type BoardScope } from '../lib/boardScope';
@@ -301,6 +302,7 @@ export function DisplayBoardPage({
       canEdit={canEdit}
       campusName={campus ? CAMPUS_NAMES[campus] : undefined}
     >
+      <BoardInlineEditContext.Provider value={!presenting}>
       {/* What is on today and tomorrow */}
       {!focused && <DayAlertBar alerts={boardAlerts} size="board" />}
       {/* Today's notices from the Events team */}
@@ -415,6 +417,7 @@ export function DisplayBoardPage({
 
       {/* Floor plans and other files open here, on top of the board */}
       <AttachmentViewer />
+      </BoardInlineEditContext.Provider>
     </DisplayShell>
   );
 }

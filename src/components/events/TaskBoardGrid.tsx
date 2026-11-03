@@ -52,6 +52,8 @@ interface TaskBoardGridProps {
   renderSessionTools?: (session: EventSession) => ReactNode;
   fullScreen?: boolean;
   onEscapeBlockedChange?: (blocked: boolean) => void;
+  onSelectionChange?: (selected: boolean) => void;
+  clearSelectionSignal?: number;
 }
 
 /**
@@ -65,7 +67,8 @@ interface TaskBoardGridProps {
  */
 export function TaskBoardGrid({
   eventId, eventDate, tasks, departments, sessions, canEdit, search, departmentFilter, sessionFilter,
-  onOpenTask, onEditTask, onAddSession, renderSessionTools, fullScreen = false, onEscapeBlockedChange
+  onOpenTask, onEditTask, onAddSession, renderSessionTools, fullScreen = false, onEscapeBlockedChange,
+  onSelectionChange, clearSelectionSignal
 }: TaskBoardGridProps) {
   const { t, deptName, lang } = useLanguage();
   const { toast } = useToast();
@@ -111,9 +114,32 @@ export function TaskBoardGrid({
   }, [columns.length]);
 
   useEffect(() => {
-    onEscapeBlockedChange?.(!!cursor || !!editing || !!context || helpOpen);
+    onEscapeBlockedChange?.(!!editing || !!context || helpOpen);
     return () => onEscapeBlockedChange?.(false);
-  }, [cursor, editing, context, helpOpen, onEscapeBlockedChange]);
+  }, [editing, context, helpOpen, onEscapeBlockedChange]);
+
+  useEffect(() => {
+    onSelectionChange?.(!!cursor || !!focus);
+    return () => onSelectionChange?.(false);
+  }, [cursor, focus, onSelectionChange]);
+
+  useEffect(() => {
+    setCursor(null);
+    setFocus(null);
+  }, [clearSelectionSignal]);
+
+  useEffect(() => {
+    if (!cursor) return;
+    const target = focus?.group === cursor.group ? focus : cursor;
+    const cell = containerRef.current?.querySelector<HTMLElement>(
+      `[data-board-cell="${target.group || 'general'}|${target.dept}|${target.row}"]`
+    );
+    const band = containerRef.current?.querySelector<HTMLElement>(`[data-board-band="${target.group || 'general'}"]`);
+    if (cell) {
+      cell.style.scrollMarginTop = `${headerHeight + (band?.getBoundingClientRect().height ?? 44)}px`;
+      cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
+  }, [cursor, focus, headerHeight]);
 
   useEffect(() => {
     if (!helpOpen) return;
@@ -591,6 +617,7 @@ export function TaskBoardGrid({
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (editing || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || context || helpOpen) return;
+    if (event.key === 'Escape' && document.querySelector('[role="dialog"], [role="menu"]')) return;
     const mod = event.ctrlKey || event.metaKey;
     const key = event.key;
     if (mod && key.toLowerCase() === 'z') { event.preventDefault(); void travel(event.shiftKey); return; }
@@ -957,6 +984,7 @@ export function TaskBoardGrid({
                           <td
                             key={dept.id}
                             data-board-cell={`${group.key || 'general'}|${dept.id}|${row}`}
+                            style={{ scrollMarginTop: headerHeight + 44 }}
                             onMouseDown={(event) => {
                               if (isEditing || event.button !== 0) return;
                               containerRef.current?.focus();

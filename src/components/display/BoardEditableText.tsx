@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLanguage } from '../../i18n';
@@ -10,6 +10,8 @@ import { RichTextEditor } from '../editor/RichTextEditor';
 import { RichTextViewer } from '../editor/RichTextViewer';
 import { LinkifiedText } from '../ui/LinkifiedText';
 
+export const BoardInlineEditContext = createContext(true);
+
 type Target = { entity: 'task'; field: 'title' | 'description' | 'notes' | 'assigned_staff' | 'instructions' | 'work_location' | 'setup_location' }
   | { entity: 'session'; field: 'title' | 'location' | 'time_note' | 'note' }
   | { entity: 'event'; field: 'name' | 'description' | 'additional_notes' | 'location' | 'setup_location' | 'setup_start_note' | 'venue_ready_note' | 'event_start_note' | 'event_finish_note' | 'breakdown_start_note' | 'breakdown_deadline_note' };
@@ -18,6 +20,8 @@ export function BoardEditableText({ entity, field, id, eventId, value, label, ri
   id: string; eventId: string; value: string | null; label: string; rich?: boolean; placeholder?: string; className?: string;
 }) {
   const { isEventsTeam } = useAuth();
+  const inlineEditEnabled = useContext(BoardInlineEditContext);
+  const canInlineEdit = isEventsTeam && inlineEditEnabled;
   const { t, lang } = useLanguage();
   const { toast } = useToast();
   const { updateTask } = useTaskMutations(eventId);
@@ -29,8 +33,11 @@ export function BoardEditableText({ entity, field, id, eventId, value, label, ri
   const busy = useRef(false);
   const pending = updateTask.isPending || updateSession.isPending || updateEvent.isPending;
   const displayed = saved?.source === value ? saved.value : value ?? '';
+  useEffect(() => {
+    if (!canInlineEdit) setEditing(false);
+  }, [canInlineEdit]);
   const save = async () => {
-    if (busy.current) return;
+    if (!canInlineEdit || busy.current) return;
     if (((entity === 'task' && field === 'title') || field === 'name') && !draft.trim()) { toast(t('validation.required'), 'error'); return; }
     if (draft === displayed) { setEditing(false); return; }
     busy.current = true;
@@ -45,14 +52,14 @@ export function BoardEditableText({ entity, field, id, eventId, value, label, ri
     } catch { toast(t('common.errorGeneric'), 'error'); }
     finally { busy.current = false; }
   };
-  if (!editing || !isEventsTeam) return <span className={className}>
-    <span role={isEventsTeam ? 'button' : undefined} tabIndex={isEventsTeam ? 0 : undefined}
-      aria-label={isEventsTeam ? `${t('common.edit')}: ${label}` : undefined}
-      title={isEventsTeam ? (lang === 'th' ? 'คลิกเพื่อแก้ไข · Enter บันทึก' : 'Click to edit · Enter to save') : undefined}
-      className={isEventsTeam ? 'cursor-text rounded outline-none hover:ring-1 hover:ring-current focus-visible:ring-2' : ''}
-      onClick={isEventsTeam ? e => { e.stopPropagation(); if (e.target instanceof Element && e.target.closest('a')) return; setDraft(displayed); setEditing(true); } : undefined}
-      onKeyDown={isEventsTeam ? e => { if (e.target instanceof Element && e.target.closest('a')) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setDraft(displayed); setEditing(true); } } : undefined}>
-      {rich ? <RichTextViewer html={displayed} /> : displayed ? <LinkifiedText text={displayed} /> : placeholder || (isEventsTeam ? '—' : '')}
+  if (!editing || !canInlineEdit) return <span className={className}>
+    <span role={canInlineEdit ? 'button' : undefined} tabIndex={canInlineEdit ? 0 : undefined}
+      aria-label={canInlineEdit ? `${t('common.edit')}: ${label}` : undefined}
+      title={canInlineEdit ? (lang === 'th' ? 'คลิกเพื่อแก้ไข · Enter บันทึก' : 'Click to edit · Enter to save') : undefined}
+      className={canInlineEdit ? 'cursor-text rounded outline-none hover:ring-1 hover:ring-current focus-visible:ring-2' : ''}
+      onClick={canInlineEdit ? e => { e.stopPropagation(); if (e.target instanceof Element && e.target.closest('a')) return; setDraft(displayed); setEditing(true); } : undefined}
+      onKeyDown={canInlineEdit ? e => { if (e.target instanceof Element && e.target.closest('a')) return; if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); setDraft(displayed); setEditing(true); } } : undefined}>
+      {rich ? <RichTextViewer html={displayed} /> : displayed ? <LinkifiedText text={displayed} /> : placeholder || (canInlineEdit ? '—' : '')}
     </span>
   </span>;
   return <span className={`inline-block max-w-full rounded-xl bg-white p-2 text-sm font-normal text-slate-800 shadow-lg ring-2 ring-teal-500 ${className}`}

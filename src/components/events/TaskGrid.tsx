@@ -183,6 +183,7 @@ export function TaskGrid({
   const { createSession } = useSessionMutations(eventId);
   const clipboard = useTaskClipboard();
 
+  const sectionRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const redoStack = useRef<UndoEntry[]>([]);
@@ -205,6 +206,8 @@ export function TaskGrid({
   const [layout, setLayout] = useState<GridLayout>(readLayout);
   const [fullScreen, setFullScreen] = useState(false);
   const [boardEscapeBlocked, setBoardEscapeBlocked] = useState(false);
+  const [boardHasSelection, setBoardHasSelection] = useState(false);
+  const [clearSelectionSignal, setClearSelectionSignal] = useState(0);
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [sel, setSel] = useState<Selection | null>(null);
@@ -226,6 +229,7 @@ export function TaskGrid({
     if (!fullScreen) return;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
+    sectionRef.current?.querySelector<HTMLElement>('[data-grid-scroll]')?.focus();
     return () => { document.body.style.overflow = overflow; };
   }, [fullScreen]);
 
@@ -234,13 +238,19 @@ export function TaskGrid({
     const exit = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       if (columnMenuOpen || helpOpen || replaceOpen || context || editing) return;
-      if (layout === 'board' ? boardEscapeBlocked : sel) return;
+      if (layout === 'board' && boardEscapeBlocked) return;
       if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+      event.preventDefault();
+      if (layout === 'board' ? boardHasSelection : sel) {
+        if (layout === 'board') setClearSelectionSignal(signal => signal + 1);
+        else setSel(null);
+        return;
+      }
       setFullScreen(false);
     };
     document.addEventListener('keydown', exit);
     return () => document.removeEventListener('keydown', exit);
-  }, [fullScreen, columnMenuOpen, helpOpen, replaceOpen, context, editing, layout, boardEscapeBlocked, sel]);
+  }, [fullScreen, columnMenuOpen, helpOpen, replaceOpen, context, editing, layout, boardEscapeBlocked, boardHasSelection, sel]);
 
   const columns = useMemo(
     () => COLUMNS.filter((column) => column.fixed || !hiddenColumns.includes(column.field)),
@@ -1230,6 +1240,7 @@ export function TaskGrid({
 
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (editing || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || context) return;
+    if (event.key === 'Escape' && (columnMenuOpen || helpOpen || replaceOpen || document.querySelector('[role="dialog"], [role="menu"]'))) return;
     const mod = event.ctrlKey || event.metaKey;
     const key = event.key;
     if (key === 'ContextMenu' || (event.shiftKey && key === 'F10')) { event.preventDefault(); openKeyboardMenu(); return; }
@@ -1405,7 +1416,7 @@ export function TaskGrid({
     'inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-navy-700 disabled:opacity-40 disabled:hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-gold-300';
 
   return (
-    <section className={cn('overflow-hidden border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900', fullScreen ? 'fixed inset-0 z-[45] !mt-0 flex flex-col rounded-none [&>div:not([data-grid-scroll])]:shrink-0' : 'rounded-2xl')}>
+    <section ref={sectionRef} className={cn('overflow-hidden border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900', fullScreen ? 'fixed inset-0 z-[45] !mt-0 flex flex-col rounded-none [&>div:not([data-grid-scroll])]:shrink-0' : 'rounded-2xl')}>
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-gradient-to-r from-teal-50 to-white px-4 py-4 dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
         <span className="rounded-xl bg-teal-700 p-2 text-white"><Table2 className="h-5 w-5" /></span>
         <div className="flex-1"><h3 className="text-base font-bold">{lang === 'th' ? 'ตารางลงงาน' : 'Task worksheet'}</h3><p className="text-xs text-slate-500">{lang === 'th' ? 'แก้ไขในเซลล์ • วางจาก Google Sheets • บันทึกอัตโนมัติ' : 'Edit cells · Paste from Google Sheets · Auto-save'}</p></div>
@@ -1461,6 +1472,8 @@ export function TaskGrid({
           renderSessionTools={renderSessionTools}
           fullScreen={fullScreen}
           onEscapeBlockedChange={setBoardEscapeBlocked}
+          onSelectionChange={setBoardHasSelection}
+          clearSelectionSignal={clearSelectionSignal}
         />
       ) : (
       <>
@@ -2080,6 +2093,11 @@ function CellEditor({
           aria-activedescendant={highlighted ? `${listId}-${highlight}` : undefined}
           value={draft}
           onChange={(event) => { setDraft(event.target.value); setHighlight(0); }}
+          onContextMenu={event => {
+            committed.current = true;
+            const value = column.field === 'session_id' && !draft.trim() ? '' : highlighted?.value ?? draft;
+            onContextMenu(event, value);
+          }}
           onKeyDown={onKeyDown}
           onBlur={() => finishChoice('stay')}
           className="h-[34px] w-full border-0 bg-white px-2 text-[13px] text-slate-800 outline-none ring-2 ring-inset ring-navy-600 dark:bg-slate-900 dark:text-slate-100 dark:ring-gold-400"
