@@ -137,6 +137,39 @@ export function useToggleDisplayTask() {
 }
 
 /** Acknowledge a task from the board with the reader's name (no login). */
+export function useAcknowledgeDisplayTasks() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ taskIds, name }: { taskIds: string[]; name: string }) => {
+      // Wait for every RPC before rollback/invalidation, including partial failures.
+      const results = await Promise.all(taskIds.map(async taskId => {
+        try {
+          const { error } = await supabase.rpc('public_acknowledge_task', { p_task_id: taskId, p_name: name });
+          return error;
+        } catch (error) { return error; }
+      }));
+      const error = results.find(Boolean);
+      if (error) throw error;
+    },
+    onMutate: async ({ taskIds, name }) => {
+      await queryClient.cancelQueries({ queryKey: ['display', 'events'] });
+      const previous = queryClient.getQueriesData<DisplayEvent[]>({ queryKey: ['display', 'events'] });
+      const ids = new Set(taskIds);
+      const acknowledged_at = new Date().toISOString();
+      queryClient.setQueriesData<DisplayEvent[]>({ queryKey: ['display', 'events'] }, old =>
+        old?.map(event => ({ ...event, tasks: event.tasks.map(task => ids.has(task.id)
+          ? { ...task, acknowledged_by: name, acknowledged_at } : task) }))
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      context?.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['display', 'events'] })
+  });
+}
+
+/** Acknowledge a single task; retained for existing callers. */
 export function useAcknowledgeDisplayTask() {
   const queryClient = useQueryClient();
   return useMutation({

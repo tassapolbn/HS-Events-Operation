@@ -1,5 +1,8 @@
 import { ContextMenu, type ContextAction } from '../ui/ContextMenu';
 import { TaskBoardGrid } from './TaskBoardGrid';
+import { JobSuggestionList } from './JobSuggestionList';
+import { useJobHistory } from '../../hooks/useJobHistory';
+import { suggestJobs, type JobIndex } from '../../lib/jobSuggestions';
 import { inverseGridEntry, type GridHistoryEntry } from '../../lib/gridHistory';
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
@@ -182,6 +185,8 @@ export function TaskGrid({
   const { createTasks, insertTaskRows, updateTasks, deleteTasks, restoreTasks } = useTaskMutations(eventId);
   const { createSession } = useSessionMutations(eventId);
   const clipboard = useTaskClipboard();
+  /** Each department's past jobs, suggested while a Title cell is typed in */
+  const jobIndex = useJobHistory(canEdit);
 
   const sectionRef = useRef<HTMLElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1896,6 +1901,8 @@ export function TaskGrid({
                               options={choicesFor(column.field)}
                               onCommit={commitEdit}
                               onCancel={cancelEdit}
+                              jobIndex={jobIndex}
+                              departmentId={row.values.department_id}
                             />
                           ) : (
                             <div
@@ -2012,10 +2019,14 @@ interface CellEditorProps {
   options: Array<{ value: string; label: string; labels: string[] }>;
   onCommit: (raw: string, direction: 'down' | 'up' | 'right' | 'left' | 'stay' | 'fill') => void;
   onCancel: () => void;
+  /** Past jobs per department, suggested while a Title cell is typed in */
+  jobIndex?: JobIndex;
+  /** The row's department, whose past jobs are suggested */
+  departmentId?: string;
 }
 
 function CellEditor({
-  column, value, initial, options, onCommit, onCancel, onContextMenu
+  column, value, initial, options, onCommit, onCancel, onContextMenu, jobIndex, departmentId
 }: CellEditorProps) {
   const { t, lang } = useLanguage();
   const [draft, setDraft] = useState(initial ?? value);
@@ -2027,6 +2038,15 @@ function CellEditor({
   const searchable = column.type === 'select' && initial !== null;
   const matches = filterOptions(draft, options);
   const highlighted = matches[highlight];
+  // Past jobs of the row's department, for the Title column only. Nothing is
+  // picked until the arrow keys pick it, so Enter and Tab keep their meaning.
+  const suggestible = column.field === 'title' && Boolean(jobIndex && departmentId);
+  const jobSuggestions = useMemo(
+    () => (suggestible && jobIndex && departmentId ? suggestJobs(jobIndex, departmentId, draft) : []),
+    [suggestible, jobIndex, departmentId, draft]
+  );
+  const [jobPick, setJobPick] = useState(-1);
+  const pickedJob = jobPick >= 0 ? jobSuggestions[jobPick] : undefined;
 
   useEffect(() => {
     listRef.current?.children[highlight]?.scrollIntoView({ block: 'nearest' });
@@ -2059,6 +2079,34 @@ function CellEditor({
       event.preventDefault();
       setHighlight((index) => Math.max(0, Math.min(matches.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1))));
       return;
+    }
+    if (suggestible) {
+      if (event.key === 'ArrowDown' && jobSuggestions.length > 0) {
+        event.preventDefault();
+        setJobPick((index) => Math.min(jobSuggestions.length - 1, index + 1));
+        return;
+      }
+      if (event.key === 'ArrowUp' && jobPick >= 0) {
+        event.preventDefault();
+        setJobPick((index) => index - 1);
+        return;
+      }
+      if (pickedJob && event.key === 'Enter') {
+        event.preventDefault();
+        finish(pickedJob, event.ctrlKey || event.metaKey ? 'fill' : event.shiftKey ? 'up' : 'down');
+        return;
+      }
+      if (pickedJob && event.key === 'Tab') {
+        event.preventDefault();
+        finish(pickedJob, event.shiftKey ? 'left' : 'right');
+        return;
+      }
+      // The first Escape only lets go of a picked suggestion
+      if (pickedJob && event.key === 'Escape') {
+        event.preventDefault();
+        setJobPick(-1);
+        return;
+      }
     }
     const save = (direction: 'down' | 'up' | 'right' | 'left' | 'stay' | 'fill') => searchable ? finishChoice(direction) : finish(draft, direction);
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); save('stay'); return; }
@@ -2146,18 +2194,29 @@ function CellEditor({
     );
   }
 
-  return (
+  const input = (
     <input
       ref={inputRef}
       aria-label={t(column.labelKey)}
+      aria-autocomplete={suggestible ? 'list' : undefined}
+      aria-expanded={suggestible ? jobSuggestions.length > 0 : undefined}
+      aria-controls={suggestible && jobSuggestions.length > 0 ? listId : undefined}
+      aria-activedescendant={pickedJob ? `${listId}-${jobPick}` : undefined}
       autoFocus
       value={draft}
-      onChange={(event) => setDraft(event.target.value)}
+      onChange={(event) => { setDraft(event.target.value); setJobPick(-1); }}
       onContextMenu={event => { committed.current = true; onContextMenu(event, draft); }}
       onKeyDown={onKeyDown}
       onBlur={() => finish(draft, 'stay')}
       placeholder={column.type === 'time' ? 'HH:mm' : undefined}
       className="h-[34px] w-full border-0 bg-white px-2 text-[13px] text-slate-800 outline-none ring-2 ring-inset ring-navy-600 dark:bg-slate-900 dark:text-slate-100 dark:ring-gold-400"
     />
+  );
+  if (!suggestible) return input;
+  return (
+    <div className="relative">
+      {input}
+      <JobSuggestionList id={listId} suggestions={jobSuggestions} highlight={jobPick} onPick={(title) => finish(title, 'stay')} />
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 import { searchEvents, searchRequests } from '../lib/boardSearch';
 import { useSearchParams } from 'react-router-dom';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { CalendarDays, CircleHelp, Inbox } from 'lucide-react';
+import { CalendarDays, CircleHelp, Inbox, Printer } from 'lucide-react';
 import { boardDepartmentKey, resolveBoardDepartment } from '../lib/boardDepartment';
 import { useAutoScroll } from '../hooks/useAutoScroll';
 import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../hooks/usePublicDisplay';
@@ -14,6 +14,9 @@ import { schoolToday } from '../lib/archive';
 import { useAutoUpdate } from '../hooks/useAutoUpdate';
 import { DisplayShell, type DisplayScale, type DisplayTab } from '../components/display/DisplayShell';
 import { EventsBoard } from '../components/display/EventsBoard';
+import { NowNextStrip } from '../components/display/NowNextStrip';
+import { DepartmentPrintSheet } from '../components/display/DepartmentPrintSheet';
+import { nowAndNext, openJobsByDepartment } from '../lib/boardToday';
 import { BoardInlineEditContext } from '../components/display/BoardEditableText';
 import { RequestsBoard } from '../components/display/RequestsBoard';
 import { BoardScopeToggle } from '../components/display/BoardScopeToggle';
@@ -88,7 +91,7 @@ export function DisplayBoardPage({
   const [presenting, setPresenting] = useState(() => searchParams.get('tv') === '1');
   const [showCombinedHint, setShowCombinedHint] = useState(false);
   const restoredDepartment = useRef<string | null>(null);
-  useAutoScroll(presenting);
+  const autoScroll = useAutoScroll(presenting);
   const exitPresentation = useCallback(() => {
     setPresenting(false);
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
@@ -197,6 +200,11 @@ export function DisplayBoardPage({
   const announcements = announcementsQuery.data;
   const rawEventsQuery = useDisplayEvents(campus, eventId);
   const rawRequestsQuery = useDisplayRequests(campus);
+  const openCounts = useMemo(() => openJobsByDepartment(rawEventsQuery.data ?? [], schoolToday()), [rawEventsQuery.data, clockTick]);
+  const liveSchedule = useMemo(() => {
+    const now = Date.now();
+    return nowAndNext(rawEventsQuery.data ?? [], now, schoolToday(now));
+  }, [rawEventsQuery.data, clockTick]);
   const filteredEvents = useMemo(() => searchEvents(rawEventsQuery.data ?? [], deferredSearch, departments ?? []), [rawEventsQuery.data, deferredSearch, departments]);
   const filteredRequests = useMemo(() => searchRequests(rawRequestsQuery.data ?? [], deferredSearch, departments ?? []), [rawRequestsQuery.data, deferredSearch, departments]);
   const eventsQuery = { ...rawEventsQuery, data: focused ? rawEventsQuery.data : filteredEvents };
@@ -269,7 +277,11 @@ export function DisplayBoardPage({
   );
 
   return (
+    <>
     <DisplayShell
+      className={selectedDepartment && !focused ? 'print:hidden' : undefined}
+      autoScroll={autoScroll}
+      openCounts={openCounts}
       tab={requestId ? 'requests' : eventId ? 'events' : tab}
       onTabChange={(next) => { if (focused) setSearchParams({}); setTab(next); }}
       search={search}
@@ -305,6 +317,7 @@ export function DisplayBoardPage({
       <BoardInlineEditContext.Provider value={!presenting}>
       {/* What is on today and tomorrow */}
       {!focused && <DayAlertBar alerts={boardAlerts} size="board" />}
+      {presenting && <NowNextStrip schedule={liveSchedule} departments={departmentList} />}
       {/* Today's notices from the Events team */}
       {!focused && (announcements ?? []).length > 0 && (
         <div className="mb-5 space-y-2" data-board-announcements>
@@ -340,7 +353,12 @@ export function DisplayBoardPage({
           </div>}
           <div className="grid gap-6 xl:grid-cols-5">
             <section className="min-w-0 xl:col-span-3">
-              <PanelHeading icon={CalendarDays} title={t('display.eventWork')} department={selectedDepartment} />
+              <div className="flex flex-wrap items-center justify-between gap-x-3">
+                <PanelHeading icon={CalendarDays} title={t('display.eventWork')} department={selectedDepartment} />
+                {!presenting && <button type="button" onClick={() => window.print()} className="mb-3 flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-bold text-navy-900 hover:bg-slate-50">
+                  <Printer aria-hidden className="h-4 w-4" />{lang === 'th' ? 'พิมพ์ใบงาน' : 'Print job sheet'}
+                </button>}
+              </div>
               {eventsQuery.isLoading || hasDeptEventWork ? (
                 <EventsBoard
                   events={eventsQuery.data}
@@ -419,5 +437,7 @@ export function DisplayBoardPage({
       <AttachmentViewer />
       </BoardInlineEditContext.Provider>
     </DisplayShell>
+    {selectedDepartment && !focused && <DepartmentPrintSheet events={rawEventsQuery.data ?? []} department={selectedDepartment} campusName={campus ? CAMPUS_NAMES[campus] : t('display.boardTitle')} />}
+    </>
   );
 }

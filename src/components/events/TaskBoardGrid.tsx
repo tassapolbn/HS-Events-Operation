@@ -1,6 +1,9 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { CalendarDays, Check, Clock, EyeOff, GripVertical, Keyboard, Layers, Loader2, MapPin, Maximize2, Plus, Redo2, Undo2, User } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { CalendarDays, Check, CheckCheck, Clock, EyeOff, GripVertical, Keyboard, Layers, Loader2, MapPin, Maximize2, Plus, Redo2, Undo2, User } from 'lucide-react';
 import { ContextMenu, type ContextAction } from '../ui/ContextMenu';
+import { JobSuggestionList } from './JobSuggestionList';
+import { useJobHistory } from '../../hooks/useJobHistory';
+import { suggestJobs, type JobIndex } from '../../lib/jobSuggestions';
 import { inverseGridEntry, type GridHistoryEntry } from '../../lib/gridHistory';
 import { useLanguage } from '../../i18n';
 import { useToast } from '../ui/Toast';
@@ -74,6 +77,8 @@ export function TaskBoardGrid({
   const { toast } = useToast();
   const { profile } = useAuth();
   const { createTasks, updateTasks, deleteTasks, restoreTasks } = useTaskMutations(eventId);
+  /** Each department's past jobs, suggested while a cell is typed in */
+  const jobIndex = useJobHistory(canEdit);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLTableRowElement>(null);
@@ -964,6 +969,42 @@ export function TaskBoardGrid({
                             {done}/{total}
                           </span>
                         )}
+                        {/* Whether each department has seen its open jobs on the board */}
+                        {columns.map((dept) => {
+                          const open = (group.columns.get(dept.id) ?? []).filter((task) => task.status !== 'completed');
+                          if (open.length === 0) return null;
+                          const acked = open.filter((task) => task.acknowledged_at);
+                          const latest = acked.reduce<EventTask | null>(
+                            (best, task) => (!best || (task.acknowledged_at ?? '') > (best.acknowledged_at ?? '') ? task : best),
+                            null
+                          );
+                          const state = acked.length === open.length ? 'all' : acked.length > 0 ? 'some' : 'none';
+                          return (
+                            <span
+                              key={dept.id}
+                              title={deptName(dept)}
+                              className={cn(
+                                'inline-flex items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-bold',
+                                state === 'none' && 'text-amber-800',
+                                state === 'all' && 'text-slate-700'
+                              )}
+                            >
+                              <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dept.color }} />
+                              <span className="sr-only">{deptName(dept)}: </span>
+                              {state === 'all' && latest ? (
+                                <>
+                                  <CheckCheck className="h-3 w-3" aria-hidden="true" />
+                                  {latest.acknowledged_by && <span>{latest.acknowledged_by}</span>}
+                                  <span className="tabular-nums">{formatTime(latest.acknowledged_at, lang)}</span>
+                                </>
+                              ) : state === 'some' ? (
+                                lang === 'th' ? `รับทราบ ${acked.length}/${open.length}` : `acknowledged ${acked.length}/${open.length}`
+                              ) : (
+                                lang === 'th' ? 'ยังไม่รับทราบ' : 'not acknowledged yet'
+                              )}
+                            </span>
+                          );
+                        })}
                         {canEdit && session && renderSessionTools && (
                           <div className="ml-auto" onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
                             {renderSessionTools(session)}
@@ -1049,6 +1090,8 @@ export function TaskBoardGrid({
                               <BoardCellEditor
                                 value={task?.title ?? ''}
                                 initial={editing?.initial ?? null}
+                                jobIndex={jobIndex}
+                                departmentId={dept.id}
                                 onCommit={(raw, after) => void commitEdit(raw, { group: group.key, dept: dept.id, row }, after)}
                                 onCancel={() => { setEditing(null); containerRef.current?.focus(); }}
                               />
@@ -1098,6 +1141,12 @@ export function TaskBoardGrid({
                                   >
                                     {task.title || <span className="italic text-slate-300">{t('tasks.taskTitle')}</span>}
                                   </span>
+                                  {/* Who ticked it on the display board */}
+                                  {completed && task.completed_by && (
+                                    <span className="mt-0.5 block text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                                      ✓ {task.completed_by}
+                                    </span>
+                                  )}
                                   {(task.assigned_staff || task.start_time) && (
                                     <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-slate-400">
                                       {task.assigned_staff && (
@@ -1173,17 +1222,25 @@ export function TaskBoardGrid({
 
 /** A cell editor that grows with the text, because these jobs are written as sentences. */
 function BoardCellEditor({
-  value, initial, onCommit, onCancel
+  value, initial, onCommit, onCancel, jobIndex, departmentId
 }: {
   value: string;
   initial: string | null;
   onCommit: (raw: string, after: EditDirection) => void;
   onCancel: () => void;
+  /** Past jobs per department, for suggestions while typing */
+  jobIndex: JobIndex;
+  departmentId: string;
 }) {
   const { t } = useLanguage();
   const [draft, setDraft] = useState(initial ?? value);
+  /** The suggestion picked with the arrow keys; -1 is none, so Enter and Tab work as usual */
+  const [highlight, setHighlight] = useState(-1);
+  const listId = useId();
   const ref = useRef<HTMLTextAreaElement>(null);
   const done = useRef(false);
+  const suggestions = useMemo(() => suggestJobs(jobIndex, departmentId, draft), [jobIndex, departmentId, draft]);
+  const picked = highlight >= 0 ? suggestions[highlight] : undefined;
 
   useEffect(() => {
     const input = ref.current;
@@ -1194,34 +1251,58 @@ function BoardCellEditor({
     input.style.height = `${input.scrollHeight}px`;
   }, []);
 
-  const finish = (after: EditDirection) => {
+  const finish = (after: EditDirection, text = draft) => {
     if (done.current) return;
     done.current = true;
-    onCommit(draft, after);
+    onCommit(text, after);
   };
 
   return (
-    <textarea
-      ref={ref}
-      autoFocus
-      rows={1}
-      aria-label={t('tasks.taskTitle')}
-      value={draft}
-      onChange={(event) => {
-        setDraft(event.target.value);
-        event.target.style.height = 'auto';
-        event.target.style.height = `${event.target.scrollHeight}px`;
-      }}
-      onKeyDown={(event) => {
-        event.stopPropagation();
-        if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); finish('fill'); return; }
-        if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); finish('down'); return; }
-        if (event.key === 'Tab') { event.preventDefault(); finish(event.shiftKey ? 'left' : 'right'); return; }
-        if (event.key === 'Escape') { event.preventDefault(); done.current = true; onCancel(); }
-      }}
-      onBlur={() => finish('stay')}
-      className="block w-full select-text resize-none border-0 bg-white px-2.5 py-1.5 text-[13px] leading-snug text-slate-800 outline-none ring-2 ring-inset ring-navy-600 dark:bg-slate-900 dark:text-slate-100 dark:ring-gold-400"
-    />
+    <div className="relative">
+      <textarea
+        ref={ref}
+        autoFocus
+        rows={1}
+        aria-label={t('tasks.taskTitle')}
+        aria-autocomplete="list"
+        aria-expanded={suggestions.length > 0}
+        aria-controls={suggestions.length > 0 ? listId : undefined}
+        aria-activedescendant={picked ? `${listId}-${highlight}` : undefined}
+        value={draft}
+        onChange={(event) => {
+          setDraft(event.target.value);
+          setHighlight(-1);
+          event.target.style.height = 'auto';
+          event.target.style.height = `${event.target.scrollHeight}px`;
+        }}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+          if (event.key === 'ArrowDown' && suggestions.length > 0) {
+            event.preventDefault();
+            setHighlight((index) => Math.min(suggestions.length - 1, index + 1));
+            return;
+          }
+          if (event.key === 'ArrowUp' && highlight >= 0) {
+            event.preventDefault();
+            setHighlight((index) => index - 1);
+            return;
+          }
+          if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); finish('fill'); return; }
+          if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); finish('down', picked ?? draft); return; }
+          if (event.key === 'Tab') { event.preventDefault(); finish(event.shiftKey ? 'left' : 'right', picked ?? draft); return; }
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            // The first Escape only lets go of a picked suggestion
+            if (picked) { setHighlight(-1); return; }
+            done.current = true;
+            onCancel();
+          }
+        }}
+        onBlur={() => finish('stay')}
+        className="block w-full select-text resize-none border-0 bg-white px-2.5 py-1.5 text-[13px] leading-snug text-slate-800 outline-none ring-2 ring-inset ring-navy-600 dark:bg-slate-900 dark:text-slate-100 dark:ring-gold-400"
+      />
+      <JobSuggestionList id={listId} suggestions={suggestions} highlight={highlight} onPick={(title) => finish('stay', title)} />
+    </div>
   );
 }

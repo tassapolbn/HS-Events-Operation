@@ -54,13 +54,14 @@ const STATUS_DOT: Record<BoardStatus, string> = {
 };
 
 /** Solid light chip so it stays readable on any event header colour. */
-export function StatusBadge({ status }: { status: BoardStatus }) {
+export function StatusBadge({ status, className }: { status: BoardStatus; className?: string }) {
   const { t } = useLanguage();
   return (
     <span
       className={cn(
         'inline-flex shrink-0 items-center gap-2 rounded-full bg-white px-3.5 py-1.5 text-sm font-extrabold shadow-sm',
-        STATUS_TEXT[status]
+        STATUS_TEXT[status],
+        className
       )}
     >
       <span

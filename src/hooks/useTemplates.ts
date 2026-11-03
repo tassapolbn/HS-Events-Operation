@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../lib/supabase';
 import { combineDateTime, dayDiff, extractTime, shiftDate } from '../lib/utils';
-import type { Attachment, Department, EventTemplate, EventWithTasks, TemplateData } from '../types';
+import type { Attachment, Campus, Department, EventContact, EventTemplate, EventWithTasks, TemplateData } from '../types';
 
 export function useTemplates() {
   return useQuery({
@@ -29,69 +29,82 @@ interface SaveTemplateArgs {
   userId: string;
 }
 
+/** Build reusable event content; checklist labels are loaded separately by the caller. */
+export function templateDataFromEvent(
+  event: EventWithTasks,
+  departments: Department[],
+  attachments: Attachment[],
+  includeAttachments: boolean,
+  checklistsByTask: Record<string, string[]> = {}
+): TemplateData {
+  const deptCode = (id: string) => departments.find((d) => d.id === id)?.code ?? '';
+  const sessions = event.event_sessions ?? [];
+  const sessionIndexById = new Map(sessions.map((session, index) => [session.id, index]));
+  return {
+    event: {
+      name: event.name,
+      category: event.category,
+      location: event.location,
+      description: event.description,
+      additional_notes: event.additional_notes,
+      internal_notes: event.internal_notes,
+      priority: event.priority,
+      times: {
+        setup_start: extractTime(event.setup_start),
+        venue_ready: extractTime(event.venue_ready),
+        event_start: extractTime(event.event_start),
+        event_finish: extractTime(event.event_finish),
+        breakdown_start: extractTime(event.breakdown_start),
+        breakdown_deadline: extractTime(event.breakdown_deadline)
+      },
+      // A three-day event makes three-day events
+      duration_days: event.end_date ? Math.max(0, dayDiff(event.event_date, event.end_date)) : 0
+    },
+    sessions: sessions.map((session) => ({
+      title: session.title,
+      day_offset: dayDiff(event.event_date, session.session_date),
+      location: session.location,
+      start_time: extractTime(session.start_time),
+      end_time: extractTime(session.end_time),
+      time_note: session.time_note ?? '',
+      note: session.note ?? '',
+      sort_order: session.sort_order
+    })),
+    tasks: event.event_tasks.map((task) => ({
+      department_code: deptCode(task.department_id),
+      title: task.title,
+      description: task.description,
+      instructions: task.instructions,
+      work_location: task.work_location,
+      setup_location: task.setup_location,
+      assigned_staff: task.assigned_staff,
+      priority: task.priority,
+      start_time: extractTime(task.start_time),
+      completion_time: extractTime(task.completion_time),
+      checklist: checklistsByTask[task.id] ?? [],
+      session_index: task.session_id != null ? sessionIndexById.get(task.session_id) ?? null : null,
+      notes: task.notes
+    })),
+    attachments: includeAttachments
+      ? attachments.map((a) => ({
+          file_name: a.file_name,
+          storage_path: a.storage_path,
+          mime_type: a.mime_type,
+          size_bytes: a.size_bytes
+        }))
+      : []
+  };
+}
+
 export function useTemplateMutations() {
   const queryClient = useQueryClient();
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['templates'] });
 
   const saveTemplate = useMutation({
     mutationFn: async (args: SaveTemplateArgs) => {
-      const deptCode = (id: string) => args.departments.find((d) => d.id === id)?.code ?? '';
-      const sessions = args.event.event_sessions ?? [];
-      const sessionIndexById = new Map(sessions.map((session, index) => [session.id, index]));
-      const data: TemplateData = {
-        event: {
-          name: args.event.name,
-          category: args.event.category,
-          location: args.event.location,
-          description: args.event.description,
-          additional_notes: args.event.additional_notes,
-          internal_notes: args.event.internal_notes,
-          priority: args.event.priority,
-          times: {
-            setup_start: extractTime(args.event.setup_start),
-            venue_ready: extractTime(args.event.venue_ready),
-            event_start: extractTime(args.event.event_start),
-            event_finish: extractTime(args.event.event_finish),
-            breakdown_start: extractTime(args.event.breakdown_start),
-            breakdown_deadline: extractTime(args.event.breakdown_deadline)
-          },
-          // A three-day event makes three-day events
-          duration_days: args.event.end_date ? Math.max(0, dayDiff(args.event.event_date, args.event.end_date)) : 0
-        },
-        sessions: sessions.map((session) => ({
-          title: session.title,
-          day_offset: dayDiff(args.event.event_date, session.session_date),
-          location: session.location,
-          start_time: extractTime(session.start_time),
-          end_time: extractTime(session.end_time),
-          time_note: session.time_note ?? '',
-          note: session.note ?? '',
-          sort_order: session.sort_order
-        })),
-        tasks: args.event.event_tasks.map((task) => ({
-          department_code: deptCode(task.department_id),
-          title: task.title,
-          description: task.description,
-          instructions: task.instructions,
-          work_location: task.work_location,
-          setup_location: task.setup_location,
-          assigned_staff: task.assigned_staff,
-          priority: task.priority,
-          start_time: extractTime(task.start_time),
-          completion_time: extractTime(task.completion_time),
-          checklist: args.checklistsByTask[task.id] ?? [],
-          session_index: task.session_id != null ? sessionIndexById.get(task.session_id) ?? null : null,
-          notes: task.notes
-        })),
-        attachments: args.includeAttachments
-          ? args.attachments.map((a) => ({
-              file_name: a.file_name,
-              storage_path: a.storage_path,
-              mime_type: a.mime_type,
-              size_bytes: a.size_bytes
-            }))
-          : []
-      };
+      const data = templateDataFromEvent(
+        args.event, args.departments, args.attachments, args.includeAttachments, args.checklistsByTask
+      );
       const { error } = await supabase.from('event_templates').insert({
         name: args.name,
         description: args.description,
@@ -119,12 +132,20 @@ export function useTemplateMutations() {
       template,
       eventDate,
       departments,
-      userId
+      userId,
+      overrides
     }: {
       template: EventTemplate;
       eventDate: string;
       departments: Department[];
       userId: string;
+      overrides?: {
+        name?: string;
+        campus?: Campus;
+        header_color?: string;
+        header_text_color?: string;
+        contacts?: EventContact[];
+      };
     }): Promise<string> => {
       const d = template.data;
       const times = d.event.times ?? {};
@@ -147,7 +168,8 @@ export function useTemplateMutations() {
           event_finish: combineDateTime(eventDate, times.event_finish ?? null),
           breakdown_start: combineDateTime(eventDate, times.breakdown_start ?? null),
           breakdown_deadline: combineDateTime(eventDate, times.breakdown_deadline ?? null),
-          created_by: userId
+          created_by: userId,
+          ...overrides
         })
         .select()
         .single();

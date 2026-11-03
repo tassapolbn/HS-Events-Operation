@@ -1,6 +1,6 @@
 import { TaskNotifyPanel } from './TaskNotifyPanel';
 import { useEffect, useRef, useState } from 'react';
-import { MapPin, Clock, User, Pencil, Trash2, Plus, X } from 'lucide-react';
+import { MapPin, Clock, User, Pencil, Trash2, Plus, X, CheckCheck } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { Select } from '../ui/Input';
@@ -14,7 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../ui/Toast';
 import { useChecklist, useChecklistMutations, useTaskMutations } from '../../hooks/useTasks';
 import { TASK_STATUSES } from '../../lib/constants';
-import { cn, formatTime, isRichTextEmpty } from '../../lib/utils';
+import { cn, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
 import type { Department, EventTask, TaskStatus } from '../../types';
 import { LinkifiedText } from '../ui/LinkifiedText';
 
@@ -139,6 +139,17 @@ export function TaskDetailModal({ open, onClose, task, department, eventId, onEd
               task.start_time || task.completion_time
                 ? `${formatTime(task.start_time, lang)} - ${formatTime(task.completion_time, lang)}`
                 : ''
+            )}
+            {/* Names given on the display board */}
+            {task.status === 'completed' && infoRow(
+              <CheckCheck className="h-4 w-4" />,
+              lang === 'th' ? 'เสร็จโดย' : 'Done by',
+              task.completed_by ?? ''
+            )}
+            {task.acknowledged_at && infoRow(
+              <CheckCheck className="h-4 w-4" />,
+              lang === 'th' ? 'รับทราบโดย' : 'Acknowledged by',
+              `${task.acknowledged_by || (lang === 'th' ? 'ไม่ระบุชื่อ' : 'No name given')} · ${formatDate(task.acknowledged_at, lang, 'd MMM')} ${formatTime(task.acknowledged_at, lang)}`
             )}
           </div>
 

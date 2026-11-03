@@ -1,9 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm, type Path } from 'react-hook-form';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
-import { useEvent, useEventMutations } from '../hooks/useEvents';
+import { useEvent, useEventMutations, useEvents } from '../hooks/useEvents';
+import { useDepartments } from '../hooks/useDepartments';
+import { templateDataFromEvent, useTemplateMutations } from '../hooks/useTemplates';
 import { useAuth } from '../contexts/AuthContext';
 import { useCampus } from '../contexts/CampusContext';
 import { useLanguage } from '../i18n';
@@ -15,10 +17,107 @@ import { RichTextEditor } from '../components/editor/RichTextEditor';
 import { Spinner } from '../components/ui/Spinner';
 import { cleanContacts, EventContactsField } from '../components/events/EventContactsField';
 import { CAMPUSES, CAMPUS_NAMES, EVENT_CATEGORIES, EVENT_STATUSES } from '../lib/constants';
-import { combineDateTime, extractDate, extractTime } from '../lib/utils';
+import { combineDateTime, extractDate, extractTime, formatDate } from '../lib/utils';
 import { sessionDaysForNewEvent, storedEndDate } from '../lib/eventDays';
 import { supabase } from '../lib/supabase';
-import type { Campus, EventContact, EventStatus } from '../types';
+import type { Attachment, Campus, EventContact, EventStatus, EventWithTasks } from '../types';
+
+function PastEventCard() {
+  const { t, lang } = useLanguage();
+  const { profile } = useAuth();
+  const { toast } = useToast();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const events = useEvents({ includeArchived: true });
+  const departments = useDepartments();
+  const { createEventFromTemplate } = useTemplateMutations();
+  const [sourceId, setSourceId] = useState('');
+  const [eventDate, setEventDate] = useState('');
+  const [creating, setCreating] = useState(false);
+  const text = (th: string, en: string) => lang === 'th' ? th : en;
+
+  const createFromPast = async (submitEvent: React.FormEvent<HTMLFormElement>) => {
+    submitEvent.preventDefault();
+    if (!sourceId || !eventDate || !profile || !departments.data || creating) return;
+    setCreating(true);
+    try {
+      const [sourceResult, attachmentResult] = await Promise.all([
+        supabase.from('events').select('*, event_tasks(*), event_sessions(*)').eq('id', sourceId).is('deleted_at', null).single(),
+        supabase.from('attachments').select('*').eq('entity_type', 'event').eq('entity_id', sourceId)
+      ]);
+      if (sourceResult.error) throw sourceResult.error;
+      if (attachmentResult.error) throw attachmentResult.error;
+      const source = sourceResult.data as EventWithTasks;
+      source.event_tasks = (source.event_tasks ?? [])
+        .filter((task) => !task.deleted_at)
+        .sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at));
+      source.event_sessions = (source.event_sessions ?? [])
+        .sort((a, b) => a.session_date.localeCompare(b.session_date) || a.sort_order - b.sort_order);
+      const checklistsByTask: Record<string, string[]> = {};
+      if (source.event_tasks.length > 0) {
+        const { data, error } = await supabase.from('task_checklist_items')
+          .select('task_id, label, sort_order')
+          .in('task_id', source.event_tasks.map((task) => task.id))
+          .order('sort_order');
+        if (error) throw error;
+        for (const item of data ?? []) {
+          (checklistsByTask[item.task_id] ??= []).push(item.label);
+        }
+      }
+      const data = templateDataFromEvent(source, departments.data, (attachmentResult.data ?? []) as Attachment[], true, checklistsByTask);
+      const eventId = await createEventFromTemplate.mutateAsync({
+        template: {
+          id: source.id, name: source.name, description: source.description, data,
+          created_by: source.created_by, created_at: source.created_at, updated_at: source.updated_at
+        },
+        eventDate,
+        departments: departments.data,
+        userId: profile.id,
+        overrides: {
+          name: source.name, campus: source.campus,
+          header_color: source.header_color, header_text_color: source.header_text_color,
+          contacts: source.contacts ?? []
+        }
+      });
+      queryClient.invalidateQueries({ queryKey: ['calendar'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['display'] });
+      toast(t('common.savedSuccess'));
+      navigate(`/events/${eventId}`);
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>{text('เริ่มจากกิจกรรมที่ผ่านมา', 'Start from a past event')}</CardTitle></CardHeader>
+      <CardBody>
+        <form onSubmit={createFromPast} className="space-y-4">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {text('คัดลอกช่วงกิจกรรมโดยเลื่อนเป็นวันที่ใหม่ พร้อมงาน รายการตรวจสอบ และไฟล์ กิจกรรมใหม่จะเป็นฉบับร่าง และงานจะเริ่มที่ยังไม่เริ่มทำ', 'Copies sessions to the new dates, along with jobs, checklists and files. The new event starts as a draft, with jobs not started.')}
+          </p>
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_12rem]">
+            <Select label={text('กิจกรรมต้นฉบับ', 'Source event')} required value={sourceId} onChange={(event) => setSourceId(event.target.value)} disabled={creating || events.isLoading}>
+              <option value="">{events.isLoading ? text('กำลังโหลด…', 'Loading…') : text('เลือกกิจกรรม', 'Choose an event')}</option>
+              {(events.data ?? []).map((event) => <option key={event.id} value={event.id}>{formatDate(event.event_date, lang)} · {event.name} · {event.campus}</option>)}
+            </Select>
+            <Input label={text('วันเริ่มกิจกรรมใหม่', 'New start date')} type="date" required value={eventDate} onChange={(event) => setEventDate(event.target.value)} disabled={creating} />
+          </div>
+          {(events.isError || departments.isError) && <p role="alert" className="text-sm text-red-600 dark:text-red-400">{t('common.errorGeneric')}</p>}
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="submit" loading={creating} disabled={!sourceId || !eventDate || !profile || !departments.data || events.isError || departments.isError}>
+              {text('สร้างจากกิจกรรมนี้', 'Create from this event')}
+            </Button>
+            <Link to="/templates" className="rounded text-sm font-medium text-navy-700 underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 dark:text-gold-300">{text('หรือใช้เทมเพลต', 'or use a template')}</Link>
+          </div>
+        </form>
+      </CardBody>
+    </Card>
+  );
+}
 
 const SCHEDULE_FIELDS = [
   { name: 'setup_start', label: 'events.setupStart' },
@@ -230,6 +329,8 @@ export function EventFormPage() {
           {isEdit ? t('events.editEvent') : t('events.newEvent')}
         </h1>
       </div>
+
+      {!isEdit && <PastEventCard />}
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <Card>

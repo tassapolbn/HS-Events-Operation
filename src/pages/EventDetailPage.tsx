@@ -29,6 +29,7 @@ import { SaveTemplateModal } from '../components/events/SaveTemplateModal';
 import { SessionFormModal } from '../components/events/SessionFormModal';
 import { HiddenSessionBadge, SessionControls } from '../components/events/SessionControls';
 import { EventContacts } from '../components/events/EventContacts';
+import { EventCheckStrip } from '../components/events/EventCheckStrip';
 import { SessionNotifyModal, unsentTasks } from '../components/events/SessionNotifyModal';
 import { SessionImportModal } from '../components/events/SessionImportModal';
 import { AuditHistory } from '../components/events/AuditHistory';
@@ -496,6 +497,8 @@ export function EventDetailPage() {
           </select>
         )}
       </div>
+
+      {isEventsTeam && <EventCheckStrip key={event.id} event={event} departments={sortedDepartments} />}
 
       {/* Tasks: one spreadsheet, or cards grouped by session */}
       {effectiveView === 'grid' ? (

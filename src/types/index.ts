@@ -138,6 +138,12 @@ export interface EventTask {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  /** Name given on the display board when the job was ticked done ('' when none) */
+  completed_by?: string;
+  /** Name given on the display board when the department acknowledged the job */
+  acknowledged_by?: string;
+  /** When the department acknowledged the job on the display board */
+  acknowledged_at?: string | null;
 }
 
 export interface ChecklistItem {

@@ -83,6 +83,36 @@ export default {
           '0%': { transform: 'scale(0.975)', boxShadow: '0 0 0 0 var(--day-glow)' },
           '40%': { transform: 'scale(1.012)' },
           '100%': { transform: 'scale(1)', boxShadow: '0 0 0 18px rgba(255,255,255,0)' }
+        },
+        /* A job just ticked: green runs across the row, then settles into the done tint */
+        'done-sweep': {
+          '0%': { transform: 'scaleX(0)', opacity: '1' },
+          '55%': { transform: 'scaleX(1)', opacity: '1' },
+          '100%': { transform: 'scaleX(1)', opacity: '0' }
+        },
+        /* The strike-through is drawn from left to right */
+        'strike-draw': {
+          from: { backgroundSize: '0% 2px' },
+          to: { backgroundSize: '100% 2px' }
+        },
+        /* A done counter that just went up */
+        'count-bump': {
+          '0%': { transform: 'scale(1)' },
+          '45%': { transform: 'scale(1.18)' },
+          '100%': { transform: 'scale(1)' }
+        },
+        /* "All done" lands on the department panel, then fades away */
+        'stamp-pop': {
+          '0%': { transform: 'scale(1.4)', opacity: '0' },
+          '18%': { transform: 'scale(1)', opacity: '1' },
+          '80%': { transform: 'scale(1)', opacity: '1' },
+          '100%': { transform: 'scale(1)', opacity: '0' }
+        },
+        /* A job the Events team has just added or changed glows gold for a moment */
+        'change-glow': {
+          '0%': { boxShadow: 'inset 0 0 0 3px rgba(240,179,35,0.95)', backgroundColor: 'rgba(250,240,200,0.9)' },
+          '70%': { boxShadow: 'inset 0 0 0 3px rgba(240,179,35,0.6)' },
+          '100%': { boxShadow: 'inset 0 0 0 0 rgba(240,179,35,0)', backgroundColor: 'rgba(250,240,200,0)' }
         }
       },
       animation: {
@@ -95,7 +125,12 @@ export default {
         sheen: 'sheen 3.2s ease-in-out infinite',
         'day-flip': 'day-flip 0.75s cubic-bezier(0.2, 0.8, 0.2, 1)',
         'day-sweep': 'day-sweep 0.9s ease-out 0.1s both',
-        'day-glow': 'day-glow 0.75s ease-out'
+        'day-glow': 'day-glow 0.75s ease-out',
+        'done-sweep': 'done-sweep 0.8s ease-out both',
+        'strike-draw': 'strike-draw 0.4s ease-out 0.15s both',
+        'count-bump': 'count-bump 0.3s ease-out',
+        'stamp-pop': 'stamp-pop 1.6s ease-out both',
+        'change-glow': 'change-glow 3s ease-out both'
       }
     }
   },
