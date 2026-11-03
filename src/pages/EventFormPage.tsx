@@ -64,7 +64,8 @@ function PastEventCard() {
           (checklistsByTask[item.task_id] ??= []).push(item.label);
         }
       }
-      const data = templateDataFromEvent(source, departments.data, (attachmentResult.data ?? []) as Attachment[], true, checklistsByTask);
+      // An exact copy: every time keeps its day and each session keeps its floor plan
+      const data = templateDataFromEvent(source, departments.data, (attachmentResult.data ?? []) as Attachment[], true, checklistsByTask, { exactCopy: true });
       const eventId = await createEventFromTemplate.mutateAsync({
         template: {
           id: source.id, name: source.name, description: source.description, data,

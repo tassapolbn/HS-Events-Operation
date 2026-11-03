@@ -216,6 +216,11 @@ export interface TemplateData {
     times: Record<string, string | null>; // HH:mm per milestone field
     /** Days after the first day that the event ends; missing or 0 for a one-day event */
     duration_days?: number;
+    /**
+     * Days after the event date each milestone time falls on. Only an exact copy
+     * of a past event keeps these; missing means the event date.
+     */
+    time_day_offsets?: Record<string, number>;
   };
   /**
    * Sessions stored relative to the event date, so the same template can be used
@@ -232,6 +237,11 @@ export interface TemplateData {
     time_note: string;
     note: string;
     sort_order: number;
+    /** Days after the session date its start or end falls on (past midnight); missing means 0 */
+    start_day_offset?: number;
+    end_day_offset?: number;
+    /** Index into `attachments` of this session's floor plan; only an exact copy keeps it */
+    floor_plan_index?: number | null;
   }>;
   tasks: Array<{
     department_code: string;
@@ -244,6 +254,9 @@ export interface TemplateData {
     priority: Priority;
     start_time: string | null; // HH:mm
     completion_time: string | null; // HH:mm
+    /** Days after the event date the job starts or is due; missing means the event date */
+    start_day_offset?: number;
+    completion_day_offset?: number;
     checklist: string[];
     /** Index into `sessions`; null or missing means a whole event task */
     session_index?: number | null;

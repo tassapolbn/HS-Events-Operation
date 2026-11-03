@@ -7,12 +7,12 @@ import { schoolToday } from '../../lib/archive';
 import { dayColor } from '../../lib/dayColors';
 import { useCurrentBoardDay } from '../../hooks/useCurrentBoardDay';
 import { FloorPlanPreview } from './FloorPlanPreview';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   AlarmClock, CalendarDays, CalendarRange, Check, CheckCheck, ChevronDown, ChevronRight, CircleCheckBig, CircleHelp, Clock, LayoutList,
-  ListChecks, Map as MapIcon, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, User, Wrench
+  ListChecks, Map as MapIcon, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, Undo2, User, Wrench
 } from 'lucide-react';
-import { useAcknowledgeDisplayTasks, useToggleDisplayTask } from '../../hooks/usePublicDisplay';
+import { useAcknowledgeDisplayTasks, useToggleDisplayTask, useUnacknowledgeDisplayTasks } from '../../hooks/usePublicDisplay';
 import { BoardNameDialog } from './BoardNameDialog';
 import { markNameSkipped, nameSkipped, readBoardName, saveBoardName } from '../../lib/boardIdentity';
 import { changedTaskIds, sessionLiveState } from '../../lib/boardMotion';
@@ -59,6 +59,8 @@ interface EventsBoardProps {
   /** Live editing: pencils appear on events, sessions and tasks when true */
   editMode?: boolean;
   presenting?: boolean;
+  /** The whole feed before any search, for live animations; defaults to `events` */
+  liveEvents?: DisplayEvent[];
   onEditEvent?: (event: DisplayEvent) => void;
   onEditSession?: (event: DisplayEvent, session: DisplaySession) => void;
   onEditTask?: (event: DisplayEvent, task: DisplayTask) => void;
@@ -74,6 +76,7 @@ export function EventsBoard({
   focusTaskId = '',
   editMode,
   presenting = false,
+  liveEvents,
   onEditEvent,
   onEditSession,
   onEditTask
@@ -145,7 +148,20 @@ export function EventsBoard({
   }, [isLoading, focusTaskId]);
 
   const ackTasks = useAcknowledgeDisplayTasks();
-  /** The action waiting for the reader's name, asked once per device before a tick or an acknowledgement */
+  const unackTasks = useUnacknowledgeDisplayTasks();
+  /**
+   * Every job on the board as the database has it, before any search, so the
+   * animations and the acknowledge buttons work from the whole picture. Read
+   * through a ref by actions that complete later (after the name dialog).
+   */
+  const feed = liveEvents ?? events;
+  const feedRef = useRef(feed);
+  feedRef.current = feed;
+  const latestTasks = (ids: string[]): DisplayTask[] => {
+    const wanted = new Set(ids);
+    return (feedRef.current ?? []).flatMap((event) => event.tasks.filter((task) => wanted.has(task.id)));
+  };
+  /** The action waiting for the reader's name, asked once per device before an acknowledgement */
   const [namePrompt, setNamePrompt] = useState<((name: string) => void) | null>(null);
   const withName = (action: (name: string) => void) => {
     const saved = readBoardName();
@@ -168,9 +184,10 @@ export function EventsBoard({
     });
 
   /**
-   * Live changes, for the tick and glow animations. Both snapshots keep every job
-   * seen so far, so a job that only reappears when a search is cleared never
-   * counts as new, and the first load never animates anything.
+   * Live changes, for the tick and glow animations. They read the whole feed,
+   * never the searched one, and only once it has loaded, so neither opening the
+   * board nor clearing a search makes every job look new. Both snapshots keep
+   * every job seen so far.
    */
   const contentSnapshot = useRef<Map<string, string> | null>(null);
   const statusSnapshot = useRef<Map<string, string> | null>(null);
@@ -178,15 +195,16 @@ export function EventsBoard({
   const [glowing, setGlowing] = useState<Set<string>>(new Set());
   /** Jobs that have just been ticked done, kept in place while their animation plays */
   const [justDone, setJustDone] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    if (!events) return;
+  // Before paint, so a block whose last job was just ticked never flickers out
+  useLayoutEffect(() => {
+    if (isLoading || !feed) return;
     const firstLoad = contentSnapshot.current === null;
-    const { next, changed } = changedTaskIds(contentSnapshot.current, events);
+    const { next, changed } = changedTaskIds(contentSnapshot.current, feed);
     contentSnapshot.current = new Map([...(contentSnapshot.current ?? []), ...next]);
     const statusBefore = statusSnapshot.current;
     const statusNext = new Map(statusBefore ?? []);
     const finished = new Set<string>();
-    for (const event of events) {
+    for (const event of feed) {
       for (const task of event.tasks) {
         const before = statusBefore?.get(task.id);
         if (before !== undefined && before !== 'completed' && task.status === 'completed') finished.add(task.id);
@@ -212,7 +230,7 @@ export function EventsBoard({
         return rest;
       }), 1600);
     }
-  }, [events]);
+  }, [feed, isLoading]);
 
   /** Jump from an upcoming task card to its event: expand, scroll, flash */
   const goToEvent = (eventId: string) => {
@@ -256,9 +274,11 @@ export function EventsBoard({
           'relative isolate px-4 py-3 transition-colors duration-150',
           focusTaskId === task.id && 'ring-4 ring-inset ring-gold-400',
           glowing.has(task.id) && 'motion-safe:animate-change-glow',
+          // No green stripe on the left: the panel already has its department colour
+          // there, and two bars side by side read as a smudge. The tint and tick say done.
           completed
-            ? 'border-l-[3px] border-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/25'
-            : 'border-l-[3px] border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'
+            ? 'bg-emerald-50 dark:bg-emerald-950/30'
+            : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
         )}
       >
         {/* Green runs across the row when it is ticked, behind the text */}
@@ -267,11 +287,9 @@ export function EventsBoard({
         )}
         <div className="flex items-start gap-3">
           <button
-            onClick={() =>
-              completed
-                ? toggleTask.mutate({ taskId: task.id, done: false })
-                : withName((name) => toggleTask.mutate({ taskId: task.id, done: true, name }))
-            }
+            // No question when ticking: a name saved on this device (from acknowledging
+            // or the board settings) goes along, so the Events team can still see who
+            onClick={() => toggleTask.mutate({ taskId: task.id, done: !completed, name: completed ? '' : readBoardName() })}
             className={cn(
               // the after: ring expands the tap area to 44px for WCAG without shifting layout
               "relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 after:absolute after:-inset-2 after:content-['']  focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-90",
@@ -367,29 +385,67 @@ export function EventsBoard({
   /**
    * The department says it has seen its jobs. Finished jobs need no answer; a job
    * added after the last acknowledgement asks again, so new work is never missed.
+   * In parts a header can lay out to fit: `action` asks the department to
+   * acknowledge its new jobs; `said` and `undo` tell who acknowledged and when,
+   * and let a mistaken press be taken back.
    */
-  const renderAck = (deptTasks: DisplayTask[]): ReactNode => {
-    if (presenting) return null;
+  const ackParts = (deptTasks: DisplayTask[], tone: 'panel' | 'card'): {
+    action: ReactNode;
+    said: { text: string; time: string } | null;
+    undo: ReactNode;
+  } => {
+    const none = { action: null, said: null, undo: null };
+    if (presenting) return none;
     const open = deptTasks.filter((task) => task.status !== 'completed');
-    if (open.length === 0) return null;
+    if (open.length === 0) return none;
     const pending = open.filter((task) => !task.acknowledged_at);
-    if (pending.length === 0) {
-      const latest = open.reduce((a, b) => ((a.acknowledged_at ?? '') >= (b.acknowledged_at ?? '') ? a : b));
-      return (
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-          <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
-          {lang === 'th' ? 'รับทราบแล้ว' : 'Acknowledged'}
-          {latest.acknowledged_by ? ` · ${latest.acknowledged_by}` : ''}
-          {latest.acknowledged_at && <span className="tabular-nums">{formatTime(latest.acknowledged_at, lang)}</span>}
-        </span>
-      );
-    }
-    const partial = pending.length < open.length;
-    return (
+    const acked = open.filter((task) => task.acknowledged_at);
+    const busy = ackTasks.isPending || unackTasks.isPending;
+    // Jobs are read again when the action runs: the name dialog may have stayed open
+    // while someone else acknowledged, or a job may have been ticked done meanwhile
+    const acknowledge = (ids: string[]) =>
+      withName((name) => {
+        const still = latestTasks(ids).filter((task) => task.status !== 'completed' && !task.acknowledged_at);
+        if (still.length > 0) ackTasks.mutate({ taskIds: still.map((task) => task.id), name });
+      });
+    // An acknowledgement pressed by mistake, by another department say, can be taken back
+    const undoButton = acked.length > 0 && (
       <button
         type="button"
-        disabled={ackTasks.isPending}
-        onClick={() => withName((name) => ackTasks.mutate({ taskIds: pending.map((task) => task.id), name }))}
+        disabled={busy}
+        onClick={() => {
+          const still = latestTasks(acked.map((task) => task.id)).filter((task) => task.acknowledged_at);
+          if (still.length > 0) unackTasks.mutate({ taskIds: still.map((task) => task.id) });
+        }}
+        title={lang === 'th' ? 'ยกเลิกการรับทราบ เช่น ถ้ากดผิดแผนก' : 'Take the acknowledgement back, for example if it was pressed by mistake'}
+        aria-label={lang === 'th' ? 'ยกเลิกการรับทราบ' : 'Undo acknowledgement'}
+        className={cn(
+          'inline-flex shrink-0 items-center gap-1 text-xs font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-60',
+          tone === 'panel'
+            ? 'rounded-md px-1.5 py-0.5 text-slate-500 hover:bg-white hover:text-red-700 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-red-300'
+            : 'rounded-full border border-slate-300 bg-white px-2 py-1 text-slate-600 hover:bg-slate-50 hover:text-red-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300'
+        )}
+      >
+        <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+        {lang === 'th' ? 'ยกเลิก' : 'Undo'}
+      </button>
+    );
+    const partial = pending.length > 0 && acked.length > 0;
+    const latest = acked.length > 0
+      ? acked.reduce((a, b) => ((a.acknowledged_at ?? '') >= (b.acknowledged_at ?? '') ? a : b))
+      : null;
+    const said = latest && {
+      text: (partial
+        ? (lang === 'th' ? `รับทราบแล้ว ${acked.length} งาน` : `${acked.length} acknowledged`)
+        : (lang === 'th' ? 'รับทราบแล้ว' : 'Acknowledged'))
+        + (latest.acknowledged_by ? ` · ${latest.acknowledged_by}` : ''),
+      time: latest.acknowledged_at ? formatTime(latest.acknowledged_at, lang) : ''
+    };
+    const action = pending.length > 0 && (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => acknowledge(pending.map((task) => task.id))}
         className={cn(
           'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-60',
           partial
@@ -403,7 +459,41 @@ export function EventsBoard({
           : (lang === 'th' ? 'รับทราบ' : 'Acknowledge')}
       </button>
     );
+    return { action: action || null, said, undo: undoButton || null };
   };
+
+  /** Everything side by side, for a header with room to wrap (the one-department card) */
+  const renderAck = (deptTasks: DisplayTask[]): ReactNode => {
+    const { action, said, undo } = ackParts(deptTasks, 'card');
+    if (!action && !said) return null;
+    return (
+      <span className="inline-flex flex-wrap items-center gap-1">
+        {said && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+            <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
+            {said.text}
+            {said.time && <span className="tabular-nums">{said.time}</span>}
+          </span>
+        )}
+        {undo}
+        {action}
+      </span>
+    );
+  };
+
+  /**
+   * Who acknowledged, on its own slim line under a department panel's header,
+   * so the header keeps room for the department's name and count.
+   */
+  const renderAckLine = (said: { text: string; time: string } | null, undo: ReactNode): ReactNode =>
+    said && (
+      <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-1 text-xs dark:border-slate-800 dark:bg-slate-800/40">
+        <CheckCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+        <span className="min-w-0 truncate font-bold text-slate-600 dark:text-slate-300">{said.text}</span>
+        {said.time && <span className="shrink-0 font-semibold tabular-nums text-slate-500 dark:text-slate-400">{said.time}</span>}
+        <span className="ml-auto shrink-0">{undo}</span>
+      </div>
+    );
 
   /** A session happening right now, or starting within half an hour */
   const renderLive = (session: DisplaySession | null | undefined, onDark = false): ReactNode => {
@@ -446,13 +536,14 @@ export function EventsBoard({
       <ul className="flex-1 divide-y divide-slate-100 dark:divide-slate-800">
         {shown.map((task) => renderTaskRow(task, deptTasks.indexOf(task), evt))}
         {folded.length > 0 && (
-          <li>
+          // A rounded pill set in from the edges, clear of the department bar
+          <li className="px-3 py-2">
             <button
               type="button"
               disabled={presenting}
               aria-expanded={presenting ? undefined : open}
               onClick={() => toggleFold(panelKey)}
-              className="flex w-full items-center gap-2 border-l-[3px] border-emerald-400 bg-emerald-50/70 px-4 py-2.5 text-left text-sm font-bold text-emerald-700 transition-colors hover:bg-emerald-100/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-emerald-500 disabled:cursor-default disabled:hover:bg-emerald-50/70 dark:bg-emerald-950/25 dark:text-emerald-300"
+              className="flex w-full items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-left text-sm font-bold text-emerald-700 ring-1 ring-inset ring-emerald-200 transition-colors hover:bg-emerald-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-default disabled:hover:bg-emerald-50 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-800/70 dark:hover:bg-emerald-900/40"
             >
               <CircleCheckBig className="h-4 w-4 shrink-0" aria-hidden="true" />
               <span className="flex-1">
@@ -524,6 +615,7 @@ export function EventsBoard({
           const deptText = readableTextColor(dept.color);
           const allDone = done === deptTasks.length && deptTasks.length > 0;
           const bump = bumpKey(deptTasks);
+          const ack = ackParts(deptTasks, 'panel');
           return (
             <div
               key={dept.id}
@@ -558,7 +650,7 @@ export function EventsBoard({
                 <h3 className="min-w-0 flex-1 truncate text-[0.95rem] font-extrabold text-[color:var(--dept-ink)] dark:text-[color:var(--dept-ink-dark)]">
                   {deptName(dept)}
                 </h3>
-                {renderAck(deptTasks)}
+                {ack.action}
                 <span
                   key={bump.key}
                   className={cn(
@@ -573,6 +665,7 @@ export function EventsBoard({
                 </span>
               </div>
               {renderProgress(deptTasks, dept.color)}
+              {renderAckLine(ack.said, ack.undo)}
 
               {renderJobList(deptTasks, evt, `${blockKey}:${dept.id}`)}
             </div>
@@ -783,6 +876,14 @@ export function EventsBoard({
   };
 
   /**
+   * Done, for moving a block between Active and Done. A block whose last job was
+   * ticked a moment ago stays where it is while the tick plays, so the "All done"
+   * moment is seen and a wrong tick can still be undone, then it moves.
+   */
+  const settledDone = (session: DisplaySession | null, date: string, tasks: DisplayTask[]) =>
+    blockIsDone(session, date, tasks, boardNow) && !tasks.some((task) => justDone.has(task.id));
+
+  /**
    * One event split into the part that belongs in the scope being read. Work
    * sits in Done once its day is over or every task on it is ticked, so the
    * active board only ever carries what still has to happen.
@@ -793,10 +894,10 @@ export function EventsBoard({
     // With a department chosen, Done means that department's own work is done
     const mine = visibleTasks(evt);
     const general = mine.filter((task) => !task.session_id || !ids.has(task.session_id));
-    const generalShown = evt.id === focusEventId || inScope(blockIsDone(null, evt.event_date, general, boardNow), scope);
+    const generalShown = evt.id === focusEventId || inScope(settledDone(null, evt.event_date, general), scope);
     const sessions = all.filter((session) =>
       evt.id === focusEventId || inScope(
-        blockIsDone(session, session.session_date, mine.filter((task) => task.session_id === session.id), boardNow),
+        settledDone(session, session.session_date, mine.filter((task) => task.session_id === session.id)),
         scope
       )
     );
@@ -1195,7 +1296,7 @@ export function EventsBoard({
 
   const renderTimeline = (): ReactNode => {
     const entries = sessionTimeline(events, selectedDept).filter(({ date, event, block }) =>
-      event.id === focusEventId || inScope(blockIsDone(block.session, block.session?.session_date ?? date ?? event.event_date, block.tasks, boardNow), scope)
+      event.id === focusEventId || inScope(settledDone(block.session, block.session?.session_date ?? date ?? event.event_date, block.tasks), scope)
     );
     if (entries.length === 0) return scopeEmptyState;
     // The timeline is already in date order, so each day is one run of entries

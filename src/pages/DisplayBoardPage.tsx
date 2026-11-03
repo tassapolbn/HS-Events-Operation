@@ -229,6 +229,8 @@ export function DisplayBoardPage({
   const editProps = {
     editMode: boardEditMode,
     presenting,
+    // The whole feed, before any search, so live animations never mistake a search for new work
+    liveEvents: rawEventsQuery.data,
     onEditEvent: (event: DisplayEvent) => setEditing({ kind: 'event', event }),
     onEditSession: (event: DisplayEvent, session: DisplaySession) => setEditing({ kind: 'session', event, session }),
     onEditTask: (event: DisplayEvent, task: DisplayTask) => setEditing({ kind: 'task', event, task })

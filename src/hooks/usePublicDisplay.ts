@@ -169,6 +169,42 @@ export function useAcknowledgeDisplayTasks() {
   });
 }
 
+/**
+ * Take an acknowledgement back, when it was pressed by mistake (another
+ * department's screen, a wrong tap). Needs migration 20261104010000.
+ */
+export function useUnacknowledgeDisplayTasks() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ taskIds }: { taskIds: string[] }) => {
+      const results = await Promise.all(taskIds.map(async (taskId) => {
+        try {
+          const { error } = await supabase.rpc('public_unacknowledge_task', { p_task_id: taskId });
+          return error;
+        } catch (error) { return error; }
+      }));
+      const error = results.find(Boolean);
+      if (error) throw error;
+    },
+    onMutate: async ({ taskIds }) => {
+      await queryClient.cancelQueries({ queryKey: ['display', 'events'] });
+      const previous = queryClient.getQueriesData<DisplayEvent[]>({ queryKey: ['display', 'events'] });
+      const ids = new Set(taskIds);
+      queryClient.setQueriesData<DisplayEvent[]>({ queryKey: ['display', 'events'] }, (old) =>
+        old?.map((event) => ({
+          ...event,
+          tasks: event.tasks.map((task) => (ids.has(task.id) ? { ...task, acknowledged_by: '', acknowledged_at: null } : task))
+        }))
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      context?.previous.forEach(([key, data]) => queryClient.setQueryData(key, data));
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['display', 'events'] })
+  });
+}
+
 /** Acknowledge a single task; retained for existing callers. */
 export function useAcknowledgeDisplayTask() {
   const queryClient = useQueryClient();

@@ -5,6 +5,7 @@ import { JobSuggestionList } from './JobSuggestionList';
 import { useJobHistory } from '../../hooks/useJobHistory';
 import { suggestJobs, type JobIndex } from '../../lib/jobSuggestions';
 import { inverseGridEntry, type GridHistoryEntry } from '../../lib/gridHistory';
+import { fullDropRows, planBlockMove } from '../../lib/boardMove.ts';
 import { useLanguage } from '../../i18n';
 import { useToast } from '../ui/Toast';
 import { useAuth } from '../../contexts/AuthContext';
@@ -98,8 +99,8 @@ export function TaskBoardGrid({
   const [focus, setFocus] = useState<Cell | null>(null);
   const dragMode = useRef<'none' | 'select' | 'fill'>('none');
   const [fillTo, setFillTo] = useState<Cell | null>(null);
-  /** The job being carried to another column, and the cell under the pointer */
-  const carrying = useRef<EventTask | null>(null);
+  /** The jobs being carried, the top-left of their block, and the cell of the job grabbed */
+  const carrying = useRef<{ tasks: EventTask[]; origin: Cell; grab: Cell } | null>(null);
   const [dropAt, setDropAt] = useState<Cell | null>(null);
 
   const busy = createTasks.isPending || updateTasks.isPending || deleteTasks.isPending || restoreTasks.isPending;
@@ -572,7 +573,7 @@ export function TaskBoardGrid({
    * lands in is renumbered so it sits exactly where it was dropped, and the
    * placement it came from is kept so the drop can be undone.
    */
-  const carryTo = async (task: EventTask, target: Cell) => {
+  const carryOneTo = async (task: EventTask, target: Cell) => {
     if (!canEdit || busyRef.current) return;
     const column = groupByKey.get(target.group)?.columns.get(target.dept) ?? [];
     const without = column.filter((item) => item.id !== task.id);
@@ -607,6 +608,87 @@ export function TaskBoardGrid({
       setCursor({ group: target.group, dept: target.dept, row: at });
       setFocus(null);
       toast(t('grid.taskMoved'));
+    } catch {
+      toast(t('common.errorGeneric'), 'error');
+    } finally {
+      busyRef.current = false;
+    }
+  };
+
+  /**
+   * Carry a selected block of jobs, like moving a range in a spreadsheet: the
+   * job under the pointer lands on the drop cell and the rest keep their place
+   * around it. Letting go where it started changes nothing.
+   */
+  const carryTo = async (carried: NonNullable<typeof carrying.current>, target: Cell) => {
+    if (!canEdit || busyRef.current) return;
+    if (carried.tasks.length === 1) return carryOneTo(carried.tasks[0], target);
+    const { origin, grab } = carried;
+    if (grab.group === target.group && grab.dept === target.dept && grab.row === target.row) return;
+    // The block's top row goes this far above the drop row
+    const topRow = Math.max(0, target.row - (grab.row - origin.row));
+
+    // Renumber whole columns, including jobs hidden by the search filter.
+    const sessionIds = new Set(sessions.map((session) => session.id));
+    const moveGroups = groups.map((group) => ({
+      key: group.key,
+      columns: new Map(columns.map((dept) => [dept.id, tasks.filter((task) =>
+        task.department_id === dept.id && (group.session
+          ? task.session_id === group.key
+          : !task.session_id || !sessionIds.has(task.session_id))
+      ).sort((a, b) => a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at))]))
+    }));
+    const destination = moveGroups.find((group) => group.key === target.group);
+    const carriedIds = carried.tasks.map((task) => task.id);
+    // A search can hide jobs: the drop row and the carried jobs' order are read as shown
+    const rows = fullDropRows({
+      full: destination?.columns ?? new Map(),
+      visible: groupByKey.get(target.group)?.columns ?? new Map(),
+      carried: carriedIds,
+      row: topRow
+    });
+    const shownFrom = groupByKey.get(origin.group);
+    const shownRows = new Map(carried.tasks.map((task) => [
+      task.id,
+      shownFrom?.columns.get(task.department_id)?.findIndex((item) => item.id === task.id) ?? 0
+    ]));
+    const { patches, undo } = planBlockMove({
+      columns: flatColumns, groups: moveGroups,
+      carried: { ids: carriedIds, anchor: flatColumns.indexOf(grab.dept), rows: shownRows },
+      target: { ...target, row: topRow, rows }
+    });
+    if (patches.length === 0) return;
+
+    busyRef.current = true;
+    try {
+      await updateTasks.mutateAsync(patches);
+      pushUndo({ kind: 'placement', patches: undo });
+      // Where each job stands once saved. Patches hold only the jobs that moved,
+      // and every touched column is numbered from 0, so the rest keep theirs.
+      const movedIds = new Set(carried.tasks.map((task) => task.id));
+      const placed = new Map(patches.map((patch) => [patch.id, patch]));
+      const after = (task: EventTask) => placed.get(task.id) ?? task;
+      const visibleIds = new Set(groups.flatMap((group) => [...group.columns.values()].flat().map((task) => task.id)));
+      const destinationTasks = [
+        ...[...(destination?.columns.values() ?? [])].flat().filter((task) => !movedIds.has(task.id)),
+        ...carried.tasks
+      ];
+      const cellFor = (task: EventTask): Cell => {
+        const { department_id, sort_order } = after(task);
+        return {
+          group: target.group,
+          dept: department_id,
+          row: destinationTasks.filter((other) => visibleIds.has(other.id)
+            && after(other).department_id === department_id && after(other).sort_order < sort_order).length
+        };
+      };
+      const landed = [...carried.tasks].sort((a, b) => after(a).sort_order - after(b).sort_order
+        || flatColumns.indexOf(after(a).department_id) - flatColumns.indexOf(after(b).department_id));
+      const oneColumn = landed.every((task) => after(task).department_id === after(landed[0]).department_id);
+      scrollAfterMove.current = false;
+      setCursor(cellFor(landed[0]));
+      setFocus(oneColumn ? cellFor(landed[landed.length - 1]) : null);
+      toast(lang === 'th' ? `ย้าย ${landed.length} งานแล้ว` : `Moved ${landed.length} jobs`);
     } catch {
       toast(t('common.errorGeneric'), 'error');
     } finally {
@@ -1102,12 +1184,36 @@ export function TaskBoardGrid({
                                     data-board-grip="true"
                                     title={t('grid.dragToMove')}
                                     draggable={!busy}
+                                    onMouseDown={(event) => {
+                                      scrollAfterMove.current = false;
+                                      if (event.button !== 0) return;
+                                      event.stopPropagation();
+                                      dragMode.current = 'none';
+                                      containerRef.current?.focus({ preventScroll: true });
+                                      // Keep the block intact until dragstart can snapshot it.
+                                      if (!picked || areaTasks().length <= 1) {
+                                        setCursor({ group: group.key, dept: dept.id, row });
+                                        setFocus(null);
+                                      }
+                                    }}
                                     onDragStart={(event) => {
                                       // A carry is not a sweep, so the selection stops following the pointer
                                       dragMode.current = 'none';
-                                      carrying.current = task;
+                                      scrollAfterMove.current = false;
+                                      const selected = picked ? areaTasks() : [];
+                                      const carried = selected.length > 1 ? selected : [task];
+                                      const grab = { group: group.key, dept: dept.id, row };
+                                      carrying.current = {
+                                        tasks: carried,
+                                        origin: carried.length > 1 && area
+                                          ? { group: area.group, dept: flatColumns[area.left], row: area.top }
+                                          : grab,
+                                        grab
+                                      };
                                       event.dataTransfer.effectAllowed = 'move';
-                                      event.dataTransfer.setData('text/plain', task.title);
+                                      event.dataTransfer.setData('text/plain', carried.length > 1
+                                        ? (lang === 'th' ? `${carried.length} งาน` : `${carried.length} jobs`)
+                                        : task.title);
                                     }}
                                     onDragEnd={() => { carrying.current = null; setDropAt(null); }}
                                     className="mt-0.5 flex h-4 w-3 shrink-0 cursor-grab items-center justify-center text-slate-300 opacity-0 transition-opacity active:cursor-grabbing group-hover/cell:opacity-100 dark:text-slate-600"
