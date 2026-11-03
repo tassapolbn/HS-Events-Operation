@@ -11,6 +11,14 @@ export function NowNextStrip({ schedule, departments }: { schedule: NowAndNext; 
   const { lang, deptName } = useLanguage();
   const th = lang === 'th';
   if (!schedule.now.length && !schedule.next) return null;
+  /** "in 40 min", or "in 7 h 28 min" once the wait is an hour or more */
+  const wait = (minutes: number) => {
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    if (hours === 0) return th ? `อีก ${minutes} นาที` : `in ${minutes} min`;
+    if (rest === 0) return th ? `อีก ${hours} ชม.` : `in ${hours} h`;
+    return th ? `อีก ${hours} ชม. ${rest} นาที` : `in ${hours} h ${rest} min`;
+  };
   const sessionSummary = (entry: TodaySession) => (
     <div key={entry.key} className="space-y-2">
       <p className="text-xl font-bold leading-snug sm:text-2xl">
@@ -34,7 +42,7 @@ export function NowNextStrip({ schedule, departments }: { schedule: NowAndNext; 
       {schedule.now.map(sessionSummary)}
     </section>}
     {schedule.next && <section className="space-y-3">
-      <h2 className="text-lg font-extrabold">{th ? 'ถัดไป' : 'Next'} <span className="ml-2 rounded-lg bg-gold-100 px-2 py-1 text-gold-800">{th ? `อีก ${schedule.next.minutes} นาที` : `in ${schedule.next.minutes} min`}</span></h2>
+      <h2 className="text-lg font-extrabold">{th ? 'ถัดไป' : 'Next'} <span className="ml-2 rounded-lg bg-gold-100 px-2 py-1 text-gold-800">{wait(schedule.next.minutes)}</span></h2>
       {sessionSummary(schedule.next)}
     </section>}
   </aside>;
