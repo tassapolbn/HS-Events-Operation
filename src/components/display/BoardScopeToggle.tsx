@@ -42,7 +42,7 @@ export function BoardScopeToggle({
               'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 active:scale-95',
               scope === value
                 ? value === 'done'
-                  ? 'bg-slate-700 text-white'
+                  ? 'bg-emerald-600 text-white'
                   : 'bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900'
                 : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
             )}

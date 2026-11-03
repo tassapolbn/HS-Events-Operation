@@ -182,7 +182,7 @@ export function EventsBoard({
           'px-4 py-3 transition-colors duration-150',
           focusTaskId === task.id && 'ring-4 ring-inset ring-gold-400',
           completed
-            ? 'border-l-[3px] border-transparent bg-slate-50 dark:bg-slate-800/25'
+            ? 'border-l-[3px] border-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/25'
             : 'border-l-[3px] border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'
         )}
       >
@@ -191,10 +191,10 @@ export function EventsBoard({
             onClick={() => toggleTask.mutate({ taskId: task.id, done: !completed })}
             className={cn(
               // the after: ring expands the tap area to 44px for WCAG without shifting layout
-              "relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 after:absolute after:-inset-2 after:content-['']  focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 focus-visible:ring-offset-2 active:scale-90",
+              "relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 after:absolute after:-inset-2 after:content-['']  focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-90",
               completed
-                ? 'border-slate-500 bg-slate-500 text-white shadow-sm'
-                : 'border-slate-300 bg-white hover:border-navy-500 dark:border-slate-600 dark:bg-slate-900'
+                ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
+                : 'border-slate-300 bg-white hover:border-emerald-400 dark:border-slate-600 dark:bg-slate-900'
             )}
             title={t('display.tapToComplete')}
             aria-label={t('display.tapToComplete')}
@@ -229,7 +229,7 @@ export function EventsBoard({
                 )}
                 {!completed && <AttachmentChips files={task.attachments} />}
                 {completed && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
                     <Check className="h-3 w-3" /> {t('display.completedLabel')}
                   </span>
                 )}
@@ -328,7 +328,7 @@ export function EventsBoard({
                   className={cn(
                     'shrink-0 rounded-full px-2.5 py-1 text-xs font-extrabold tabular-nums',
                     allDone
-                      ? 'bg-slate-700 text-white shadow-sm'
+                      ? 'bg-emerald-700 text-white shadow-sm'
                       : 'bg-white text-[color:var(--dept-ink)] shadow-sm dark:bg-slate-900 dark:text-[color:var(--dept-ink-dark)]'
                   )}
                 >
