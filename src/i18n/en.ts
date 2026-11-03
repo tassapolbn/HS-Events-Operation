@@ -543,9 +543,9 @@ export const en = {
     delay: 'Google checks the link for changes on its own schedule, usually every few hours. A change made here can take up to a day to show in Google Calendar.',
     private: 'Anyone with a link can see these events, so share it only with staff.',
     newLinks: 'Make new links',
-    newLinksHint: 'If a link has been shared too widely, make new ones. The old links stop working.',
+    newLinksHint: 'If a link has been shared too widely, make new ones. The old links stop working within a few minutes.',
     newLinksConfirm: 'Make new calendar links?',
-    newLinksWarning: 'The current links stop working. Everyone who added them will need to add the new links.',
+    newLinksWarning: 'The current links stop working within a few minutes. Everyone who added them will need to add the new links.',
     newLinksDone: 'New calendar links are ready',
     notReady: 'Calendar links are not available yet.'
   },

@@ -4,9 +4,8 @@
  * Google Calendar, Apple Calendar and Outlook fetch these every few hours.
  * The link's key is checked by the database (calendar_feed), which answers
  * with the campus's events; src/lib/icsFeed.ts turns them into the calendar
- * file. Netlify keeps each answer for an hour, so however many people and
- * devices subscribe, the database is asked at most about once an hour per
- * link.
+ * file. Netlify keeps each answer for 5 minutes, so a replaced link stops
+ * working within about 5 minutes.
  *
  * It uses the site's own VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
  * settings, which Netlify makes available to functions.
@@ -58,17 +57,22 @@ export default async (req: Request): Promise<Response> => {
   // A key that has been replaced, or never existed
   if (!Array.isArray(events)) return text('Not found', 404);
 
-  const body = buildIcsFeed({ events, campus: campus.code, campusName: campus.name, lang, siteUrl: url.origin, now: new Date() });
+  let body: string;
+  try {
+    body = buildIcsFeed({ events, campus: campus.code, campusName: campus.name, lang, siteUrl: url.origin, now: new Date() });
+  } catch (error) {
+    console.error('calendar-feed: could not build the calendar', error);
+    return text('The calendar is not available right now', 500);
+  }
   return new Response(body, {
     status: 200,
     headers: {
       'Content-Type': 'text/calendar; charset=utf-8',
       'Content-Disposition': `inline; filename="headstart-${campus.code.toLowerCase()}.ics"`,
-      // Netlify keeps the answer for an hour and may hand out the old one for
-      // ten more minutes while it fetches a new one
-      'Netlify-CDN-Cache-Control': 'public, durable, s-maxage=3600, stale-while-revalidate=600',
+      // Netlify keeps the answer for five minutes without serving stale copies
+      'Netlify-CDN-Cache-Control': 'public, s-maxage=300',
       'Netlify-Vary': 'query=key|lang',
-      'Cache-Control': 'public, max-age=900'
+      'Cache-Control': 'private, no-cache'
     }
   });
 };

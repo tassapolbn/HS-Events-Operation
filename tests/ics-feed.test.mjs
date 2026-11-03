@@ -44,6 +44,44 @@ test('text values are escaped as iCalendar asks', () => {
   assert.equal(icsEscape('a\r\nb\u0007c'), 'a\\nbc', 'CRLF becomes \\n and control characters go');
 });
 
+test('mixed contact values keep useful details without empty contact lines', () => {
+  const options = { campus: 'HSC', campusName: 'x', lang: 'en', siteUrl: site, now: new Date() };
+  const contacts = [{ name: 'Coordinator', phone: 812345678 }, { name: 5 }, { role: 'MC', phone: '081' }, 'junk', {}];
+  const event = { ...waiKru, sessions: [], contacts };
+  const description = parse(buildIcsFeed({ ...options, events: [event] }))[0].DESCRIPTION;
+  assert.ok(!description.includes('MC') && !description.includes('081'), 'a contact without a name is left out');
+  assert.match(description, /Contacts:\\n• Coordinator · 812345678\\n• 5\\n/);
+  assert.equal(description.split('• ').length - 1, 2, 'only the two useful contacts have lines');
+
+  const malformed = { ...event, contacts: [null, false, 7, [], {}, { name: {}, role: false, phone: Infinity, email: [] }] };
+  assert.ok(!parse(buildIcsFeed({ ...options, events: [malformed] }))[0].DESCRIPTION.includes('Contacts:'));
+
+  const numeric = { ...event, contacts: [{ name: '  Lead  ', role: 5, phone: 0, email: 12 }] };
+  assert.match(parse(buildIcsFeed({ ...options, events: [numeric] }))[0].DESCRIPTION, /• Lead \(5\) · 0 · 12/);
+});
+
+test('non-string event and session text is safe and normal event names stay unchanged', () => {
+  const options = { campus: 'HSC', campusName: 'x', lang: 'en', siteUrl: site, now: new Date() };
+  const event = { ...waiKru, name: null, location: 42, contacts: [], sessions: [
+    { id: 'numeric', title: 5, session_date: '2026-10-21', start_time: null, end_time: null, location: {}, time_note: 0, note: 12 },
+    { id: 'invalid', title: {}, session_date: '2026-10-22', start_time: null, end_time: null, location: 7, time_note: false, note: [] }
+  ] };
+  const other = { ...event, id: 'other', name: 8, sessions: [] };
+  const entries = parse(buildIcsFeed({ ...options, events: [other, event] }));
+  assert.equal(entries.find((entry) => entry.UID === 'event-wai@hs-event-ops').SUMMARY, '');
+  assert.equal(entries.find((entry) => entry.UID === 'event-other@hs-event-ops').SUMMARY, '8');
+  const session = entries.find((entry) => entry.UID === 'session-numeric@hs-event-ops');
+  assert.equal(session.SUMMARY, '5 · ');
+  assert.equal(session.LOCATION, '42');
+  assert.match(session.DESCRIPTION, /\\n0\\nNote: 12/);
+  const invalid = entries.find((entry) => entry.UID === 'session-invalid@hs-event-ops');
+  assert.equal(invalid.LOCATION, '7');
+  assert.ok(!invalid.DESCRIPTION.includes('Note:'));
+
+  const normal = { ...event, name: '  Wai Kru  ', sessions: [] };
+  assert.equal(parse(buildIcsFeed({ ...options, events: [normal] }))[0].SUMMARY, '  Wai Kru  ');
+});
+
 test('long lines fold at 75 bytes without breaking a Thai character', () => {
   const thai = 'SUMMARY:' + 'งานไหว้ครูประจำปีการศึกษา '.repeat(8);
   const folded = foldLine(thai);

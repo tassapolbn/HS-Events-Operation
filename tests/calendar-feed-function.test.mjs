@@ -26,11 +26,12 @@ test('it serves exactly the two campus addresses', () => {
   assert.deepEqual(config.path, ['/calendar/hsc.ics', '/calendar/hsn.ics']);
 });
 
-test('a good key gets the campus calendar, cached by Netlify for an hour', async () => {
+test('a good key gets the campus calendar, cached by Netlify for five minutes', async () => {
   const response = await get(`/calendar/hsc.ics?key=${KEY}`);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get('content-type'), 'text/calendar; charset=utf-8');
-  assert.match(response.headers.get('netlify-cdn-cache-control'), /public, durable, s-maxage=3600/);
+  assert.equal(response.headers.get('netlify-cdn-cache-control'), 'public, s-maxage=300');
+  assert.equal(response.headers.get('cache-control'), 'private, no-cache');
   assert.equal(response.headers.get('netlify-vary'), 'query=key|lang');
   const body = await response.text();
   assert.match(body, /BEGIN:VCALENDAR/);
@@ -74,4 +75,20 @@ test('trouble with the database or the settings says so', async () => {
   assert.equal((await get(`/calendar/hsc.ics?key=${KEY}`)).status, 502);
   env = {};
   assert.equal((await get(`/calendar/hsc.ics?key=${KEY}`)).status, 500);
+});
+
+test('calendar generation errors return a 500 that is never cached', async (t) => {
+  const logged = t.mock.method(console, 'error', () => {});
+  answer = () => new Response(JSON.stringify([
+    { id: 'broken', name: 'Broken date', campus: 'HSC', event_date: 'not a date', contacts: [], sessions: [] }
+  ]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+  const response = await get(`/calendar/hsc.ics?key=${KEY}`);
+  assert.equal(response.status, 500);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  assert.equal(response.headers.get('netlify-cdn-cache-control'), null);
+  assert.equal(await response.text(), 'The calendar is not available right now');
+  assert.equal(logged.mock.callCount(), 1);
+  assert.equal(logged.mock.calls[0].arguments[0], 'calendar-feed: could not build the calendar');
+  assert.ok(logged.mock.calls[0].arguments[1] instanceof Error);
 });

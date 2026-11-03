@@ -103,6 +103,12 @@ const WORDS = {
 
 type Words = { [K in keyof (typeof WORDS)['en']]: string };
 
+const clean = (value: unknown): string =>
+  typeof value === 'string' ? value.trim() : typeof value === 'number' && Number.isFinite(value) ? String(value) : '';
+
+const eventName = (event: FeedEvent): string =>
+  typeof event.name === 'string' ? event.name : clean(event.name);
+
 const fill = (template: string, values: Record<string, string | number>) =>
   template.replace(/\{(\w+)\}/g, (match, key: string) => (key in values ? String(values[key]) : match));
 
@@ -213,7 +219,7 @@ function saySessionTime(session: FeedSession, lang: FeedLang): string {
  * it is, or is simply the event on the event's own days.
  */
 function sessionSummary(event: FeedEvent, session: FeedSession, words: Words): string {
-  const title = session.title?.trim();
+  const title = clean(session.title);
   if (title) return `${title} · ${event.name}`;
   if (session.session_date < event.event_date) return `${words.prep} · ${event.name}`;
   if (isMultiDay(event) && session.session_date > eventEndDate(event)) return `${words.after} · ${event.name}`;
@@ -229,9 +235,9 @@ function sessionDayLabel(event: FeedEvent, day: string, words: Words, lang: Feed
 }
 
 function contactLine(contact: FeedContact): string {
-  const name = (contact.name ?? '').trim();
-  const role = (contact.role ?? '').trim();
-  return [role ? `${name} (${role})` : name, contact.phone?.trim(), contact.email?.trim()].filter(Boolean).join(' · ');
+  const name = clean(contact.name);
+  const role = clean(contact.role);
+  return [role ? `${name} (${role})` : name, clean(contact.phone), clean(contact.email)].filter(Boolean).join(' · ');
 }
 
 // ---------- the calendar ----------
@@ -272,13 +278,16 @@ function entryLines(entry: FeedEntry, stamp: string): string[] {
 
 /** The entries one event puts on the calendar */
 export function eventEntries(event: FeedEvent, options: Omit<FeedOptions, 'events' | 'now'>): FeedEntry[] {
+  event = { ...event, name: eventName(event) };
   const words = WORDS[options.lang];
   const lang = options.lang;
   const board = `${options.siteUrl.replace(/\/$/, '')}/display/${options.campus.toLowerCase()}?event=${event.id}`;
   const sessions = [...(event.sessions ?? [])].sort(
     (a, b) => a.session_date.localeCompare(b.session_date) || (a.start_time ?? '~').localeCompare(b.start_time ?? '~')
   );
-  const contacts = (event.contacts ?? []).filter((contact) => (contact.name ?? '').trim()).map(contactLine);
+  const contacts = (event.contacts ?? [])
+    .filter((contact) => contact && typeof contact === 'object' && !Array.isArray(contact) && clean(contact.name))
+    .map(contactLine);
   const entries: FeedEntry[] = [];
 
   // The event itself, across its days
@@ -286,7 +295,7 @@ export function eventEntries(event: FeedEvent, options: Omit<FeedOptions, 'event
     uid: `event-${event.id}@hs-event-ops`,
     summary: event.name,
     allDay: { first: event.event_date, afterLast: shiftDay(eventEndDate(event), 1) },
-    location: event.location?.trim() || undefined,
+    location: clean(event.location) || undefined,
     description: [
       sayRange(event, lang),
       event.event_start ? `${words.eventStarts}: ${sayDayTime(event.event_start, lang)}` : '',
@@ -294,7 +303,7 @@ export function eventEntries(event: FeedEvent, options: Omit<FeedOptions, 'event
       sessions.length
         ? `\n${words.sessions}:\n${sessions
             .map((session) =>
-              ['•', sayDay(session.session_date, lang), saySessionTime(session, lang), session.title?.trim() || words.session]
+              ['•', sayDay(session.session_date, lang), saySessionTime(session, lang), clean(session.title) || words.session]
                 .filter(Boolean)
                 .join(' ')
             )
@@ -318,13 +327,13 @@ export function eventEntries(event: FeedEvent, options: Omit<FeedOptions, 'event
       ...(start
         ? { timed: { start, end } }
         : { allDay: { first: session.session_date, afterLast: shiftDay(session.session_date, 1) } }),
-      location: session.location?.trim() || event.location?.trim() || undefined,
+      location: clean(session.location) || clean(event.location) || undefined,
       description: [
         sessionDayLabel(event, session.session_date, words, lang),
         // Only a finish time: say so, since the entry itself is all day
         !start && session.end_time ? fill(words.until, { time: sayTime(session.end_time, lang) }) : '',
-        session.time_note?.trim() ?? '',
-        session.note?.trim() ? `${words.note}: ${session.note.trim()}` : '',
+        clean(session.time_note),
+        clean(session.note) ? `${words.note}: ${clean(session.note)}` : '',
         `\n${words.board}: ${board}`
       ],
       url: board,
@@ -341,7 +350,7 @@ export function eventEntries(event: FeedEvent, options: Omit<FeedOptions, 'event
         uid: `setup-${event.id}@hs-event-ops`,
         summary: `${event.name} · ${words.setupBegins}`,
         timed: { start: setup, end: null },
-        location: event.location?.trim() || undefined,
+        location: clean(event.location) || undefined,
         description: [fill(words.before, { date: sayDay(event.event_date, lang) }), `\n${words.board}: ${board}`],
         url: board,
         modified: event.updated_at
@@ -370,7 +379,10 @@ export function buildIcsFeed(options: FeedOptions): string {
     'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
     'X-PUBLISHED-TTL:PT1H'
   ];
-  const events = [...options.events].sort((a, b) => a.event_date.localeCompare(b.event_date) || a.name.localeCompare(b.name));
+  const events = [...options.events].sort((a, b) =>
+    a.event_date.localeCompare(b.event_date) ||
+    eventName(a).localeCompare(eventName(b))
+  );
   for (const event of events) {
     for (const entry of eventEntries(event, options)) lines.push(...entryLines(entry, stamp));
   }
