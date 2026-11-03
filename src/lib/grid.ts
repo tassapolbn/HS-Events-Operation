@@ -136,3 +136,19 @@ export function matchOption(
   }
   return null;
 }
+
+/** Rank dropdown choices without changing their order inside each match group. */
+export function filterOptions<T extends { value: string; labels: string[] }>(raw: string, options: T[]): T[] {
+  const needle = raw.trim().toLowerCase();
+  if (!needle) return options;
+  const exact: T[] = [];
+  const starts: T[] = [];
+  const contains: T[] = [];
+  for (const option of options) {
+    const labels = option.labels.map((label) => label.trim().toLowerCase());
+    if (option.value.toLowerCase() === needle || labels.includes(needle)) exact.push(option);
+    else if (labels.some((label) => label.startsWith(needle))) starts.push(option);
+    else if (labels.some((label) => label.includes(needle))) contains.push(option);
+  }
+  return [...exact, ...starts, ...contains];
+}

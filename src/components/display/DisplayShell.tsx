@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { CalendarDays, Globe, Inbox, RefreshCw, Search, Settings2, X } from 'lucide-react';
+import { CalendarDays, Globe, Inbox, MonitorPlay, RefreshCw, Search, Settings2, X } from 'lucide-react';
 import { useLanguage } from '../../i18n';
 import { departmentIcon } from '../../lib/constants';
-import { cn } from '../../lib/utils';
+import { cn, readableTextColor } from '../../lib/utils';
 import type { DisplayDepartment } from '../../types';
 import type { LiveStatus } from '../../lib/displayLive';
 
@@ -23,28 +23,34 @@ interface DisplayShellProps {
   /** Whether the board is receiving changes as they happen */
   live?: LiveStatus;
   canEdit?: boolean;
+  presenting?: boolean;
+  onTogglePresentation?: () => void;
   campusName?: string;
   search: string;
   onSearch: (value: string) => void;
   children: ReactNode;
 }
 
-export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departments, selectedDepartmentId, onSelectDepartment, onRefresh, refreshing, updatedAt, live, campusName, search, onSearch, children }: DisplayShellProps) {
+export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departments, selectedDepartmentId, onSelectDepartment, onRefresh, refreshing, updatedAt, live, campusName, search, onSearch, presenting = false, onTogglePresentation, children }: DisplayShellProps) {
   const { t, lang, setLang, deptName } = useLanguage();
   const [now, setNow] = useState(new Date());
   const [settings, setSettings] = useState(false);
-  useEffect(() => { const timer = setInterval(() => setNow(new Date()), 60_000); return () => clearInterval(timer); }, []);
+  useEffect(() => { setNow(new Date()); const timer = setInterval(() => setNow(new Date()), presenting ? 30_000 : 60_000); return () => clearInterval(timer); }, [presenting]);
   // How tall the pinned search bar is, so the board's day headers can pin just below it
   const stickyRef = useRef<HTMLDivElement>(null);
   const [stickyHeight, setStickyHeight] = useState(0);
   useEffect(() => {
+    if (presenting) { setStickyHeight(0); return; }
     const node = stickyRef.current;
     if (!node || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(() => setStickyHeight(Math.round(node.getBoundingClientRect().height)));
+    setStickyHeight(Math.round(node.getBoundingClientRect().height));
     observer.observe(node);
     return () => observer.disconnect();
-  }, []);
+  }, [presenting, selectedDepartmentId]);
   const th = lang === 'th';
+  const selectedDepartment = departments.find((dept) => dept.id === selectedDepartmentId);
+  const liveIndicator = live && <span title={th ? 'บอร์ดจะอัปเดตเองทันทีเมื่อทีม Events แก้ไขงาน' : 'The board updates by itself as soon as the Events team makes a change'} className={cn('inline-flex items-center gap-1.5 font-semibold', presenting ? 'text-white/90' : live === 'live' ? 'text-emerald-700' : live === 'offline' ? 'text-amber-800' : 'text-slate-500')}><span aria-hidden className={cn('h-2 w-2 rounded-full', live === 'live' ? (presenting ? 'bg-emerald-400' : 'bg-emerald-500') : live === 'offline' ? (presenting ? 'bg-amber-400' : 'bg-amber-500') : 'bg-slate-400')} />{live === 'live' ? (th ? 'อัปเดตสด' : 'Live') : live === 'offline' ? (th ? 'กำลังเชื่อมต่อใหม่…' : 'Reconnecting…') : (th ? 'กำลังเชื่อมต่อ…' : 'Connecting…')}</span>;
   return <div className="support-board min-h-screen bg-[#f3f6fa] text-slate-800" style={{ '--board-sticky-top': `${stickyHeight}px` } as CSSProperties}>
     <header className="border-b-4 border-gold-400 bg-[#003057] text-white">
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6">
@@ -53,7 +59,9 @@ export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departmen
           <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-widest text-gold-400">{th ? 'บอร์ดปฏิบัติงาน' : 'Operations board'}</p><h1 className="text-lg font-bold leading-snug sm:text-2xl">{campusName || t('display.boardTitle')}</h1></div>
         </div>
         <div className="flex items-center gap-2">
-          <p className="mr-3 hidden text-right text-sm text-white/80 lg:block">{now.toLocaleDateString(th ? 'th-TH' : 'en-GB', {timeZone:'Asia/Bangkok',day:'numeric',month:'long',year:'numeric'})}<span className="mt-1 block text-xs">{th ? 'เวลาไทย' : 'Thailand time'}</span></p>
+          <p className={cn('mr-3 text-right text-sm text-white/80', !presenting && 'hidden lg:block')}>{now.toLocaleDateString(th ? 'th-TH' : 'en-GB', {timeZone:'Asia/Bangkok',day:'numeric',month:'long',year:'numeric'})}{presenting && <span className="ml-2 font-bold tabular-nums">{now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', hour12: false })}</span>}<span className="mt-1 block text-xs">{th ? 'เวลาไทย' : 'Thailand time'}</span></p>
+          {presenting && liveIndicator}
+          <button type="button" onClick={onTogglePresentation} aria-pressed={presenting} aria-label={presenting ? (th ? 'ออก' : 'Exit') : (th ? 'นำเสนอ' : 'Present')} className="flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-xl bg-white/10 px-3 font-semibold hover:bg-white/20">{presenting ? <X className="h-5 w-5" /> : <MonitorPlay className="h-5 w-5" />}<span className="hidden sm:inline">{presenting ? (th ? 'ออก' : 'Exit') : (th ? 'นำเสนอ' : 'Present')}</span></button>
           <button onClick={() => setLang(th ? 'en' : 'th')} className="flex min-h-11 items-center gap-2 rounded-xl bg-white/10 px-3 font-semibold hover:bg-white/20"><Globe className="h-4 w-4" />{th ? 'EN' : 'ไทย'}</button>
           <button onClick={() => setSettings(!settings)} aria-expanded={settings} aria-label={th ? 'ขนาดตัวอักษร' : 'Text size'} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20"><Settings2 className="h-5 w-5" /></button>
           <button onClick={onRefresh} disabled={refreshing} aria-label={t('display.refresh')} className="flex min-h-11 min-w-11 items-center justify-center rounded-xl bg-white/10 hover:bg-white/20 disabled:opacity-60"><RefreshCw className={cn('h-5 w-5', refreshing && 'animate-spin')} /></button>
@@ -61,7 +69,7 @@ export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departmen
         {settings && <div className="flex w-full flex-wrap items-center gap-2 border-t border-white/15 pt-3"><span className="mr-2 text-sm">{th ? 'ขนาดตัวอักษร' : 'Text size'}</span>{SCALES.map(size => <button key={size} aria-pressed={scale === size} onClick={() => onScaleChange(size)} className={cn('min-h-11 rounded-lg px-4 text-sm font-bold',scale === size ? 'bg-gold-400 text-navy-900' : 'bg-white/10')}>{t(`displaySize.${size}`)}</button>)}</div>}
       </div>
     </header>
-    <div ref={stickyRef} data-board-sticky className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur">
+    {!presenting && <div ref={stickyRef} data-board-sticky className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur" style={selectedDepartment ? { borderBottomWidth: 4, borderBottomColor: selectedDepartment.color } : undefined}>
       <div className="mx-auto max-w-[1600px] space-y-3 px-4 py-3 sm:px-6">
         <div className="flex flex-col gap-3 md:flex-row">
           <div className="flex shrink-0 gap-1 rounded-xl bg-slate-100 p-1" role="group" aria-label={t('display.chooseView')}>
@@ -75,12 +83,12 @@ export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departmen
         </div>
         <div className="flex gap-2 overflow-x-auto pb-1" aria-label={t('common.department')}>
           <button aria-pressed={!selectedDepartmentId} onClick={() => onSelectDepartment('')} className={cn('min-h-11 shrink-0 rounded-xl border px-4 text-sm font-bold',!selectedDepartmentId ? 'border-gold-400 bg-gold-50 text-navy-900' : 'border-slate-200 bg-white text-slate-600')}>{t('display.allDepartments')}</button>
-          {departments.map(dept => {const Icon=departmentIcon(dept.icon);const active=selectedDepartmentId===dept.id;return <button key={dept.id} aria-pressed={active} onClick={() => onSelectDepartment(active ? '' : dept.id)} className={cn('flex min-h-11 shrink-0 items-center gap-2 rounded-xl border px-3 text-sm font-semibold',active ? 'border-navy-700 bg-navy-50 text-navy-900' : 'border-slate-200 text-slate-600 hover:bg-slate-50')}><Icon className="h-4 w-4" style={{color:dept.color}} />{deptName(dept)}</button>;})}
+          {departments.map(dept => {const Icon=departmentIcon(dept.icon);const active=selectedDepartmentId===dept.id;return <button key={dept.id} aria-pressed={active} onClick={() => onSelectDepartment(active ? '' : dept.id)} className={cn('flex min-h-11 shrink-0 items-center gap-2 rounded-xl border px-3 text-sm font-semibold',!active && 'border-slate-200 text-slate-600 hover:bg-slate-50')} style={active ? { backgroundColor: dept.color, color: readableTextColor(dept.color), borderColor: dept.color } : undefined}><Icon className="h-4 w-4" style={{color:active ? 'currentColor' : dept.color}} />{deptName(dept)}</button>;})}
         </div>
       </div>
-    </div>
+    </div>}
     <main className="mx-auto max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><p>{th ? 'เลือกแผนกเพื่อดูงานของทีม · แตะงานเพื่อดูรายละเอียด' : 'Choose your department · Open a job for details'}</p><span className="flex items-center gap-3">{live && <span title={th ? 'บอร์ดจะอัปเดตเองทันทีเมื่อทีม Events แก้ไขงาน' : 'The board updates by itself as soon as the Events team makes a change'} className={cn('inline-flex items-center gap-1.5 font-semibold', live === 'live' ? 'text-emerald-700' : live === 'offline' ? 'text-amber-800' : 'text-slate-500')}><span aria-hidden className={cn('h-2 w-2 rounded-full', live === 'live' ? 'bg-emerald-500' : live === 'offline' ? 'bg-amber-500' : 'bg-slate-400')} />{live === 'live' ? (th ? 'อัปเดตสด' : 'Live') : live === 'offline' ? (th ? 'กำลังเชื่อมต่อใหม่…' : 'Reconnecting…') : (th ? 'กำลังเชื่อมต่อ…' : 'Connecting…')}</span>}<span>{updatedAt ? `${t('display.updated')} ${updatedAt.toLocaleTimeString(th ? 'th-TH' : 'en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})}` : ''}</span></span></div>
+      {!presenting && <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500"><p>{th ? 'เลือกแผนกเพื่อดูงานของทีม · แตะงานเพื่อดูรายละเอียด' : 'Choose your department · Open a job for details'}</p><span className="flex items-center gap-3">{liveIndicator}<span>{updatedAt ? `${t('display.updated')} ${updatedAt.toLocaleTimeString(th ? 'th-TH' : 'en-GB',{timeZone:'Asia/Bangkok',hour:'2-digit',minute:'2-digit'})}` : ''}</span></span></div>}
       {children}
     </main>
   </div>;

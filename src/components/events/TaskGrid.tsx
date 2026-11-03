@@ -1,11 +1,11 @@
 import { ContextMenu, type ContextAction } from '../ui/ContextMenu';
 import { TaskBoardGrid } from './TaskBoardGrid';
 import { inverseGridEntry, type GridHistoryEntry } from '../../lib/gridHistory';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   ArrowDownToLine, Check, ClipboardPaste, Columns3, Copy, CopyPlus, EyeOff, GripVertical, Keyboard, Layers,
   LayoutGrid, List, Maximize2, Plus, Replace, Trash2, Undo2, Redo2, MoreHorizontal, Search, Table2, ChevronDown,
-  Pencil, Loader2, X
+  Pencil, Loader2, X, Minimize2
 } from 'lucide-react';
 import { en } from '../../i18n/en';
 import { th } from '../../i18n/th';
@@ -18,7 +18,7 @@ import { nextOrderOnDay } from '../../lib/sessionOrder';
 import { sessionColor, WHOLE_EVENT_COLOR } from '../../lib/sessionColors';
 import { PRIORITIES, TASK_STATUSES, TASK_STATUS_DOTS } from '../../lib/constants';
 import { cn, combineDateTime, darkenColor, extractTime, formatDate, lightenColor } from '../../lib/utils';
-import { matchOption, normalizeTimeInput, parseClipboardTable, toClipboardTable } from '../../lib/grid';
+import { filterOptions, matchOption, normalizeTimeInput, parseClipboardTable, toClipboardTable } from '../../lib/grid';
 import { copyTasks, getTaskClipboard, taskToClipboardItem, useTaskClipboard } from '../../lib/taskClipboard';
 import type { Department, EventSession, EventTask, Priority, TaskStatus } from '../../types';
 
@@ -74,9 +74,9 @@ const LAYOUT_KEY = 'eventops.gridLayout';
 
 function readLayout(): GridLayout {
   try {
-    return localStorage.getItem(LAYOUT_KEY) === 'board' ? 'board' : 'list';
+    return localStorage.getItem(LAYOUT_KEY) === 'list' ? 'list' : 'board';
   } catch {
-    return 'list';
+    return 'board';
   }
 }
 
@@ -170,10 +170,11 @@ interface TaskGridProps {
   onEditTask: (task: EventTask) => void;
   /** Opens the session form, so a session can be added without leaving the sheet */
   onAddSession?: () => void;
+  renderSessionTools?: (session: EventSession) => ReactNode;
 }
 
 export function TaskGrid({
-  eventId, eventDate, tasks, departments, sessions, canEdit, onOpenTask, onEditTask, onAddSession
+  eventId, eventDate, tasks, departments, sessions, canEdit, onOpenTask, onEditTask, onAddSession, renderSessionTools
 }: TaskGridProps) {
   const { t, deptName, lang } = useLanguage();
   const { toast } = useToast();
@@ -202,6 +203,8 @@ export function TaskGrid({
   const [saveFailed, setSaveFailed] = useState(false);
   const [hiddenColumns, setHiddenColumns] = useState<GridField[]>(readHiddenColumns);
   const [layout, setLayout] = useState<GridLayout>(readLayout);
+  const [fullScreen, setFullScreen] = useState(false);
+  const [boardEscapeBlocked, setBoardEscapeBlocked] = useState(false);
   const [columnMenuOpen, setColumnMenuOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [sel, setSel] = useState<Selection | null>(null);
@@ -218,6 +221,26 @@ export function TaskGrid({
   // Dragging a row by its number to a new place in the sheet
   const [dragRows, setDragRows] = useState<{ top: number; bottom: number } | null>(null);
   const [dropAt, setDropAt] = useState<{ index: number; below: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!fullScreen) return;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = overflow; };
+  }, [fullScreen]);
+
+  useEffect(() => {
+    if (!fullScreen) return;
+    const exit = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
+      if (columnMenuOpen || helpOpen || replaceOpen || context || editing) return;
+      if (layout === 'board' ? boardEscapeBlocked : sel) return;
+      if (document.querySelector('[role="dialog"], [role="menu"]')) return;
+      setFullScreen(false);
+    };
+    document.addEventListener('keydown', exit);
+    return () => document.removeEventListener('keydown', exit);
+  }, [fullScreen, columnMenuOpen, helpOpen, replaceOpen, context, editing, layout, boardEscapeBlocked, sel]);
 
   const columns = useMemo(
     () => COLUMNS.filter((column) => column.fixed || !hiddenColumns.includes(column.field)),
@@ -437,6 +460,19 @@ export function TaskGrid({
     },
     [deptOptions, sessionOptions, priorityOptions, statusOptions]
   );
+
+  const choicesFor = (field: GridField) => {
+    const choices = optionsFor(field).map((option) => {
+      const label = field === 'department_id' ? deptName(departments.find((dept) => dept.id === option.value))
+        : field === 'session_id' ? sessionLabel(sessions.find((session) => session.id === option.value)!)
+          : field === 'priority' ? t(`priority.${option.value as Priority}`)
+            : t(`taskStatus.${option.value as TaskStatus}`);
+      return { ...option, label, labels: [...option.labels, label] };
+    });
+    return field === 'session_id'
+      ? [{ value: '', label: t('sessions.whole'), labels: [en.sessions.whole, th.sessions.whole] }, ...choices]
+      : choices;
+  };
 
   const displayValue = useCallback(
     (row: GridRow, column: ColumnDef): string => {
@@ -1267,7 +1303,7 @@ export function TaskGrid({
         if (sel) startEdit(sel.r, sel.c);
         return;
       case 'Escape':
-        event.preventDefault();
+        if (sel) event.preventDefault();
         setSel(null);
         return;
       case 'Delete':
@@ -1292,13 +1328,18 @@ export function TaskGrid({
     const row = rows[cell.r];
     if (!column || !row) return false;
 
-    if (direction === 'fill') { const saved = await applyTable([[raw]]); if (!saved) setEditing({...cell,initial:raw,version:++editVersion.current}); return saved; }
-    const parsed = column.type === 'time' ? normalizeTimeInput(raw) : raw;
+    const parsed = column.type === 'select' ? parseCellInput(column, raw) : column.type === 'time' ? normalizeTimeInput(raw) : raw;
+    if (parsed === null) {
+      toast(lang === 'th' ? 'ไม่มีตัวเลือกนี้ในรายการ' : 'Not in the list. Pick one of the options.', 'error');
+      setEditing({ ...cell, initial: raw, version: ++editVersion.current });
+      return false;
+    }
     if (column.type === 'time' && raw.trim() && !parsed) {
       toast(lang === 'th' ? 'กรุณาใส่เวลา เช่น 09:30' : 'Enter a valid time, e.g. 09:30', 'error');
       setEditing({ ...cell, initial: raw, version: ++editVersion.current });
       return false;
     }
+    if (direction === 'fill') { const saved = await applyTable([[parsed]]); if (!saved) setEditing({...cell,initial:raw,version:++editVersion.current}); return saved; }
     const changed = parsed !== row.values[column.field];
     if (changed && !(await commitUpdates([{ id: row.task.id, values: { [column.field]: parsed } }]))) { setEditing({...cell, initial:raw, version: ++editVersion.current}); return false; }
 
@@ -1364,7 +1405,7 @@ export function TaskGrid({
     'inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-navy-700 disabled:opacity-40 disabled:hover:bg-white dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-gold-300';
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <section className={cn('overflow-hidden border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900', fullScreen ? 'fixed inset-0 z-[45] !mt-0 flex flex-col rounded-none [&>div:not([data-grid-scroll])]:shrink-0' : 'rounded-2xl')}>
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-gradient-to-r from-teal-50 to-white px-4 py-4 dark:border-slate-700 dark:from-slate-800 dark:to-slate-900">
         <span className="rounded-xl bg-teal-700 p-2 text-white"><Table2 className="h-5 w-5" /></span>
         <div className="flex-1"><h3 className="text-base font-bold">{lang === 'th' ? 'ตารางลงงาน' : 'Task worksheet'}</h3><p className="text-xs text-slate-500">{lang === 'th' ? 'แก้ไขในเซลล์ • วางจาก Google Sheets • บันทึกอัตโนมัติ' : 'Edit cells · Paste from Google Sheets · Auto-save'}</p></div>
@@ -1379,12 +1420,13 @@ export function TaskGrid({
         <select aria-label={t('sessions.title')} value={sessionFilter} onChange={event => setSessionFilter(event.target.value)} className="max-w-64 rounded-xl border border-slate-200 bg-transparent p-2 text-sm dark:border-slate-700"><option value="all">{lang === 'th' ? 'ทุก session' : 'All sessions'}</option><option value="">{t('sessions.whole')}</option>{sessions.map(session => <option key={session.id} value={session.id}>{sessionLabel(session)}</option>)}</select>
         {layout === 'list' && <button type="button" onClick={() => setComfortable(value => !value)} className={toolbarButton}>{comfortable ? (lang === 'th' ? 'แถวกระชับ' : 'Compact rows') : (lang === 'th' ? 'แถวอ่านง่าย' : 'Comfortable rows')}</button>}
         <div className="flex shrink-0 rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900">
-          {([['list', List, t('grid.listLayout')], ['board', LayoutGrid, t('grid.boardLayout')]] as Array<[GridLayout, typeof List, string]>).map(([mode, Icon, label]) => (
+          {([['board', LayoutGrid, t('grid.boardLayout')], ['list', List, text('รายละเอียดทั้งหมด', 'All details')]] as Array<[GridLayout, typeof List, string]>).map(([mode, Icon, label]) => (
             <button
               key={mode}
               type="button"
               onClick={() => setLayout(mode)}
               aria-pressed={layout === mode}
+              title={mode === 'list' ? text('ทุกคอลัมน์ในตารางเดียว', 'Every column in one table') : undefined}
               className={cn(
                 'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition-colors',
                 layout === mode
@@ -1396,6 +1438,10 @@ export function TaskGrid({
             </button>
           ))}
         </div>
+        <button type="button" className={toolbarButton} aria-pressed={fullScreen} onClick={() => setFullScreen((value) => !value)}>
+          {fullScreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+          {fullScreen ? text('ออกจากเต็มจอ', 'Exit full screen') : text('เต็มจอ', 'Full screen')}
+        </button>
       </div>
 
       {layout === 'board' ? (
@@ -1412,6 +1458,9 @@ export function TaskGrid({
           onOpenTask={onOpenTask}
           onEditTask={onEditTask}
           onAddSession={onAddSession}
+          renderSessionTools={renderSessionTools}
+          fullScreen={fullScreen}
+          onEscapeBlockedChange={setBoardEscapeBlocked}
         />
       ) : (
       <>
@@ -1638,7 +1687,8 @@ export function TaskGrid({
           onCut={handleCut}
           onPaste={handlePaste}
           aria-label={lang === 'th' ? 'ตารางลงงาน ใช้ปุ่มลูกศรเพื่อเลื่อนเซลล์' : 'Task worksheet. Use arrow keys to navigate cells.'}
-          className={cn('max-h-[72vh] overflow-auto outline-none', comfortable && '[&_[data-cell]>div]:min-h-[44px]')}
+          data-grid-scroll
+          className={cn('overflow-auto outline-none', fullScreen ? 'min-h-0 flex-1' : 'max-h-[calc(100vh-12rem)]', comfortable && '[&_[data-cell]>div]:min-h-[44px]')}
         >
           <table role="grid" aria-readonly={!canEdit} className="w-max min-w-full select-none border-separate border-spacing-0 text-[13px]">
             <colgroup>
@@ -1707,7 +1757,7 @@ export function TaskGrid({
                             } as React.CSSProperties
                           }
                         >
-                          <div className="sticky left-0 flex w-max items-center gap-2 px-3 py-1.5 text-[color:var(--band-ink)] dark:text-[color:var(--band-ink-dark)]">
+                          <div className="sticky left-0 flex items-center gap-2 px-3 py-1.5 text-[color:var(--band-ink)] dark:text-[color:var(--band-ink-dark)]">
                             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: band.color }} />
                             {band.label}
                             {band.session?.is_hidden && (
@@ -1717,6 +1767,11 @@ export function TaskGrid({
                               >
                                 <EyeOff className="h-3 w-3" /> {t('sessions.hiddenOnBoard')}
                               </span>
+                            )}
+                            {canEdit && band.session && renderSessionTools && (
+                              <div className="ml-auto normal-case tracking-normal" onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                                {renderSessionTools(band.session)}
+                              </div>
                             )}
                           </div>
                         </td>
@@ -1810,7 +1865,7 @@ export function TaskGrid({
                             'border-b border-r border-slate-100 p-0 align-middle dark:border-slate-800',
                             // The first column is frozen, so it needs a solid backdrop
                             frozen ? 'sticky left-[46px] bg-white dark:bg-slate-900' : 'relative',
-                            active ? 'z-[3]' : frozen ? 'z-[2]' : '',
+                            isEditing ? 'z-30' : active ? 'z-[3]' : frozen ? 'z-[2]' : '',
                             active && 'outline outline-2 -outline-offset-2 outline-navy-600 dark:outline-gold-400'
                           )}
                         >
@@ -1825,9 +1880,7 @@ export function TaskGrid({
                               column={column}
                               value={row.values[column.field]}
                               initial={editing?.initial ?? null}
-                              departments={departments}
-                              sessions={sessions}
-                              sessionLabel={sessionLabel}
+                              options={choicesFor(column.field)}
                               onCommit={commitEdit}
                               onCancel={cancelEdit}
                             />
@@ -1943,20 +1996,28 @@ interface CellEditorProps {
   column: ColumnDef;
   value: string;
   initial: string | null;
-  departments: Department[];
-  sessions: EventSession[];
-  sessionLabel: (session: EventSession) => string;
+  options: Array<{ value: string; label: string; labels: string[] }>;
   onCommit: (raw: string, direction: 'down' | 'up' | 'right' | 'left' | 'stay' | 'fill') => void;
   onCancel: () => void;
 }
 
 function CellEditor({
-  column, value, initial, departments, sessions, sessionLabel, onCommit, onCancel, onContextMenu
+  column, value, initial, options, onCommit, onCancel, onContextMenu
 }: CellEditorProps) {
-  const { t, deptName } = useLanguage();
+  const { t, lang } = useLanguage();
   const [draft, setDraft] = useState(initial ?? value);
+  const [highlight, setHighlight] = useState(0);
+  const listId = useId();
   const committed = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const searchable = column.type === 'select' && initial !== null;
+  const matches = filterOptions(draft, options);
+  const highlighted = matches[highlight];
+
+  useEffect(() => {
+    listRef.current?.children[highlight]?.scrollIntoView({ block: 'nearest' });
+  }, [highlight, draft]);
 
   // Start with the caret at the end so the first typed character is kept
   useEffect(() => {
@@ -1972,18 +2033,30 @@ function CellEditor({
     onCommit(raw, direction);
   };
 
+  const finishChoice = (direction: 'down' | 'up' | 'right' | 'left' | 'stay' | 'fill') => {
+    if (column.field === 'session_id' && !draft.trim()) finish('', direction);
+    else if (highlighted) finish(highlighted.value, direction);
+    else if (!committed.current) { committed.current = true; onCancel(); }
+  };
+
   const onKeyDown = (event: React.KeyboardEvent) => {
     event.stopPropagation();
     if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); finish(draft, 'stay'); return; }
+    if (searchable && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
+      event.preventDefault();
+      setHighlight((index) => Math.max(0, Math.min(matches.length - 1, index + (event.key === 'ArrowDown' ? 1 : -1))));
+      return;
+    }
+    const save = (direction: 'down' | 'up' | 'right' | 'left' | 'stay' | 'fill') => searchable ? finishChoice(direction) : finish(draft, direction);
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); save('stay'); return; }
     if (event.key === 'Enter') {
       event.preventDefault();
-      finish(draft, event.ctrlKey || event.metaKey ? 'fill' : event.shiftKey ? 'up' : 'down');
+      save(event.ctrlKey || event.metaKey ? 'fill' : event.shiftKey ? 'up' : 'down');
       return;
     }
     if (event.key === 'Tab') {
       event.preventDefault();
-      finish(draft, event.shiftKey ? 'left' : 'right');
+      save(event.shiftKey ? 'left' : 'right');
       return;
     }
     if (event.key === 'Escape') {
@@ -1993,18 +2066,45 @@ function CellEditor({
     }
   };
 
+  if (searchable) {
+    return (
+      <div className="relative">
+        <input
+          ref={inputRef}
+          autoFocus
+          role="combobox"
+          aria-label={t(column.labelKey)}
+          aria-autocomplete="list"
+          aria-expanded={true}
+          aria-controls={listId}
+          aria-activedescendant={highlighted ? `${listId}-${highlight}` : undefined}
+          value={draft}
+          onChange={(event) => { setDraft(event.target.value); setHighlight(0); }}
+          onKeyDown={onKeyDown}
+          onBlur={() => finishChoice('stay')}
+          className="h-[34px] w-full border-0 bg-white px-2 text-[13px] text-slate-800 outline-none ring-2 ring-inset ring-navy-600 dark:bg-slate-900 dark:text-slate-100 dark:ring-gold-400"
+        />
+        <ul ref={listRef} id={listId} role="listbox" aria-label={t(column.labelKey)} className="absolute left-0 top-full z-40 max-h-60 min-w-full overflow-auto rounded-b-lg border border-slate-200 bg-white py-1 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+          {matches.map((option, index) => (
+            <li
+              key={option.value}
+              id={`${listId}-${index}`}
+              role="option"
+              aria-selected={highlight === index}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => { event.stopPropagation(); finish(option.value, 'stay'); }}
+              className={cn('cursor-pointer px-3 py-2 text-sm', highlight === index ? 'bg-navy-100 text-navy-800 dark:bg-navy-800 dark:text-gold-300' : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800')}
+            >
+              {option.label}
+            </li>
+          ))}
+          {matches.length === 0 && <li role="presentation" className="px-3 py-2 text-sm text-slate-500">{lang === 'th' ? 'ไม่มีตัวเลือกนี้ในรายการ' : 'No matching options'}</li>}
+        </ul>
+      </div>
+    );
+  }
+
   if (column.type === 'select') {
-    const options =
-      column.field === 'department_id'
-        ? departments.map((dept) => ({ value: dept.id, label: deptName(dept) }))
-        : column.field === 'session_id'
-          ? [
-              { value: '', label: t('sessions.whole') },
-              ...sessions.map((session) => ({ value: session.id, label: sessionLabel(session) }))
-            ]
-          : column.field === 'priority'
-            ? PRIORITIES.map((priority) => ({ value: priority, label: t(`priority.${priority}`) }))
-            : TASK_STATUSES.map((status) => ({ value: status, label: t(`taskStatus.${status}`) }));
     return (
       <select
         aria-label={t(column.labelKey)}

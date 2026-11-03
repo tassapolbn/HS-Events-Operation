@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { FloorPlanPreview } from './FloorPlanPreview';
 import {
-  Clock, DoorOpen, FileText, Flag, Hammer, Map as MapIcon, MapPin, Maximize2,
+  Check, Clock, DoorOpen, FileText, Flag, Hammer, Map as MapIcon, MapPin, Maximize2,
   PackageCheck, PackageOpen, Paperclip, PlayCircle, StickyNote, type LucideIcon
 } from 'lucide-react';
 import { showAttachment } from './AttachmentViewer';
@@ -157,7 +157,7 @@ export function FactChip({
 }
 
 /**
- * The x of y counter. One neutral pill everywhere, turning green only when the
+ * The x of y counter. One neutral pill everywhere, turning slate with a tick when the
  * work is done, so a colour on this board always means the same thing.
  */
 export function CountPill({ done, total }: { done: number; total: number }) {
@@ -165,10 +165,11 @@ export function CountPill({ done, total }: { done: number; total: number }) {
   return (
     <span
       className={cn(
-        'shrink-0 rounded-full px-3 py-1 text-sm font-extrabold tabular-nums shadow-sm',
-        complete ? 'bg-emerald-500 text-white' : 'bg-white text-navy-900 ring-1 ring-black/5'
+        'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-sm font-extrabold tabular-nums shadow-sm',
+        complete ? 'bg-slate-700 text-white' : 'bg-white text-navy-900 ring-1 ring-black/5'
       )}
     >
+      {complete && <Check className="h-3.5 w-3.5" aria-hidden="true" />}
       {done}/{total}
     </span>
   );

@@ -4,12 +4,12 @@ import { EventContacts } from '../events/EventContacts';
 import { sessionTimeline } from '../../lib/sessionTimeline';
 import { daysBetween, eventDayCount, eventDayIndex, eventEndDate, isMultiDay } from '../../lib/eventDays';
 import { schoolToday } from '../../lib/archive';
-import { dayColor, sessionBarGradient } from '../../lib/dayColors';
+import { dayColor } from '../../lib/dayColors';
 import { useCurrentBoardDay } from '../../hooks/useCurrentBoardDay';
 import { FloorPlanPreview } from './FloorPlanPreview';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  AlarmClock, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CircleCheckBig, Clock, LayoutList,
+  AlarmClock, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CircleCheckBig, CircleHelp, Clock, LayoutList,
   ListChecks, Map as MapIcon, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, User, Wrench
 } from 'lucide-react';
 import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
@@ -55,6 +55,7 @@ interface EventsBoardProps {
   focusTaskId?: string;
   /** Live editing: pencils appear on events, sessions and tasks when true */
   editMode?: boolean;
+  presenting?: boolean;
   onEditEvent?: (event: DisplayEvent) => void;
   onEditSession?: (event: DisplayEvent, session: DisplaySession) => void;
   onEditTask?: (event: DisplayEvent, task: DisplayTask) => void;
@@ -69,6 +70,7 @@ export function EventsBoard({
   focusEventId = '',
   focusTaskId = '',
   editMode,
+  presenting = false,
   onEditEvent,
   onEditSession,
   onEditTask
@@ -96,6 +98,7 @@ export function EventsBoard({
       ? { className: '', style: undefined }
       : { className: 'animate-rise-in', style: { animationDelay: `${Math.min(order, 5) * 45}ms` } };
   useEffect(() => { const timer = window.setInterval(() => setBoardNow(Date.now()), 30_000); return () => window.clearInterval(timer); }, []);
+  const [showViewHint, setShowViewHint] = useState(false);
   const [highlighted, setHighlighted] = useState<string | null>(null);
   /** Which event the "Ask a question" dialog is open for */
   const [askEvent, setAskEvent] = useState<DisplayEvent | null>(null);
@@ -167,30 +170,124 @@ export function EventsBoard({
     );
   }
 
+  const renderTaskRow = (task: DisplayTask, index: number, evt: DisplayEvent): ReactNode => {
+    const completed = task.status === 'completed';
+    const hasMeta = Boolean(task.assigned_staff) || task.attachments.length > 0 || completed;
+    return (
+      <li
+        key={task.id}
+        id={`task-${task.id}`}
+        tabIndex={focusTaskId === task.id ? -1 : undefined}
+        className={cn(
+          'px-4 py-3 transition-colors duration-150',
+          focusTaskId === task.id && 'ring-4 ring-inset ring-gold-400',
+          completed
+            ? 'border-l-[3px] border-transparent bg-slate-50 dark:bg-slate-800/25'
+            : 'border-l-[3px] border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'
+        )}
+      >
+        <div className="flex items-start gap-3">
+          <button
+            onClick={() => toggleTask.mutate({ taskId: task.id, done: !completed })}
+            className={cn(
+              // the after: ring expands the tap area to 44px for WCAG without shifting layout
+              "relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 after:absolute after:-inset-2 after:content-['']  focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 focus-visible:ring-offset-2 active:scale-90",
+              completed
+                ? 'border-slate-500 bg-slate-500 text-white shadow-sm'
+                : 'border-slate-300 bg-white hover:border-navy-500 dark:border-slate-600 dark:bg-slate-900'
+            )}
+            title={t('display.tapToComplete')}
+            aria-label={t('display.tapToComplete')}
+            aria-pressed={completed}
+          >
+            {completed && <Check className="h-4 w-4 animate-tick-pop" strokeWidth={3} />}
+          </button>
+
+          <div className="min-w-0 flex-1">
+            <div
+              className={cn(
+                'flex items-start gap-2 break-words text-[0.95rem] font-semibold leading-snug text-slate-800 dark:text-slate-100',
+                completed && 'text-slate-400 line-through dark:text-slate-500'
+              )}
+            >
+              <span className="mt-px inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[0.7rem] font-extrabold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {index + 1}
+              </span>
+              <span className="min-w-0 flex-1"><BoardEditableText entity="task" id={task.id} eventId={evt.id} field="title" value={task.title} label={t('tasks.taskTitle')} /></span>
+            </div>
+
+            {!isRichTextEmpty(task.description) && !completed && (
+              <BoardEditableText entity="task" id={task.id} eventId={evt.id} field="description" value={task.description} rich label={t('tasks.taskDescription')} className="mt-1 block pl-7 text-sm text-slate-500 dark:text-slate-400" />
+            )}
+
+            {hasMeta && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-7">
+                {task.assigned_staff && !completed && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                    <User className="h-3.5 w-3.5" /> <BoardEditableText entity="task" id={task.id} eventId={evt.id} field="assigned_staff" value={task.assigned_staff} label={t('tasks.assignedStaff')} />
+                  </span>
+                )}
+                {!completed && <AttachmentChips files={task.attachments} />}
+                {completed && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2.5 py-0.5 text-xs font-bold text-slate-700 dark:bg-slate-700 dark:text-slate-200">
+                    <Check className="h-3 w-3" /> {t('display.completedLabel')}
+                  </span>
+                )}
+              </div>
+            )}
+
+            {!isRichTextEmpty(task.notes) && !completed && (
+              <BoardEditableText entity="task" id={task.id} eventId={evt.id} field="notes" value={task.notes} rich label={t('common.notes')} className="mt-1 block pl-7 text-sm italic text-slate-400" />
+            )}
+          </div>
+          {editMode && (
+            <button
+              onClick={() => onEditTask?.(evt, task)}
+              title={t('tasks.editTask')}
+              aria-label={t('tasks.editTask')}
+              className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-all hover:bg-slate-200 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 dark:bg-slate-800 dark:text-slate-400"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+      </li>
+    );
+  };
+
   /**
    * Department panels. Tasks are deliberately lightweight: the date, time and
    * venue belong to the event, so they are stated once in the briefing above
    * and never repeated per task.
    */
   const renderPanels = (tasks: DisplayTask[], evt: DisplayEvent): ReactNode => {
-    const visibleDepts = departments.filter(
+    const lanes = [...departments].sort((a, b) => a.sort_order - b.sort_order);
+    const visibleDepts = lanes.filter(
       (dept) => (!selectedDept || dept.id === selectedDept) && tasks.some((task) => task.department_id === dept.id)
     );
+    // A block with no jobs at all shows nothing, rather than a row of empty lanes
     if (visibleDepts.length === 0) return null;
     const colClass =
       selectedDept || visibleDepts.length === 1
         ? 'grid-cols-1'
         : visibleDepts.length === 2
         ? 'grid-cols-1 sm:grid-cols-2'
-        : visibleDepts.length === 3
-        ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4';
+        : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3';
 
     return (
-      <div className={cn('grid items-start gap-4', colClass)}>
-        {visibleDepts.map((dept, deptIndex) => {
+      <div
+        className={cn('grid items-start gap-4', colClass, !selectedDept && 'xl:[grid-template-columns:repeat(var(--lanes),minmax(0,1fr))]')}
+        style={{ '--lanes': lanes.length } as React.CSSProperties}
+      >
+        {(selectedDept ? visibleDepts : lanes).map((dept, deptIndex) => {
           const Icon = departmentIcon(dept.icon);
           const deptTasks = tasks.filter((task) => task.department_id === dept.id);
+          if (deptTasks.length === 0) return (
+            <div key={dept.id} aria-hidden="true" className="hidden min-h-14 items-center gap-2 rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-slate-300 xl:flex dark:border-slate-700 dark:text-slate-600">
+              <Icon className="h-5 w-5 shrink-0" />
+              <span className="truncate text-sm font-semibold">{deptName(dept)}</span>
+            </div>
+          );
           const done = deptTasks.filter((task) => task.status === 'completed').length;
           const deptText = readableTextColor(dept.color);
           const allDone = done === deptTasks.length && deptTasks.length > 0;
@@ -231,7 +328,7 @@ export function EventsBoard({
                   className={cn(
                     'shrink-0 rounded-full px-2.5 py-1 text-xs font-extrabold tabular-nums',
                     allDone
-                      ? 'bg-emerald-500 text-white shadow-sm'
+                      ? 'bg-slate-700 text-white shadow-sm'
                       : 'bg-white text-[color:var(--dept-ink)] shadow-sm dark:bg-slate-900 dark:text-[color:var(--dept-ink-dark)]'
                   )}
                 >
@@ -240,90 +337,7 @@ export function EventsBoard({
               </div>
 
               <ul className="flex-1 divide-y divide-slate-100 dark:divide-slate-800">
-                {deptTasks.map((task, index) => {
-                  const completed = task.status === 'completed';
-                  const hasMeta = Boolean(task.assigned_staff) || task.attachments.length > 0 || completed;
-                  return (
-                    <li
-                      key={task.id}
-                      id={`task-${task.id}`}
-                      tabIndex={focusTaskId === task.id ? -1 : undefined}
-                      className={cn(
-                        'px-4 py-3 transition-colors duration-150',
-                        focusTaskId === task.id && 'ring-4 ring-inset ring-gold-400',
-                        completed
-                          ? 'border-l-[3px] border-emerald-400 bg-emerald-50/70 dark:bg-emerald-950/25'
-                          : 'border-l-[3px] border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                      )}
-                    >
-                      <div className="flex items-start gap-3">
-                        <button
-                          onClick={() => toggleTask.mutate({ taskId: task.id, done: !completed })}
-                          className={cn(
-                            // the after: ring expands the tap area to 44px for WCAG without shifting layout
-                            "relative mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 transition-all duration-150 after:absolute after:-inset-2 after:content-['']  focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 active:scale-90",
-                            completed
-                              ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
-                              : 'border-slate-300 bg-white hover:border-emerald-400 dark:border-slate-600 dark:bg-slate-900'
-                          )}
-                          title={t('display.tapToComplete')}
-                          aria-label={t('display.tapToComplete')}
-                          aria-pressed={completed}
-                        >
-                          {completed && <Check className="h-4 w-4 animate-tick-pop" strokeWidth={3} />}
-                        </button>
-
-                        <div className="min-w-0 flex-1">
-                          <div
-                            className={cn(
-                              'flex items-start gap-2 break-words text-[0.95rem] font-semibold leading-snug text-slate-800 dark:text-slate-100',
-                              completed && 'text-slate-400 line-through dark:text-slate-500'
-                            )}
-                          >
-                            <span className="mt-px inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-slate-100 text-[0.7rem] font-extrabold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                              {index + 1}
-                            </span>
-                            <span className="min-w-0 flex-1"><BoardEditableText entity="task" id={task.id} eventId={evt.id} field="title" value={task.title} label={t('tasks.taskTitle')} /></span>
-                          </div>
-
-                          {!isRichTextEmpty(task.description) && !completed && (
-                            <BoardEditableText entity="task" id={task.id} eventId={evt.id} field="description" value={task.description} rich label={t('tasks.taskDescription')} className="mt-1 block pl-7 text-sm text-slate-500 dark:text-slate-400" />
-                          )}
-
-                          {hasMeta && (
-                            <div className="mt-1.5 flex flex-wrap items-center gap-2 pl-7">
-                              {task.assigned_staff && !completed && (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                                  <User className="h-3.5 w-3.5" /> <BoardEditableText entity="task" id={task.id} eventId={evt.id} field="assigned_staff" value={task.assigned_staff} label={t('tasks.assignedStaff')} />
-                                </span>
-                              )}
-                              {!completed && <AttachmentChips files={task.attachments} />}
-                              {completed && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300">
-                                  <Check className="h-3 w-3" /> {t('display.completedLabel')}
-                                </span>
-                              )}
-                            </div>
-                          )}
-
-                          {!isRichTextEmpty(task.notes) && !completed && (
-                            <BoardEditableText entity="task" id={task.id} eventId={evt.id} field="notes" value={task.notes} rich label={t('common.notes')} className="mt-1 block pl-7 text-sm italic text-slate-400" />
-                          )}
-                        </div>
-                        {editMode && (
-                          <button
-                            onClick={() => onEditTask?.(evt, task)}
-                            title={t('tasks.editTask')}
-                            aria-label={t('tasks.editTask')}
-                            className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500 transition-all hover:bg-slate-200 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 dark:bg-slate-800 dark:text-slate-400"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  );
-                })}
+                {deptTasks.map((task, index) => renderTaskRow(task, index, evt))}
               </ul>
             </div>
           );
@@ -334,20 +348,19 @@ export function EventsBoard({
 
   /**
    * A session states its own date, place and time once, above its panels. Its bar
-   * wears the Thai colour of its weekday, like the day's banner and date tile.
+   * keeps weekday colour on its date tile and left edge so the facts read calmly.
    */
   const sessionHeader = (
     session: DisplaySession,
     tasks: DisplayTask[],
-    evt: DisplayEvent,
-    barGradient: string
+    evt: DisplayEvent
   ): ReactNode => {
     const done = tasks.filter((task) => task.status === 'completed').length;
     return (
       <div
         data-session-bar={session.id}
-        className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-4 py-3.5 text-white shadow-md"
-        style={{ backgroundImage: barGradient }}
+        className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border-l-[6px] bg-white px-4 py-3.5 text-navy-900 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700"
+        style={{ borderLeftColor: dayColor(session.session_date).solid }}
       >
         <span className="flex h-12 w-12 shrink-0 flex-col overflow-hidden rounded-lg bg-white shadow ring-1 ring-black/10">
           {/* The month strip wears the Thai colour of the session's weekday */}
@@ -368,9 +381,9 @@ export function EventsBoard({
           {/* The full date is already spelled out in the block on the left, so it
               stays quiet here and the place and the time carry the solid chips. */}
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            <FactChip icon={CalendarDays} tone="quiet">{formatDate(session.session_date, lang)}</FactChip>
+            <FactChip icon={CalendarDays} tone="plain">{formatDate(session.session_date, lang)}</FactChip>
             {session.location && (
-              <FactChip icon={MapPin} tone="strong">
+              <FactChip icon={MapPin} tone="plain">
                 <BoardEditableText
                   entity="session"
                   id={session.id}
@@ -382,7 +395,7 @@ export function EventsBoard({
               </FactChip>
             )}
             {(session.start_time || session.end_time || session.time_note) && (
-              <FactChip icon={Clock} tone="strong">
+              <FactChip icon={Clock} tone="plain">
                 <span className="flex flex-wrap items-baseline gap-x-2">
                   {(session.start_time || session.end_time) && (
                     <span className="tabular-nums tracking-tight">
@@ -413,7 +426,7 @@ export function EventsBoard({
               onClick={() => onEditSession?.(evt, session)}
               title={t('sessions.editSession')}
               aria-label={t('sessions.editSession')}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20 text-white transition-all hover:bg-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition-all hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 dark:bg-slate-800 dark:text-slate-300"
             >
               <Pencil className="h-4 w-4" />
             </button>
@@ -574,6 +587,60 @@ export function EventsBoard({
     const dayBadge = eventDayBadge(evt, date);
     const plans = evt.attachments.filter((file) => file.mime_type.startsWith('image/') && !(evt.sessions ?? []).some(session => session.floor_plan_attachment_id === file.id));
 
+    if (selectedDept) return (
+      <div key={group.blocks[0].key} data-timeline-event={evt.id} className="space-y-3">
+        {group.blocks.map((block) => {
+          const session = block.session;
+          const tasks = block.tasks.filter((task) => task.department_id === selectedDept);
+          const overdue = overdueCount(session, date, tasks);
+          return (
+            <section key={block.key} className="overflow-hidden rounded-2xl border-l-4 bg-white ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700" style={{ borderLeftColor: headerColor }}>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3">
+                <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: headerColor }} />
+                <h3 className="min-w-0 break-words text-base font-extrabold text-navy-900 dark:text-slate-100">
+                  <BoardEditableText entity="event" id={evt.id} eventId={evt.id} field="name" value={evt.name} label={t('events.eventName')} />
+                </h3>
+                {session ? session.title && (
+                  <span className="min-w-0 break-words font-bold text-slate-600 dark:text-slate-300"><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="title" value={session.title} label={t('sessions.title')} /></span>
+                ) : <span className="font-bold text-slate-600 dark:text-slate-300">{t('sessions.generalTasks')}</span>}
+                {session ? (
+                  <>
+                    {(session.start_time || session.end_time || session.time_note) && (
+                      <FactChip icon={Clock} tone="plain">
+                        <span className="flex flex-wrap items-baseline gap-x-2">
+                          {(session.start_time || session.end_time) && <span className="tabular-nums">{session.start_time ? formatTime(session.start_time, lang) : '—'}{session.end_time && <> - {formatTime(session.end_time, lang)}</>}</span>}
+                          {session.time_note && <BoardEditableText entity="session" id={session.id} eventId={evt.id} field="time_note" value={session.time_note} label={t('common.notes')} />}
+                        </span>
+                      </FactChip>
+                    )}
+                    {session.location && <FactChip icon={MapPin} tone="plain"><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="location" value={session.location} label={t('common.location')} /></FactChip>}
+                  </>
+                ) : (
+                  <>
+                    {evt.event_start && <FactChip icon={Clock} tone="plain">{formatTime(evt.event_start, lang)}{evt.event_finish && <> - {formatTime(evt.event_finish, lang)}</>}</FactChip>}
+                    {evt.location && <FactChip icon={MapPin} tone="plain"><BoardEditableText entity="event" id={evt.id} eventId={evt.id} field="location" value={evt.location} label={t('common.location')} /></FactChip>}
+                  </>
+                )}
+                {dayBadge && <span data-event-day={dayBadge.tone} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-bold text-navy-800 dark:bg-slate-800 dark:text-slate-200">{dayBadge.tone === 'before' && <Wrench className="h-3.5 w-3.5" aria-hidden="true" />}{dayBadge.text}</span>}
+                {overdue > 0 && <span title={t('display.overdueHint')} className="inline-flex animate-live-ring items-center gap-1.5 rounded-lg bg-red-500 px-2.5 py-1 text-xs font-extrabold text-white"><TriangleAlert className="h-3.5 w-3.5" />{overdue} {t('display.overdue')}</span>}
+                {/* Who to ask, kept in the compact card as on the full event header */}
+                <EventContacts contacts={evt.contacts} className="order-last basis-full" />
+                <div className="ml-auto flex flex-wrap items-center gap-2">
+                  {editMode && <button type="button" onClick={() => onEditEvent?.(evt)} aria-label={`${t('events.editEvent')}: ${evt.name}`} title={t('events.editEvent')} className="rounded-lg bg-slate-100 p-2 text-slate-600 hover:bg-slate-200 focus-visible:ring-2 focus-visible:ring-navy-500 dark:bg-slate-800 dark:text-slate-300"><Pencil className="h-4 w-4" /></button>}
+                  {editMode && session && <button type="button" onClick={() => onEditSession?.(evt, session)} aria-label={t('sessions.editSession')} title={t('sessions.editSession')} className="rounded-lg bg-slate-100 p-2 text-slate-600 hover:bg-slate-200 focus-visible:ring-2 focus-visible:ring-navy-500 dark:bg-slate-800 dark:text-slate-300"><Pencil className="h-4 w-4" /></button>}
+                  {plans.length > 0 && <button type="button" onClick={() => openAttachment(plans[0], plans)} title={t('display.viewFloorPlan')} aria-label={t('display.viewFloorPlan')} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 p-2 text-sm font-bold text-navy-800 hover:bg-slate-200 focus-visible:ring-2 focus-visible:ring-navy-500 dark:bg-slate-800 dark:text-slate-200"><MapIcon className="h-4 w-4" /><span className="hidden sm:inline">{t('display.floorPlan')}</span></button>}
+                  <button type="button" onClick={() => goToEvent(evt.id)} title={t('display.openEvent')} aria-label={t('display.openEvent')} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 p-2 text-sm font-bold text-navy-800 hover:bg-slate-200 focus-visible:ring-2 focus-visible:ring-navy-500 dark:bg-slate-800 dark:text-slate-200"><span className="hidden sm:inline">{t('display.openEvent')}</span><ChevronRight className="h-4 w-4" /></button>
+                  <CountPill done={tasks.filter((task) => task.status === 'completed').length} total={tasks.length} />
+                </div>
+              </div>
+              {session && <div className="space-y-3 px-4">{sessionNoteBar(session, evt.id)}{session.floor_plan && <FloorPlanPreview file={session.floor_plan} label={session.title ? `${t('display.floorPlan')} · ${session.title}` : t('display.floorPlan')} />}</div>}
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800">{tasks.map((task, index) => renderTaskRow(task, index, evt))}</ul>
+            </section>
+          );
+        })}
+      </div>
+    );
+
     return (
       <div
         key={group.blocks[0].key}
@@ -659,7 +726,7 @@ export function EventsBoard({
             <div key={block.key} className="space-y-3">
               {block.session ? (
                 <>
-                  {sessionHeader(block.session, block.tasks, evt, sessionBarGradient(block.session.session_date))}
+                  {sessionHeader(block.session, block.tasks, evt)}
                   {sessionNoteBar(block.session, evt.id)}
                 </>
               ) : (
@@ -884,14 +951,17 @@ export function EventsBoard({
         ))}
       </div>
       {viewMode === 'date' && (
-        <div className="w-full text-sm leading-relaxed text-slate-500 sm:min-w-48 sm:flex-1 dark:text-slate-400">{t('display.dateViewHint')}</div>
+        <>
+          <button type="button" aria-expanded={showViewHint} aria-label={lang === 'th' ? 'คำอธิบาย' : 'What is this?'} onClick={() => setShowViewHint((value) => !value)} className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-navy-500 dark:hover:bg-slate-800"><CircleHelp className="h-5 w-5" /></button>
+          {showViewHint && <p className="w-full text-sm leading-relaxed text-slate-500 dark:text-slate-400">{t('display.dateViewHint')}</p>}
+        </>
       )}
     </div>
   );
 
   return (
     <div className="space-y-6">
-      {viewToggle}
+      {!presenting && viewToggle}
       {viewMode === 'event' && upcoming.length > 0 && (
         <section className="animate-slide-up rounded-3xl border border-gold-200 bg-gradient-to-r from-gold-50 via-white to-white p-4 shadow-sm dark:border-gold-900 dark:from-gold-950/30 dark:via-slate-900 dark:to-slate-900">
           <div className="mb-3 flex items-center gap-2">
@@ -1170,7 +1240,7 @@ export function EventsBoard({
                             key={session.id}
                             className="space-y-4 rounded-2xl border border-navy-100 bg-slate-50 p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/40"
                           >
-                            {sessionHeader(session, sessionTasks, event, sessionBarGradient(session.session_date))}
+                            {sessionHeader(session, sessionTasks, event)}
                             {/* Operational note for this session: OT, reminders, venue instructions */}
                             {sessionNoteBar(session, event.id)}
                             {session.floor_plan && <FloorPlanPreview file={session.floor_plan} label={`${t('display.floorPlan')} · ${session.title || formatDate(session.session_date, lang)}`} />}

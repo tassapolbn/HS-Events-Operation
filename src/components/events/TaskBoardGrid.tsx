@@ -1,5 +1,5 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CalendarDays, Check, Clock, EyeOff, GripVertical, Layers, Loader2, MapPin, Maximize2, Plus, Redo2, Undo2, User } from 'lucide-react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { CalendarDays, Check, Clock, EyeOff, GripVertical, Keyboard, Layers, Loader2, MapPin, Maximize2, Plus, Redo2, Undo2, User } from 'lucide-react';
 import { ContextMenu, type ContextAction } from '../ui/ContextMenu';
 import { inverseGridEntry, type GridHistoryEntry } from '../../lib/gridHistory';
 import { useLanguage } from '../../i18n';
@@ -33,6 +33,7 @@ type Placement = { id: string; session_id: string | null; department_id: string;
 type BoardHistoryEntry = GridHistoryEntry<'title'> | { kind: 'placement'; patches: Placement[] };
 
 type Cell = { group: string; dept: string; row: number };
+type EditDirection = 'down' | 'stay' | 'left' | 'right' | 'fill';
 
 interface TaskBoardGridProps {
   eventId: string;
@@ -48,6 +49,9 @@ interface TaskBoardGridProps {
   onOpenTask: (task: EventTask) => void;
   onEditTask: (task: EventTask) => void;
   onAddSession?: () => void;
+  renderSessionTools?: (session: EventSession) => ReactNode;
+  fullScreen?: boolean;
+  onEscapeBlockedChange?: (blocked: boolean) => void;
 }
 
 /**
@@ -61,7 +65,7 @@ interface TaskBoardGridProps {
  */
 export function TaskBoardGrid({
   eventId, eventDate, tasks, departments, sessions, canEdit, search, departmentFilter, sessionFilter,
-  onOpenTask, onEditTask, onAddSession
+  onOpenTask, onEditTask, onAddSession, renderSessionTools, fullScreen = false, onEscapeBlockedChange
 }: TaskBoardGridProps) {
   const { t, deptName, lang } = useLanguage();
   const { toast } = useToast();
@@ -69,6 +73,9 @@ export function TaskBoardGrid({
   const { createTasks, updateTasks, deleteTasks, restoreTasks } = useTaskMutations(eventId);
 
   const containerRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLTableRowElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [helpOpen, setHelpOpen] = useState(false);
   const undoStack = useRef<BoardHistoryEntry[]>([]);
   const redoStack = useRef<BoardHistoryEntry[]>([]);
   const busyRef = useRef(false);
@@ -92,6 +99,30 @@ export function TaskBoardGrid({
     () => departments.filter((dept) => !departmentFilter || dept.id === departmentFilter),
     [departments, departmentFilter]
   );
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const measure = () => setHeaderHeight(header.getBoundingClientRect().height);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [columns.length]);
+
+  useEffect(() => {
+    onEscapeBlockedChange?.(!!cursor || !!editing || !!context || helpOpen);
+    return () => onEscapeBlockedChange?.(false);
+  }, [cursor, editing, context, helpOpen, onEscapeBlockedChange]);
+
+  useEffect(() => {
+    if (!helpOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); setHelpOpen(false); }
+    };
+    document.addEventListener('keydown', close);
+    return () => document.removeEventListener('keydown', close);
+  }, [helpOpen]);
 
   const groups = useMemo<BoardGroup[]>(() => {
     const needle = search.trim().toLocaleLowerCase();
@@ -192,8 +223,8 @@ export function TaskBoardGrid({
   };
 
   /** Write one or more titles down a column, creating rows as they run out. */
-  const writeColumn = async (groupKey: string, deptId: string, startRow: number, titles: string[]) => {
-    if (!canEdit || busyRef.current) return;
+  const writeColumn = async (groupKey: string, deptId: string, startRow: number, titles: string[], focusCreated = true) => {
+    if (!canEdit || busyRef.current) return false;
     const existing = groupByKey.get(groupKey)?.columns.get(deptId) ?? [];
     const updates: Array<{ id: string; values: { title: string } }> = [];
     const inserts: TaskInput[] = [];
@@ -207,7 +238,7 @@ export function TaskBoardGrid({
         order += 1;
       }
     });
-    if (updates.length === 0 && inserts.length === 0) return;
+    if (updates.length === 0 && inserts.length === 0) return true;
     busyRef.current = true;
     try {
       if (updates.length > 0) {
@@ -221,10 +252,12 @@ export function TaskBoardGrid({
       if (inserts.length > 0) {
         const created = await createTasks.mutateAsync(inserts);
         pushUndo({ kind: 'create', ids: created.map((task) => task.id) });
-        if (created[0]) focusAfterCreate.current = created[created.length - 1].id;
+        if (focusCreated && created[0]) focusAfterCreate.current = created[created.length - 1].id;
       }
+      return true;
     } catch {
       toast(t('common.errorGeneric'), 'error');
+      return false;
     } finally {
       busyRef.current = false;
     }
@@ -557,11 +590,68 @@ export function TaskBoardGrid({
   });
 
   const onKeyDown = (event: React.KeyboardEvent) => {
-    if (editing || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || context) return;
+    if (editing || event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || context || helpOpen) return;
     const mod = event.ctrlKey || event.metaKey;
     const key = event.key;
     if (mod && key.toLowerCase() === 'z') { event.preventDefault(); void travel(event.shiftKey); return; }
     if (mod && key.toLowerCase() === 'y') { event.preventDefault(); void travel(true); return; }
+    if (mod && key.toLowerCase() === 'a') {
+      event.preventDefault();
+      const group = groupByKey.get(cursor?.group ?? '') ?? groups[0];
+      if (group && flatColumns.length > 0) {
+        setCursor({ group: group.key, dept: flatColumns[0], row: 0 });
+        setFocus({ group: group.key, dept: flatColumns[flatColumns.length - 1], row: Math.max(0, group.rows - 1) });
+      }
+      return;
+    }
+    if (mod && key.toLowerCase() === 'd') {
+      event.preventDefault();
+      if (!area) return;
+      const single = area.top === area.bottom && area.left === area.right;
+      const sourceRow = single ? area.top - 1 : area.top;
+      if (sourceRow < 0) return;
+      const entries: Array<{ dept: string; row: number; title: string }> = [];
+      for (let row = single ? area.top : area.top + 1; row <= area.bottom; row += 1) {
+        for (let column = area.left; column <= area.right; column += 1) {
+          const dept = flatColumns[column];
+          const title = taskAt(area.group, dept, sourceRow)?.title ?? '';
+          // An empty source cell fills nothing, so no blank jobs appear and no titles are wiped
+          if (!title.trim()) continue;
+          entries.push({ dept, row, title });
+        }
+      }
+      void writeCells(entries, area.group);
+      return;
+    }
+    if (key === 'Home' || key === 'End' || key === 'PageDown' || key === 'PageUp' || (mod && key.startsWith('Arrow'))) {
+      event.preventDefault();
+      const from = event.shiftKey && cursor && focus?.group === cursor.group ? focus : cursor;
+      const groupIndex = Math.max(0, groups.findIndex((group) => group.key === from?.group));
+      const group = groups[groupIndex];
+      if (!group || !flatColumns.length) return;
+      let target: Cell = from ?? { group: group.key, dept: flatColumns[0], row: 0 };
+      if (key === 'Home' || key === 'End') {
+        const last = key === 'End';
+        const edgeGroup = mod ? groups[last ? groups.length - 1 : 0] : group;
+        target = { group: edgeGroup.key, dept: flatColumns[last ? flatColumns.length - 1 : 0], row: mod ? (last ? edgeGroup.rows : 0) : target.row };
+      } else if (key === 'PageDown' || key === 'PageUp') {
+        const next = groups[groupIndex + (key === 'PageDown' ? 1 : -1)];
+        if (next) target = { ...target, group: next.key, row: 0 };
+      } else if (key === 'ArrowLeft' || key === 'ArrowRight') {
+        target = { ...target, dept: flatColumns[key === 'ArrowRight' ? flatColumns.length - 1 : 0] };
+      } else {
+        const down = key === 'ArrowDown';
+        const edge = down ? Math.max(0, (group.columns.get(target.dept)?.length ?? 0) - 1) : 0;
+        const next = groups[groupIndex + (down ? 1 : -1)];
+        if (target.row === edge && next && !event.shiftKey) target = { ...target, group: next.key, row: down ? 0 : next.rows };
+        else target = { ...target, row: edge };
+      }
+      if (event.shiftKey && cursor) {
+        // A block always stays inside its original session band.
+        if (target.group === cursor.group) setFocus(target);
+      } else { setFocus(null); setCursor(target); }
+      return;
+    }
     if (mod) return;
     if (event.shiftKey && cursor && (key === 'ArrowDown' || key === 'ArrowUp' || key === 'ArrowLeft' || key === 'ArrowRight')) {
       event.preventDefault();
@@ -581,7 +671,7 @@ export function TaskBoardGrid({
     if (key === 'ArrowUp') { event.preventDefault(); setFocus(null); move(-1, 0); return; }
     if (key === 'ArrowLeft') { event.preventDefault(); setFocus(null); move(0, -1); return; }
     if (key === 'ArrowRight' || key === 'Tab') { event.preventDefault(); setFocus(null); move(0, event.shiftKey && key === 'Tab' ? -1 : 1); return; }
-    if (key === 'Escape') { event.preventDefault(); setCursor(null); setFocus(null); return; }
+    if (key === 'Escape') { if (cursor) event.preventDefault(); setCursor(null); setFocus(null); return; }
     if ((key === 'Enter' || key === 'F2') && cursor && canEdit) {
       event.preventDefault();
       setEditing({ ...cursor, initial: null });
@@ -638,22 +728,43 @@ export function TaskBoardGrid({
     event.clipboardData.setData('text/plain', toClipboardTable(table));
   };
 
-  const commitEdit = async (raw: string, cell: { group: string; dept: string; row: number }, after: 'down' | 'stay') => {
+  const commitEdit = async (raw: string, cell: Cell, after: EditDirection) => {
     setEditing(null);
     containerRef.current?.focus();
     const title = raw.trim();
     const task = taskAt(cell.group, cell.dept, cell.row);
+    if (after === 'fill' && area) {
+      // Ctrl+Enter with nothing typed leaves the selected jobs as they are
+      if (!title) return;
+      const entries: Array<{ dept: string; row: number; title: string }> = [];
+      for (let row = area.top; row <= area.bottom; row += 1) {
+        for (let column = area.left; column <= area.right; column += 1) entries.push({ dept: flatColumns[column], row, title });
+      }
+      await writeCells(entries, area.group);
+      return;
+    }
+    const advance = () => {
+      if (after === 'stay') return;
+      setFocus(null);
+      if (after === 'left' || after === 'right') {
+        const column = Math.max(0, Math.min(flatColumns.length - 1, flatColumns.indexOf(cell.dept) + (after === 'right' ? 1 : -1)));
+        setCursor({ ...cell, dept: flatColumns[column] });
+      } else if (after === 'down') {
+        if (task) move(1, 0);
+        else setCursor({ ...cell, row: (groupByKey.get(cell.group)?.columns.get(cell.dept)?.length ?? 0) + 1 });
+      }
+    };
     if (!title) {
       // Emptying a cell takes the job off the sheet, the way a spreadsheet would
       if (task) await removeTask(task);
+      if (after === 'left' || after === 'right') advance();
       return;
     }
     if (task?.title === title) {
-      if (after === 'down') move(1, 0);
+      advance();
       return;
     }
-    await writeColumn(cell.group, cell.dept, cell.row, [title]);
-    if (after === 'down' && task) move(1, 0);
+    if (await writeColumn(cell.group, cell.dept, cell.row, [title], after === 'stay')) advance();
   };
 
   const cursorTask = cursor ? taskAt(cursor.group, cursor.dept, cursor.row) : null;
@@ -694,6 +805,34 @@ export function TaskBoardGrid({
             </button>
           </>
         )}
+        <div className="relative">
+          {helpOpen && <div className="fixed inset-0 z-20" onClick={() => setHelpOpen(false)} />}
+          <button type="button" aria-expanded={helpOpen} className={cn(toolbarButton, helpOpen && 'relative z-30')} onClick={() => setHelpOpen((open) => !open)}>
+            <Keyboard className="h-3.5 w-3.5" /> {t('grid.shortcuts')}
+          </button>
+          {helpOpen && (
+            <div className="absolute left-0 z-30 mt-1 max-h-[60vh] w-80 max-w-[85vw] space-y-1 overflow-auto rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-xl dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              <p className="font-semibold text-slate-800 dark:text-slate-100">{t('grid.shortcuts')}</p>
+              <p>Enter / F2: {text('แก้ไขเซลล์', 'Edit cell')}</p>
+              <p>Enter: {text('บันทึกและลงแถวถัดไป เพิ่มงานต่อได้ทันที', 'Save and move down; keep adding jobs')}</p>
+              <p>Shift+Enter: {text('ขึ้นบรรทัดใหม่ในข้อความ', 'New line within a job')}</p>
+              <p>Tab / Shift+Tab: {text('บันทึกและไปแผนกถัดไป / ก่อนหน้า', 'Save and move to next / previous department')}</p>
+              <p>Ctrl+Enter: {text('ใส่ข้อความในทุกเซลล์ที่เลือก', 'Fill selected cells with typed text')}</p>
+              <p>Ctrl+D: {text('เติมลงล่างจากแถวบนสุด หรือเซลล์ด้านบน', 'Fill down from the top row or cell above')}</p>
+              <p>Ctrl+A: {text('เลือกทุกงานในช่วงกิจกรรมนี้', 'Select all job rows in this session band')}</p>
+              <p>Home / End: {text('แผนกแรก / สุดท้าย', 'First / last department')}</p>
+              <p>Ctrl+Home / End: {text('ต้น / ท้ายตาราง', 'First / last cell in the worksheet')}</p>
+              <p>Ctrl+↑ / ↓: {text('งานแรก / สุดท้าย แล้วไปช่วงกิจกรรมก่อนหน้า / ถัดไป', 'First / last job, then previous / next session band')}</p>
+              <p>Ctrl+← / →: {text('แผนกแรก / สุดท้าย', 'First / last department')}</p>
+              <p>Shift+{text('ลูกศร', 'Arrow')} / Ctrl+Shift+{text('ลูกศร', 'Arrow')}: {text('ขยายการเลือกภายในช่วงกิจกรรม', 'Extend selection within the session band')}</p>
+              <p>PageUp / PageDown: {text('ช่วงกิจกรรมก่อนหน้า / ถัดไป', 'Previous / next session band')}</p>
+              <p>Ctrl+C / V / X: {text('คัดลอก / วาง / ตัด', 'Copy / paste / cut')}</p>
+              <p>Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y: {text('ย้อนกลับ / ทำซ้ำ', 'Undo / redo')}</p>
+              <p>Escape: {text('ยกเลิกการแก้ไขหรือล้างการเลือก', 'Cancel editing or clear selection')}</p>
+              <p>{text('บน Mac ใช้ Cmd แทน Ctrl', 'On Mac, use Cmd instead of Ctrl')}</p>
+            </div>
+          )}
+        </div>
         <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-slate-400">
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {t('grid.boardHint')}
@@ -707,7 +846,8 @@ export function TaskBoardGrid({
         onPaste={onPaste}
         onCopy={onCopy}
         aria-label={t('grid.boardLayout')}
-        className="max-h-[72vh] overflow-auto outline-none"
+        data-grid-scroll
+        className={cn('overflow-auto outline-none', fullScreen ? 'min-h-0 flex-1' : 'max-h-[calc(100vh-12rem)]')}
       >
         <table className="w-full min-w-[720px] select-none border-separate border-spacing-0 text-[13px]">
           <colgroup>
@@ -716,14 +856,14 @@ export function TaskBoardGrid({
             ))}
           </colgroup>
           <thead>
-            <tr>
+            <tr ref={headerRef}>
               {columns.map((dept) => {
                 const Icon = departmentIcon(dept.icon);
                 return (
                   <th
                     key={dept.id}
                     scope="col"
-                    className="sticky top-0 z-10 border-b-2 border-r border-white/20 px-3 py-2.5 text-center text-sm font-extrabold"
+                    className="sticky top-0 z-20 border-b-2 border-r border-white/20 px-3 py-2.5 text-center text-sm font-extrabold"
                     style={{ backgroundColor: dept.color, color: readableTextColor(dept.color) }}
                   >
                     <span className="inline-flex items-center justify-center gap-2">
@@ -746,14 +886,15 @@ export function TaskBoardGrid({
                     <td
                       colSpan={columns.length}
                       data-board-band={group.key || 'general'}
-                      className="border-b border-t border-slate-200 px-3 py-2 dark:border-slate-700"
+                      className="sticky z-10 border-b border-t border-slate-200 px-3 py-2 dark:border-slate-700"
                       style={{
+                        top: headerHeight,
                         backgroundColor: lightenColor(color, 0.86),
                         color: darkenColor(color, 0.7),
                         borderLeft: `5px solid ${color}`
                       }}
                     >
-                      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-center">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-left">
                         <span className="text-sm font-extrabold">
                           {session ? session.title || formatDate(session.session_date, lang, 'EEEE d MMMM') : t('sessions.generalTasks')}
                         </span>
@@ -786,6 +927,11 @@ export function TaskBoardGrid({
                           <span className="rounded-full bg-white/70 px-2 py-0.5 text-xs font-extrabold tabular-nums">
                             {done}/{total}
                           </span>
+                        )}
+                        {canEdit && session && renderSessionTools && (
+                          <div className="ml-auto" onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+                            {renderSessionTools(session)}
+                          </div>
                         )}
                       </div>
                     </td>
@@ -991,7 +1137,7 @@ function BoardCellEditor({
 }: {
   value: string;
   initial: string | null;
-  onCommit: (raw: string, after: 'down' | 'stay') => void;
+  onCommit: (raw: string, after: EditDirection) => void;
   onCancel: () => void;
 }) {
   const { t } = useLanguage();
@@ -1008,7 +1154,7 @@ function BoardCellEditor({
     input.style.height = `${input.scrollHeight}px`;
   }, []);
 
-  const finish = (after: 'down' | 'stay') => {
+  const finish = (after: EditDirection) => {
     if (done.current) return;
     done.current = true;
     onCommit(draft, after);
@@ -1029,8 +1175,9 @@ function BoardCellEditor({
       onKeyDown={(event) => {
         event.stopPropagation();
         if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+        if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); finish('fill'); return; }
         if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); finish('down'); return; }
-        if (event.key === 'Tab') { event.preventDefault(); finish('stay'); return; }
+        if (event.key === 'Tab') { event.preventDefault(); finish(event.shiftKey ? 'left' : 'right'); return; }
         if (event.key === 'Escape') { event.preventDefault(); done.current = true; onCancel(); }
       }}
       onBlur={() => finish('stay')}

@@ -1,4 +1,5 @@
-import { CircleCheckBig, ListTodo } from 'lucide-react';
+import { useState } from 'react';
+import { CircleCheckBig, CircleHelp, ListTodo } from 'lucide-react';
 import { useLanguage } from '../../i18n';
 import { cn } from '../../lib/utils';
 import type { BoardScope } from '../../lib/boardScope';
@@ -18,7 +19,8 @@ export function BoardScopeToggle({
   activeCount: number;
   doneCount: number;
 }) {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
+  const [showHint, setShowHint] = useState(false);
   const options: Array<[BoardScope, typeof ListTodo, string, number]> = [
     ['active', ListTodo, t('display.scopeActive'), activeCount],
     ['done', CircleCheckBig, t('display.scopeDone'), doneCount]
@@ -40,7 +42,7 @@ export function BoardScopeToggle({
               'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 active:scale-95',
               scope === value
                 ? value === 'done'
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-slate-700 text-white'
                   : 'bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900'
                 : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
             )}
@@ -57,9 +59,8 @@ export function BoardScopeToggle({
           </button>
         ))}
       </div>
-      <p className="w-full text-sm leading-relaxed text-slate-500 sm:min-w-48 sm:flex-1 dark:text-slate-400">
-        {t('display.scopeHint')}
-      </p>
+      <button type="button" aria-expanded={showHint} aria-label={lang === 'th' ? 'คำอธิบาย' : 'What is this?'} onClick={() => setShowHint((value) => !value)} className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-navy-500 dark:hover:bg-slate-800"><CircleHelp className="h-5 w-5" /></button>
+      {showHint && <p className="w-full text-sm leading-relaxed text-slate-500 dark:text-slate-400">{t('display.scopeHint')}</p>}
     </div>
   );
 }

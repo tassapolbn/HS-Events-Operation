@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Bell, CalendarDays, Clock, Import, LayoutTemplate, Layers, MapPin, Pencil, Plus,
-  Table2, Trash2, Eye, LayoutGrid, Archive
+  Table2, Trash2, Eye, LayoutGrid, Archive, ChevronDown
 } from 'lucide-react';
 import { useEvent, useEventMutations } from '../hooks/useEvents';
 import { useArchiveMutations } from '../hooks/useArchive';
@@ -45,14 +45,14 @@ type ViewMode = 'grid' | 'overview' | 'department';
 
 const VIEW_MODE_KEY = 'eventops.eventViewMode';
 
-function readViewMode(fallback: ViewMode): ViewMode {
+function readViewMode(): ViewMode | null {
   try {
     const saved = localStorage.getItem(VIEW_MODE_KEY);
     if (saved === 'grid' || saved === 'overview' || saved === 'department') return saved;
   } catch {
     // Storage can be blocked; the default is fine
   }
-  return fallback;
+  return null;
 }
 
 export function EventDetailPage() {
@@ -72,7 +72,10 @@ export function EventDetailPage() {
   const { createTask, createTasks, updateTask, deleteTask } = useTaskMutations(id);
   const { deleteSession } = useSessionMutations(id ?? '');
 
-  const [viewMode, setViewMode] = useState<ViewMode>(() => readViewMode(isEventsTeam ? 'grid' : 'overview'));
+  const [viewMode, setViewMode] = useState<ViewMode | null>(readViewMode);
+  const effectiveView = viewMode ?? (isEventsTeam ? 'grid' : 'overview');
+  const [detailsOpen, setDetailsOpen] = useState<boolean | null>(null);
+  const showDetails = detailsOpen ?? (!isEventsTeam || !event?.event_tasks.length);
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
   const [taskFormOpen, setTaskFormOpen] = useState(false);
   const [taskFormDeptId, setTaskFormDeptId] = useState<string | undefined>();
@@ -92,13 +95,7 @@ export function EventDetailPage() {
   const [deletingTask, setDeletingTask] = useState<EventTask | null>(null);
   const [notifyDeptIds, setNotifyDeptIds] = useState<string[] | null>(null);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(VIEW_MODE_KEY, viewMode);
-    } catch {
-      // ignore
-    }
-  }, [viewMode]);
+  useEffect(() => { setDetailsOpen(null); }, [id]);
 
   useEffect(() => {
     const taskId = searchParams.get('task');
@@ -113,12 +110,12 @@ export function EventDetailPage() {
   const sortedDepartments = departments ?? [];
 
   const visibleDepartments = useMemo(() => {
-    if (viewMode === 'department') {
+    if (effectiveView === 'department') {
       const targetId = selectedDeptId || profile?.department_id || sortedDepartments[0]?.id;
       return sortedDepartments.filter((d) => d.id === targetId);
     }
     return sortedDepartments;
-  }, [viewMode, selectedDeptId, sortedDepartments, profile?.department_id]);
+  }, [effectiveView, selectedDeptId, sortedDepartments, profile?.department_id]);
 
   if (isLoading) return <Spinner />;
   if (error || !event) {
@@ -288,7 +285,7 @@ export function EventDetailPage() {
     <div
       className={cn(
         'gap-4',
-        viewMode === 'overview' ? 'grid items-start md:grid-cols-2 xl:grid-cols-4' : 'grid grid-cols-1'
+        effectiveView === 'overview' ? 'grid items-start md:grid-cols-2 xl:grid-cols-4' : 'grid grid-cols-1'
       )}
     >
       {visibleDepartments.map((dept) => (
@@ -375,10 +372,13 @@ export function EventDetailPage() {
 
   const viewModeButton = (mode: ViewMode, icon: React.ReactNode, label: string) => (
     <button
-      onClick={() => setViewMode(mode)}
+      onClick={() => {
+        setViewMode(mode);
+        try { localStorage.setItem(VIEW_MODE_KEY, mode); } catch { /* Storage can be blocked. */ }
+      }}
       className={cn(
         'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
-        viewMode === mode
+        effectiveView === mode
           ? 'bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900'
           : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
       )}
@@ -466,50 +466,6 @@ export function EventDetailPage() {
         <ArchivedBanner kind="event" canRestore={isEventsTeam} restoring={restoreEvents.isPending} onRestore={handleRestore} />
       )}
 
-      {/* Timeline */}
-      <Card>
-        <CardHeader><CardTitle>{t('events.timeline')}</CardTitle></CardHeader>
-        <CardBody><EventTimeline event={event} /></CardBody>
-      </Card>
-
-      {/* Event information */}
-      {(!isRichTextEmpty(event.description) || !isRichTextEmpty(event.additional_notes) ||
-        (isEventsTeam && !isRichTextEmpty(event.internal_notes))) && (
-        <Card>
-          <CardHeader><CardTitle>{t('events.eventInfo')}</CardTitle></CardHeader>
-          <CardBody className="space-y-4">
-            {!isRichTextEmpty(event.description) && (
-              <section>
-                <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{t('events.descriptionLabel')}</h4>
-                <RichTextViewer html={event.description} />
-              </section>
-            )}
-            {!isRichTextEmpty(event.additional_notes) && (
-              <section>
-                <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{t('events.additionalNotes')}</h4>
-                <RichTextViewer html={event.additional_notes} />
-              </section>
-            )}
-            {isEventsTeam && !isRichTextEmpty(event.internal_notes) && (
-              <section className="rounded-xl border border-gold-200 bg-gold-50 p-3 dark:border-gold-900 dark:bg-gold-950/30">
-                <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gold-700 dark:text-gold-400">
-                  {t('events.internalNotes')} ({t('events.internalOnly')})
-                </h4>
-                <RichTextViewer html={event.internal_notes} />
-              </section>
-            )}
-          </CardBody>
-        </Card>
-      )}
-
-      {/* Attachments */}
-      <Card>
-        <CardHeader><CardTitle>{t('common.attachments')}</CardTitle></CardHeader>
-        <CardBody>
-          <AttachmentSection entityType="event" entityId={event.id} canManage={isEventsTeam} />
-        </CardBody>
-      </Card>
-
       {/* Department tasks header: view mode, add session, copy sessions */}
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="mr-auto text-lg font-bold text-navy-800 dark:text-white">{t('events.departmentTasks')}</h2>
@@ -528,7 +484,7 @@ export function EventDetailPage() {
           {viewModeButton('overview', <LayoutGrid className="h-3.5 w-3.5" />, t('events.viewModeOverview'))}
           {viewModeButton('department', <Eye className="h-3.5 w-3.5" />, t('events.viewModeDepartment'))}
         </div>
-        {viewMode === 'department' && (
+        {effectiveView === 'department' && (
           <select
             value={selectedDeptId || profile?.department_id || sortedDepartments[0]?.id || ''}
             onChange={(e) => setSelectedDeptId(e.target.value)}
@@ -542,7 +498,7 @@ export function EventDetailPage() {
       </div>
 
       {/* Tasks: one spreadsheet, or cards grouped by session */}
-      {viewMode === 'grid' ? (
+      {effectiveView === 'grid' ? (
         <TaskGrid
           eventId={event.id}
           eventDate={event.event_date}
@@ -553,6 +509,18 @@ export function EventDetailPage() {
           onOpenTask={(task) => setViewingTask(task)}
           onEditTask={openEditTask}
           onAddSession={() => setSessionModal({ mode: 'create', session: null })}
+          renderSessionTools={(session) => (
+            <SessionControls
+              session={session}
+              sessions={sessions}
+              tone="light"
+              onDuplicate={() => setSessionModal({ mode: 'duplicate', session })}
+              onEdit={() => setSessionModal({ mode: 'edit', session })}
+              onDelete={() => setDeletingSession(session)}
+              onNotify={() => setNotifySession(session)}
+              unsentCount={unsentTasks(event.event_tasks, session.id).length}
+            />
+          )}
         />
       ) : sessions.length === 0 ? (
         renderDepartmentGrid(event.event_tasks, null)
@@ -577,7 +545,7 @@ export function EventDetailPage() {
       )}
 
       {/* Sessions are managed from the grid view too */}
-      {viewMode === 'grid' && sessions.length > 0 && isEventsTeam && (
+      {effectiveView === 'grid' && sessions.length > 0 && isEventsTeam && (
         <div className="flex flex-wrap gap-2">
           {sessions.map((session) => (
             <div
@@ -610,6 +578,67 @@ export function EventDetailPage() {
           <p className="basis-full text-xs text-slate-400">{t('sessions.reorderHint')}</p>
         </div>
       )}
+
+      <section className="space-y-4">
+        <button
+          type="button"
+          aria-expanded={showDetails}
+          aria-controls="event-details"
+          onClick={() => setDetailsOpen(!showDetails)}
+          className="flex w-full items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left dark:border-slate-700 dark:bg-slate-900"
+        >
+          <ChevronDown className={cn('h-4 w-4 shrink-0 transition-transform', showDetails && 'rotate-180')} />
+          <span className="shrink-0 font-bold text-navy-800 dark:text-white">{lang === 'th' ? 'รายละเอียดกิจกรรม' : 'Event details'}</span>
+          <span className="min-w-0 truncate text-xs text-slate-500 dark:text-slate-400">
+            {[formatDateRange(event.event_date, event.end_date, lang), event.location, `${attachments?.length ?? 0} ${t('common.attachments')}`].filter(Boolean).join(' · ')}
+          </span>
+        </button>
+        <div id="event-details" hidden={!showDetails} className="space-y-5">
+          {/* Timeline */}
+          <Card>
+            <CardHeader><CardTitle>{t('events.timeline')}</CardTitle></CardHeader>
+            <CardBody><EventTimeline event={event} /></CardBody>
+          </Card>
+
+          {/* Event information */}
+          {(!isRichTextEmpty(event.description) || !isRichTextEmpty(event.additional_notes) ||
+            (isEventsTeam && !isRichTextEmpty(event.internal_notes))) && (
+            <Card>
+              <CardHeader><CardTitle>{t('events.eventInfo')}</CardTitle></CardHeader>
+              <CardBody className="space-y-4">
+                {!isRichTextEmpty(event.description) && (
+                  <section>
+                    <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{t('events.descriptionLabel')}</h4>
+                    <RichTextViewer html={event.description} />
+                  </section>
+                )}
+                {!isRichTextEmpty(event.additional_notes) && (
+                  <section>
+                    <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">{t('events.additionalNotes')}</h4>
+                    <RichTextViewer html={event.additional_notes} />
+                  </section>
+                )}
+                {isEventsTeam && !isRichTextEmpty(event.internal_notes) && (
+                  <section className="rounded-xl border border-gold-200 bg-gold-50 p-3 dark:border-gold-900 dark:bg-gold-950/30">
+                    <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-gold-700 dark:text-gold-400">
+                      {t('events.internalNotes')} ({t('events.internalOnly')})
+                    </h4>
+                    <RichTextViewer html={event.internal_notes} />
+                  </section>
+                )}
+              </CardBody>
+            </Card>
+          )}
+
+          {/* Attachments */}
+          <Card>
+            <CardHeader><CardTitle>{t('common.attachments')}</CardTitle></CardHeader>
+            <CardBody>
+              <AttachmentSection entityType="event" entityId={event.id} canManage={isEventsTeam} />
+            </CardBody>
+          </Card>
+        </div>
+      </section>
 
       {/* Audit history */}
       {isEventsTeam && <AuditHistory recordId={event.id} />}

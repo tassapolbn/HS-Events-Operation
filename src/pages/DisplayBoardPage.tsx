@@ -1,7 +1,9 @@
 import { searchEvents, searchRequests } from '../lib/boardSearch';
 import { useSearchParams } from 'react-router-dom';
-import { useDeferredValue, useEffect, useMemo, useState, type ComponentType } from 'react';
-import { CalendarDays, Inbox } from 'lucide-react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
+import { CalendarDays, CircleHelp, Inbox } from 'lucide-react';
+import { boardDepartmentKey, resolveBoardDepartment } from '../lib/boardDepartment';
+import { useAutoScroll } from '../hooks/useAutoScroll';
 import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../hooks/usePublicDisplay';
 import { useDisplayLiveUpdates } from '../hooks/useDisplayLiveUpdates';
 import { useBoardAnnouncements } from '../hooks/useAnnouncements';
@@ -62,7 +64,7 @@ function PanelHeading({
       </span>
       <div className="min-w-0">
         {department && (
-          <p className="truncate text-[0.65rem] font-bold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
+          <p className="truncate text-base font-extrabold" style={{ color }}>
             {deptName(department)}
           </p>
         )}
@@ -82,6 +84,42 @@ export function DisplayBoardPage({
 }) {
   const { t, lang } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
+  const [presenting, setPresenting] = useState(() => searchParams.get('tv') === '1');
+  const [showCombinedHint, setShowCombinedHint] = useState(false);
+  const restoredDepartment = useRef<string | null>(null);
+  useAutoScroll(presenting);
+  const exitPresentation = useCallback(() => {
+    setPresenting(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  }, []);
+  const togglePresentation = () => {
+    if (presenting) {
+      exitPresentation();
+      return;
+    }
+    setEditing(null);
+    setPresenting(true);
+    try {
+      void document.documentElement.requestFullscreen().catch(() => {});
+    } catch {
+      // Presentation also works in browsers that do not support fullscreen.
+    }
+  };
+  useEffect(() => {
+    if (!presenting) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') exitPresentation();
+    };
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) setPresenting(false);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+    };
+  }, [presenting, exitPresentation]);
   const requestId = searchParams.get('request') || '';
   const eventId = requestId ? '' : searchParams.get('event') || '';
   const taskId = eventId ? searchParams.get('task') || '' : '';
@@ -138,6 +176,22 @@ export function DisplayBoardPage({
   }, []);
 
   const { data: departments } = useDisplayDepartments();
+  useEffect(() => {
+    const key = boardDepartmentKey(campus);
+    if (!departments || focused || restoredDepartment.current === key) return;
+    restoredDepartment.current = key;
+    if (searchParams.has('dept')) {
+      const resolved = resolveBoardDepartment(searchParams.get('dept'), departments);
+      if (resolved !== null) setSelectedDept(resolved);
+      return;
+    }
+    try {
+      const saved = localStorage.getItem(key);
+      setSelectedDept(departments.some((dept) => dept.id === saved) ? saved! : '');
+    } catch {
+      // Storage can be blocked on a shared display.
+    }
+  }, [departments, focused, campus, searchParams]);
   const announcementsQuery = useBoardAnnouncements(campus);
   const announcements = announcementsQuery.data;
   const rawEventsQuery = useDisplayEvents(campus, eventId);
@@ -162,9 +216,10 @@ export function DisplayBoardPage({
   const exitFocus = () => { setSearchParams({}); setSelectedDept(''); setTab(requestId ? 'requests' : 'events'); setSearch(''); };
 
   const canEdit = isEventsTeam;
-  const boardEditMode = canEdit;
+  const boardEditMode = canEdit && !presenting;
   const editProps = {
     editMode: boardEditMode,
+    presenting,
     onEditEvent: (event: DisplayEvent) => setEditing({ kind: 'event', event }),
     onEditSession: (event: DisplayEvent, session: DisplaySession) => setEditing({ kind: 'session', event, session }),
     onEditTask: (event: DisplayEvent, task: DisplayTask) => setEditing({ kind: 'task', event, task })
@@ -208,7 +263,7 @@ export function DisplayBoardPage({
     return { active, done };
   })();
 
-  const scopeToggle = (
+  const scopeToggle = !presenting && (
     <BoardScopeToggle scope={scope} onChange={setScope} activeCount={scopeCounts.active} doneCount={scopeCounts.done} />
   );
 
@@ -222,7 +277,19 @@ export function DisplayBoardPage({
       onScaleChange={setScale}
       departments={departmentList}
       selectedDepartmentId={focused ? '' : selectedDept}
-      onSelectDepartment={(next) => { if (focused) setSearchParams({}); setSelectedDept(next); }}
+      onSelectDepartment={(next) => {
+        if (focused) setSearchParams({});
+        const key = boardDepartmentKey(campus);
+        restoredDepartment.current = key;
+        setSelectedDept(next);
+        try {
+          localStorage.setItem(key, next);
+        } catch {
+          // The choice still applies when storage is unavailable.
+        }
+      }}
+      presenting={presenting}
+      onTogglePresentation={togglePresentation}
       onRefresh={() => {
         eventsQuery.refetch();
         requestsQuery.refetch();
@@ -244,7 +311,7 @@ export function DisplayBoardPage({
           ))}
         </div>
       )}
-      {search.trim() && <p role="status" className="mb-4 text-sm text-slate-600">{lang === 'th' ? 'ผลการค้นหาในบอร์ดนี้' : 'Search results on this board'}: “{search}” <button className="ml-2 rounded-lg px-3 py-2 font-semibold text-navy-800 underline" onClick={() => setSearch('')}>{lang === 'th' ? 'ล้างคำค้น' : 'Clear'}</button></p>}
+      {!presenting && search.trim() && <p role="status" className="mb-4 text-sm text-slate-600">{lang === 'th' ? 'ผลการค้นหาในบอร์ดนี้' : 'Search results on this board'}: “{search}” <button className="ml-2 rounded-lg px-3 py-2 font-semibold text-navy-800 underline" onClick={() => setSearch('')}>{lang === 'th' ? 'ล้างคำค้น' : 'Clear'}</button></p>}
       {active.isError && !focused && <p role="alert" className="mb-4 rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">{lang === 'th' ? 'โหลดข้อมูลไม่สำเร็จ กรุณากดรีเฟรช' : 'Could not load work. Please refresh.'}</p>}
       {focused ? (
         <div className="space-y-5">
@@ -265,7 +332,10 @@ export function DisplayBoardPage({
       ) : combined ? (
         <div className="space-y-4">
           {scopeToggle}
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('display.combinedHint')}</p>
+          {!presenting && <div>
+            <button type="button" aria-expanded={showCombinedHint} aria-label={lang === 'th' ? 'คำอธิบาย' : 'What is this?'} onClick={() => setShowCombinedHint((value) => !value)} className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-navy-500 dark:hover:bg-slate-800"><CircleHelp className="h-5 w-5" /></button>
+            {showCombinedHint && <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{t('display.combinedHint')}</p>}
+          </div>}
           <div className="grid gap-6 xl:grid-cols-5">
             <section className="min-w-0 xl:col-span-3">
               <PanelHeading icon={CalendarDays} title={t('display.eventWork')} department={selectedDepartment} />
