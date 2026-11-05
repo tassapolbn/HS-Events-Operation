@@ -24,13 +24,13 @@ export function EventCheckStrip({ event, departments }: { event: EventWithTasks;
   const warningIcons = { 'no-jobs': ListTodo, 'no-time': Clock, 'no-place': MapPin, hidden: EyeOff };
 
   return (
-    <section aria-label={text('ตรวจงานก่อนวันงาน', 'Check before the day')} className="rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
+    <section aria-label={text('ตรวจงานก่อนวันงาน', 'Check before the day')} className="min-w-0 max-w-full rounded-xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-900">
       <div className="flex flex-wrap items-center gap-2 p-3">
-        <h3 className="text-sm font-bold text-navy-800 dark:text-white">{text('ตรวจงานก่อนวันงาน', 'Check before the day')}</h3>
-        <div className="flex flex-1 flex-wrap gap-1.5">
+        <h3 className="w-full text-sm font-bold text-navy-800 dark:text-white sm:w-auto">{text('ตรวจงานก่อนวันงาน', 'Check before the day')}</h3>
+        <div className="flex w-full min-w-0 flex-wrap gap-1.5 sm:w-auto sm:flex-1">
           {departments.map((department) => (
-            <span key={department.id} className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-              <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ backgroundColor: department.color }} />
+            <span key={department.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-700 [overflow-wrap:anywhere] dark:bg-slate-800 dark:text-slate-200">
+              <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: department.color }} />
               {deptName(department)} <strong className="tabular-nums">{totals[department.id].total}</strong>
             </span>
           ))}
@@ -41,12 +41,14 @@ export function EventCheckStrip({ event, departments }: { event: EventWithTasks;
             {text(`ควรตรวจสอบ ${warningCount} รายการ`, `${warningCount} warnings`)}
           </span>
         )}
-        <a href={`/display/${event.campus.toLowerCase()}?event=${event.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-navy-800 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 dark:text-slate-200 dark:hover:bg-slate-800">
-          <Monitor aria-hidden="true" className="h-4 w-4" /> {text('ดูบนบอร์ด', 'Open on board')}
-        </a>
-        <button type="button" aria-expanded={expanded} aria-controls={tableId} aria-label={text('แสดงหรือซ่อนรายละเอียดการตรวจงาน', 'Show or hide check details')} onClick={() => setExpanded(!expanded)} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 dark:text-slate-300 dark:hover:bg-slate-800">
-          <ChevronDown aria-hidden="true" className={`h-4 w-4 ${expanded ? 'rotate-180' : ''}`} />
-        </button>
+        <div className="flex w-full min-w-0 items-center justify-between gap-2 sm:w-auto">
+          <a href={`/display/${event.campus.toLowerCase()}?event=${event.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold text-navy-800 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 dark:text-slate-200 dark:hover:bg-slate-800">
+            <Monitor aria-hidden="true" className="h-4 w-4" /> {text('ดูบนบอร์ด', 'Open on board')}
+          </a>
+          <button type="button" aria-expanded={expanded} aria-controls={tableId} aria-label={text('แสดงหรือซ่อนรายละเอียดการตรวจงาน', 'Show or hide check details')} onClick={() => setExpanded(!expanded)} className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 dark:text-slate-300 dark:hover:bg-slate-800">
+            <ChevronDown aria-hidden="true" className={`h-4 w-4 ${expanded ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
       </div>
       <div id={tableId} hidden={!expanded} className="overflow-x-auto border-t border-slate-200 dark:border-slate-700">
         <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200">

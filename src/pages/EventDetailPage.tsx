@@ -56,6 +56,25 @@ function readViewMode(): ViewMode | null {
   return null;
 }
 
+function useWideScreen() {
+  const [wideScreen, setWideScreen] = useState(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(min-width: 768px)').matches
+      : false
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const media = window.matchMedia('(min-width: 768px)');
+    const update = () => setWideScreen(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+
+  return wideScreen;
+}
+
 export function EventDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -74,7 +93,8 @@ export function EventDetailPage() {
   const { deleteSession } = useSessionMutations(id ?? '');
 
   const [viewMode, setViewMode] = useState<ViewMode | null>(readViewMode);
-  const effectiveView = viewMode ?? (isEventsTeam ? 'grid' : 'overview');
+  const wideScreen = useWideScreen();
+  const effectiveView = viewMode ?? (isEventsTeam && wideScreen ? 'grid' : 'overview');
   const [detailsOpen, setDetailsOpen] = useState<boolean | null>(null);
   const showDetails = detailsOpen ?? (!isEventsTeam || !event?.event_tasks.length);
   const [selectedDeptId, setSelectedDeptId] = useState<string>('');
@@ -332,21 +352,21 @@ export function EventDetailPage() {
     const sessionTasks = event.event_tasks.filter((task) => task.session_id === session.id);
     const done = sessionTasks.filter((task) => task.status === 'completed').length;
     return (
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl bg-gradient-to-r from-navy-800 to-navy-600 px-4 py-3 text-white shadow-sm dark:from-navy-900 dark:to-navy-700">
+      <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5 rounded-2xl bg-gradient-to-r from-navy-800 to-navy-600 px-4 py-3 text-white shadow-sm dark:from-navy-900 dark:to-navy-700">
         <Layers className="h-4 w-4 text-gold-400" />
-        <span className="text-sm font-extrabold">
+        <span className="min-w-0 max-w-full break-words text-sm font-extrabold">
           {session.title || formatDate(session.session_date, lang, 'EEEE d MMMM')}
         </span>
-        <span className="flex items-center gap-1.5 text-xs text-white/80">
+        <span className="flex min-w-0 max-w-full items-center gap-1.5 text-xs text-white/80 [&>svg]:shrink-0">
           <CalendarDays className="h-3.5 w-3.5" /> {formatDate(session.session_date, lang)}
         </span>
         {session.location && (
-          <span className="flex items-center gap-1.5 text-xs text-white/80">
-            <MapPin className="h-3.5 w-3.5" /> {session.location}
+          <span className="flex min-w-0 max-w-full items-center gap-1.5 text-xs text-white/80 [&>svg]:shrink-0">
+            <MapPin className="h-3.5 w-3.5" /> <span className="min-w-0 [overflow-wrap:anywhere]">{session.location}</span>
           </span>
         )}
         {session.start_time && (
-          <span className="flex items-center gap-1.5 text-xs text-white/80">
+          <span className="flex min-w-0 max-w-full items-center gap-1.5 text-xs text-white/80 [&>svg]:shrink-0">
             <Clock className="h-3.5 w-3.5" /> {formatTime(session.start_time, lang)}
             {session.end_time && <> - {formatTime(session.end_time, lang)}</>}
           </span>
@@ -356,16 +376,18 @@ export function EventDetailPage() {
           {done}/{sessionTasks.length}
         </span>
         {isEventsTeam && (
-          <SessionControls
-            session={session}
-            sessions={sessions}
-            tone="dark"
-            onDuplicate={() => setSessionModal({ mode: 'duplicate', session })}
-            onEdit={() => setSessionModal({ mode: 'edit', session })}
-            onDelete={() => setDeletingSession(session)}
-            onNotify={() => setNotifySession(session)}
-            unsentCount={unsentTasks(event.event_tasks, session.id).length}
-          />
+          <div className="w-full min-w-0 sm:w-auto">
+            <SessionControls
+              session={session}
+              sessions={sessions}
+              tone="dark"
+              onDuplicate={() => setSessionModal({ mode: 'duplicate', session })}
+              onEdit={() => setSessionModal({ mode: 'edit', session })}
+              onDelete={() => setDeletingSession(session)}
+              onNotify={() => setNotifySession(session)}
+              unsentCount={unsentTasks(event.event_tasks, session.id).length}
+            />
+          </div>
         )}
       </div>
     );
@@ -373,45 +395,49 @@ export function EventDetailPage() {
 
   const viewModeButton = (mode: ViewMode, icon: React.ReactNode, label: string) => (
     <button
+      type="button"
+      aria-label={label}
+      title={label}
+      aria-pressed={effectiveView === mode}
       onClick={() => {
         setViewMode(mode);
         try { localStorage.setItem(VIEW_MODE_KEY, mode); } catch { /* Storage can be blocked. */ }
       }}
       className={cn(
-        'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors',
+        'flex min-h-10 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 sm:min-h-0 sm:flex-none sm:px-3',
         effectiveView === mode
           ? 'bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900'
           : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
       )}
     >
-      {icon} {label}
+      {icon} <span className="hidden min-[400px]:inline">{label}</span>
     </button>
   );
 
   return (
-    <div className="animate-fade-in space-y-5">
-      {/* Sticky event header */}
+    <div className="min-w-0 max-w-full animate-fade-in space-y-5">
+      {/* Keep the event header in the flow on phones */}
       <div
-        className="sticky top-16 z-10 -mx-4 border-b border-slate-200 bg-white/90 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 lg:-mx-8 lg:px-8"
+        className="border-b border-slate-200 px-0 py-3 dark:border-slate-800 md:sticky md:top-16 md:z-10 md:-mx-4 md:bg-white/90 md:px-4 md:backdrop-blur md:dark:bg-slate-950/90 lg:-mx-8 lg:px-8"
         style={{ borderTop: `4px solid ${event.header_color || '#1a3c5e'}` }}
       >
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="mx-auto grid max-w-7xl grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-2 lg:flex lg:flex-wrap">
           <Link to={isArchived ? '/archive' : '/events'} className="no-print">
-            <Button variant="ghost" size="sm"><ArrowLeft className="h-4 w-4" /></Button>
+            <Button variant="ghost" size="sm" className="min-h-10 md:min-h-0" aria-label={t('common.back')}><ArrowLeft className="h-4 w-4" /></Button>
           </Link>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-bold text-navy-800 dark:text-white sm:text-xl">{event.name}</h1>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-slate-500 dark:text-slate-400">
-              <span className="inline-flex items-center gap-1">
+          <div className="contents lg:block lg:min-w-0 lg:flex-1">
+            <h1 title={event.name} className="min-w-0 line-clamp-2 break-words text-lg font-bold text-navy-800 dark:text-white sm:text-xl md:line-clamp-1">{event.name}</h1>
+            <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+              <span className="inline-flex min-w-0 max-w-full items-center gap-1 [&>svg]:shrink-0">
                 <CalendarDays className="h-3.5 w-3.5" /> {formatDateRange(event.event_date, event.end_date, lang)}
               </span>
               {event.location && (
-                <span className="inline-flex items-center gap-1">
-                  <MapPin className="h-3.5 w-3.5" /> {event.location}
+                <span className="inline-flex min-w-0 max-w-full items-center gap-1 [&>svg]:shrink-0">
+                  <MapPin className="h-3.5 w-3.5" /> <span className="min-w-0 [overflow-wrap:anywhere]">{event.location}</span>
                 </span>
               )}
               {event.event_start && (
-                <span className="inline-flex items-center gap-1">
+                <span className="inline-flex min-w-0 max-w-full items-center gap-1 [&>svg]:shrink-0">
                   <Clock className="h-3.5 w-3.5" /> {formatTime(event.event_start, lang)}
                   {event.event_finish && <> - {formatTime(event.event_finish, lang)}</>}
                 </span>
@@ -419,20 +445,21 @@ export function EventDetailPage() {
               <Badge className="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 {t(`categories.${event.category}` as never)}
               </Badge>
+              <span className="lg:hidden"><EventStatusBadge status={event.status} /></span>
             </div>
             {/* Who to ask, right under the name of the thing being asked about */}
-            <EventContacts contacts={event.contacts} className="mt-1.5" />
+            <EventContacts contacts={event.contacts} className="col-span-2 min-w-0 lg:mt-1.5" />
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="hidden items-center gap-1.5 lg:flex">
             <EventStatusBadge status={event.status} />
           </div>
           {isEventsTeam && (
-            <div className="no-print flex items-center gap-1.5">
+            <div className="no-print col-span-2 flex min-w-0 flex-wrap items-center gap-1.5 [&_button]:min-h-10 lg:[&_button]:min-h-0">
               <Button variant="gold" size="sm" onClick={() => { setNotifyDeptIds(null); setNotifyOpen(true); }}>
-                <Bell className="h-4 w-4" /> <span className="hidden sm:inline">{t('events.notify')}</span>
+                <Bell className="h-4 w-4" /> <span>{t('events.notify')}</span>
               </Button>
               <Link to={`/events/${event.id}/edit`}>
-                <Button variant="outline" size="sm"><Pencil className="h-4 w-4" /> <span className="hidden sm:inline">{t('common.edit')}</span></Button>
+                <Button variant="outline" size="sm"><Pencil className="h-4 w-4" /> <span>{t('common.edit')}</span></Button>
               </Link>
               <Button variant="outline" size="sm" onClick={() => setTemplateOpen(true)} title={t('events.saveAsTemplate')}>
                 <LayoutTemplate className="h-4 w-4" />
@@ -469,18 +496,18 @@ export function EventDetailPage() {
 
       {/* Department tasks header: view mode, add session, copy sessions */}
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="mr-auto text-lg font-bold text-navy-800 dark:text-white">{t('events.departmentTasks')}</h2>
+        <h2 className="mr-auto w-full text-lg font-bold text-navy-800 dark:text-white sm:w-auto">{t('events.departmentTasks')}</h2>
         {isEventsTeam && (
-          <>
+          <div className="flex w-full min-w-0 flex-wrap gap-2 sm:w-auto">
             <Button variant="outline" size="sm" onClick={() => setSessionModal({ mode: 'create', session: null })}>
               <Plus className="h-4 w-4" /> {t('sessions.addSession')}
             </Button>
             <Button variant="outline" size="sm" onClick={() => setImportOpen(true)} title={t('sessions.importTitle')}>
-              <Import className="h-4 w-4" /> <span className="hidden sm:inline">{t('sessions.copyFromEvent')}</span>
+              <Import className="h-4 w-4" /> <span>{t('sessions.copyFromEvent')}</span>
             </Button>
-          </>
+          </div>
         )}
-        <div className="flex rounded-xl border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex w-full min-w-0 rounded-xl border border-slate-200 bg-white p-1 sm:w-auto dark:border-slate-700 dark:bg-slate-900">
           {viewModeButton('grid', <Table2 className="h-3.5 w-3.5" />, t('events.viewModeGrid'))}
           {viewModeButton('overview', <LayoutGrid className="h-3.5 w-3.5" />, t('events.viewModeOverview'))}
           {viewModeButton('department', <Eye className="h-3.5 w-3.5" />, t('events.viewModeDepartment'))}
@@ -489,7 +516,8 @@ export function EventDetailPage() {
           <select
             value={selectedDeptId || profile?.department_id || sortedDepartments[0]?.id || ''}
             onChange={(e) => setSelectedDeptId(e.target.value)}
-            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-900"
+            aria-label={t('common.department')}
+            className="w-full min-w-0 max-w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm sm:w-auto dark:border-slate-700 dark:bg-slate-900"
           >
             {sortedDepartments.map((d) => (
               <option key={d.id} value={d.id}>{deptName(d)}</option>
@@ -554,7 +582,7 @@ export function EventDetailPage() {
             <div
               key={session.id}
               className={cn(
-                'flex items-center gap-1.5 rounded-xl border bg-white px-2.5 py-1.5 text-xs dark:bg-slate-900',
+                'flex min-w-0 max-w-full flex-wrap items-center gap-1.5 rounded-xl border bg-white px-2.5 py-1.5 text-xs dark:bg-slate-900',
                 session.is_hidden
                   ? 'border-amber-300 dark:border-amber-700'
                   : 'border-slate-200 dark:border-slate-700'
@@ -562,7 +590,7 @@ export function EventDetailPage() {
               style={{ borderLeft: `4px solid ${sessionColor(sessions, session.id)}` }}
             >
               <Layers className="h-3.5 w-3.5" style={{ color: sessionColor(sessions, session.id) }} />
-              <span className="font-semibold text-slate-700 dark:text-slate-200">
+              <span className="min-w-0 max-w-full [overflow-wrap:anywhere] font-semibold text-slate-700 dark:text-slate-200">
                 {session.title || formatDate(session.session_date, lang, 'd MMM')}
               </span>
               {session.is_hidden && <HiddenSessionBadge tone="light" />}

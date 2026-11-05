@@ -36,26 +36,28 @@ export function EventContacts({
       : 'underline decoration-slate-400 underline-offset-2 hover:text-navy-700 dark:hover:text-gold-300';
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-2', className)} data-event-contacts={people.length}>
+    <div className={cn('flex min-w-0 max-w-full flex-wrap items-center gap-2', className)} data-event-contacts={people.length}>
       <span className={cn('text-[0.7rem] font-extrabold uppercase tracking-wider', quiet)}>
         {t('events.contactsOnBoard')}
       </span>
       {people.map((person, index) => (
         <span
           key={`${person.name}-${index}`}
-          className={cn('inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-0.5 rounded-xl px-2.5 py-1 text-sm font-bold', chip)}
+          className={cn('inline-flex w-full min-w-0 max-w-full flex-col items-start gap-x-2 gap-y-0.5 rounded-xl px-2.5 py-1 text-sm font-bold md:w-auto md:flex-row md:flex-wrap md:items-center', chip)}
         >
-          <UserRound className={cn('h-3.5 w-3.5 shrink-0', quiet)} />
-          <span className="break-words">{person.name}</span>
-          {person.role && <span className={cn('text-xs font-semibold', quiet)}>{person.role}</span>}
+          <span className="flex min-w-0 max-w-full items-center gap-2 [overflow-wrap:anywhere]">
+            <UserRound className={cn('h-3.5 w-3.5 shrink-0', quiet)} />
+            <span className="min-w-0 [overflow-wrap:anywhere]">{person.name}</span>
+            {person.role && <span className={cn('min-w-0 text-xs font-semibold', quiet)}>{person.role}</span>}
+          </span>
           {person.phone && (
-            <a href={`tel:${person.phone.replace(/\s+/g, '')}`} className={cn('inline-flex items-center gap-1 text-xs font-semibold tabular-nums', link)}>
-              <Phone className="h-3 w-3" /> {person.phone}
+            <a href={`tel:${person.phone.replace(/\s+/g, '')}`} className={cn('inline-flex min-h-9 min-w-0 max-w-full items-center gap-1 rounded px-1 py-1 text-xs font-semibold tabular-nums focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current md:min-h-0 md:p-0', link)}>
+              <Phone className="h-3 w-3 shrink-0" /> <span className="min-w-0 break-all">{person.phone}</span>
             </a>
           )}
           {person.email && (
-            <a href={`mailto:${person.email}`} className={cn('inline-flex items-center gap-1 text-xs font-semibold', link)}>
-              <Mail className="h-3 w-3" /> {person.email}
+            <a href={`mailto:${person.email}`} className={cn('inline-flex min-h-9 min-w-0 max-w-full items-center gap-1 rounded px-1 py-1 text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current md:min-h-0 md:p-0', link)}>
+              <Mail className="h-3 w-3 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{person.email}</span>
             </a>
           )}
         </span>
