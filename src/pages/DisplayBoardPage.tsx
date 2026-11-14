@@ -1,7 +1,7 @@
 import { searchEvents, searchRequests } from '../lib/boardSearch';
 import { useSearchParams } from 'react-router-dom';
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
-import { CalendarDays, CircleHelp, Inbox, Printer } from 'lucide-react';
+import { CalendarDays, Inbox, Printer } from 'lucide-react';
 import { boardDepartmentKey, resolveBoardDepartment } from '../lib/boardDepartment';
 import { useAutoScroll } from '../hooks/useAutoScroll';
 import { useDisplayDepartments, useDisplayEvents, useDisplayRequests } from '../hooks/usePublicDisplay';
@@ -89,7 +89,6 @@ export function DisplayBoardPage({
   const { t, lang } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const [presenting, setPresenting] = useState(() => searchParams.get('tv') === '1');
-  const [showCombinedHint, setShowCombinedHint] = useState(false);
   const restoredDepartment = useRef<string | null>(null);
   const autoScroll = useAutoScroll(presenting);
   const exitPresentation = useCallback(() => {
@@ -275,7 +274,10 @@ export function DisplayBoardPage({
   })();
 
   const scopeToggle = !presenting && (
-    <BoardScopeToggle scope={scope} onChange={setScope} activeCount={scopeCounts.active} doneCount={scopeCounts.done} />
+    <BoardScopeToggle scope={scope} onChange={setScope} activeCount={scopeCounts.active} doneCount={scopeCounts.done}
+      extraHint={combined ? t('display.combinedHint') : undefined}
+      inline={!combined && tab === 'events'}
+    />
   );
 
   return (
@@ -349,10 +351,6 @@ export function DisplayBoardPage({
       ) : combined ? (
         <div className="space-y-4">
           {scopeToggle}
-          {!presenting && <div>
-            <button type="button" aria-expanded={showCombinedHint} aria-label={lang === 'th' ? 'คำอธิบาย' : 'What is this?'} onClick={() => setShowCombinedHint((value) => !value)} className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-navy-500 dark:hover:bg-slate-800"><CircleHelp className="h-5 w-5" /></button>
-            {showCombinedHint && <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{t('display.combinedHint')}</p>}
-          </div>}
           <div className="grid gap-6 xl:grid-cols-5">
             <section className="min-w-0 xl:col-span-3">
               <div className="flex flex-wrap items-center justify-between gap-x-3">
@@ -389,8 +387,8 @@ export function DisplayBoardPage({
         </div>
       ) : tab === 'events' ? (
         <div className="space-y-5">
-          {scopeToggle}
           <EventsBoard
+            toolbarStart={scopeToggle}
             events={eventsQuery.data}
             departments={departmentList}
             selectedDept={selectedDept}

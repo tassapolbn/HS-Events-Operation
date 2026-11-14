@@ -14,14 +14,16 @@ import type { EventContact } from '../../types';
 export function EventContacts({
   contacts,
   tone = 'plain',
+  compact = false,
   className
 }: {
   contacts: EventContact[] | undefined;
   /** 'onDark' sits on a coloured event bar, 'plain' on a white card */
   tone?: 'onDark' | 'plain';
+  compact?: boolean;
   className?: string;
 }) {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const people = (contacts ?? []).filter((item) => item.name?.trim());
   if (people.length === 0) return null;
 
@@ -34,6 +36,38 @@ export function EventContacts({
     tone === 'onDark'
       ? 'underline decoration-white/40 underline-offset-2 hover:decoration-white'
       : 'underline decoration-slate-400 underline-offset-2 hover:text-navy-700 dark:hover:text-gold-300';
+
+  if (compact) {
+    const compactLink = 'inline-flex h-9 w-9 shrink-0 items-center justify-center gap-1 rounded-full bg-white text-navy-800 ring-1 ring-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-current md:h-auto md:w-auto md:min-w-0 md:shrink md:bg-transparent md:ring-0 md:underline md:decoration-slate-400 md:underline-offset-2 hover:text-navy-700 dark:hover:text-gold-300';
+    return (
+      <div className={cn('flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1', className)} data-event-contacts={people.length}>
+        {people.map((person, index) => (
+          <span key={`${person.name}-${index}`} className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm font-bold text-slate-700 dark:text-slate-200">
+            {index === 0 && <span className="mr-1.5 text-[0.7rem] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-400">{t('events.contactsOnBoard')}</span>}
+            <UserRound className="h-3.5 w-3.5 shrink-0 text-slate-600 dark:text-slate-400" />
+            <span className="min-w-0 [overflow-wrap:anywhere]">{person.name}</span>
+            {person.role && <span className="min-w-0 text-xs font-semibold text-slate-600 [overflow-wrap:anywhere] dark:text-slate-400">{person.role}</span>}
+            {(person.phone || person.email) && (
+              <span className="inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                {person.phone && (
+                  <a href={`tel:${person.phone.replace(/\s+/g, '')}`} className={cn(compactLink, 'text-xs font-semibold tabular-nums')}
+                    aria-label={`${lang === 'th' ? 'โทรหา' : 'Call'} ${person.name}: ${person.phone}`} title={person.phone}>
+                    <Phone className="h-4 w-4 shrink-0 md:h-3 md:w-3" /><span className="hidden min-w-0 break-all md:inline">{person.phone}</span>
+                  </a>
+                )}
+                {person.email && (
+                  <a href={`mailto:${person.email}`} className={cn(compactLink, 'text-xs font-semibold')}
+                    aria-label={`${lang === 'th' ? 'อีเมลถึง' : 'Email'} ${person.name}: ${person.email}`} title={person.email}>
+                    <Mail className="h-4 w-4 shrink-0 md:h-3 md:w-3" /><span className="hidden min-w-0 [overflow-wrap:anywhere] md:inline">{person.email}</span>
+                  </a>
+                )}
+              </span>
+            )}
+          </span>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className={cn('flex min-w-0 max-w-full flex-wrap items-center gap-2', className)} data-event-contacts={people.length}>

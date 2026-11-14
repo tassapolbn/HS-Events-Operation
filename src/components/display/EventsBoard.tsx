@@ -54,6 +54,7 @@ interface EventsBoardProps {
   isLoading: boolean;
   /** 'active' hides finished work and days already gone; 'done' shows only those */
   scope?: BoardScope;
+  toolbarStart?: ReactNode;
   focusEventId?: string;
   focusTaskId?: string;
   /** Live editing: pencils appear on events, sessions and tasks when true */
@@ -72,6 +73,7 @@ export function EventsBoard({
   selectedDept,
   isLoading,
   scope = 'active',
+  toolbarStart,
   focusEventId = '',
   focusTaskId = '',
   editMode,
@@ -252,11 +254,14 @@ export function EventsBoard({
     });
   };
 
-  if (isLoading) return <BoardSkeleton />;
+  if (isLoading) return <div className="space-y-6">{!presenting && <div className="flex flex-wrap items-center gap-x-4 gap-y-2">{toolbarStart}</div>}<BoardSkeleton /></div>;
   if (!events || events.length === 0) {
     return (
-      <div className="mx-auto max-w-xl py-16">
-        <EmptyState icon={CalendarDays} message={t('display.noEvents')} />
+      <div className="space-y-6">
+        {!presenting && <div className="flex flex-wrap items-center gap-x-4 gap-y-2">{toolbarStart}</div>}
+        <div className="mx-auto max-w-xl py-16">
+          <EmptyState icon={CalendarDays} message={t('display.noEvents')} />
+        </div>
       </div>
     );
   }
@@ -420,7 +425,7 @@ export function EventsBoard({
         title={lang === 'th' ? 'ยกเลิกการรับทราบ เช่น ถ้ากดผิดแผนก' : 'Take the acknowledgement back, for example if it was pressed by mistake'}
         aria-label={lang === 'th' ? 'ยกเลิกการรับทราบ' : 'Undo acknowledgement'}
         className={cn(
-          'inline-flex shrink-0 items-center gap-1 text-xs font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-60',
+          'inline-flex min-h-9 shrink-0 items-center gap-1 text-xs font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-60',
           tone === 'panel'
             ? 'rounded-md px-1.5 py-0.5 text-slate-500 hover:bg-white hover:text-red-700 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-red-300'
             : 'rounded-full border border-slate-300 bg-white px-2 py-1 text-slate-600 hover:bg-slate-50 hover:text-red-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300'
@@ -447,7 +452,7 @@ export function EventsBoard({
         disabled={busy}
         onClick={() => acknowledge(pending.map((task) => task.id))}
         className={cn(
-          'inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-60',
+          'inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-60',
           partial
             ? 'bg-gold-400 text-navy-900 hover:bg-gold-300'
             : 'border border-slate-300 bg-white text-navy-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
@@ -467,12 +472,12 @@ export function EventsBoard({
     const { action, said, undo } = ackParts(deptTasks, 'card');
     if (!action && !said) return null;
     return (
-      <span className="inline-flex flex-wrap items-center gap-1">
+      <span className="inline-flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1">
         {said && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+          <span className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-2xl bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
             <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            {said.text}
-            {said.time && <span className="tabular-nums">{said.time}</span>}
+            <span className="min-w-0 [overflow-wrap:anywhere]">{said.text}</span>
+            {said.time && <span className="shrink-0 tabular-nums">{said.time}</span>}
           </span>
         )}
         {undo}
@@ -485,13 +490,15 @@ export function EventsBoard({
    * Who acknowledged, on its own slim line under a department panel's header,
    * so the header keeps room for the department's name and count.
    */
-  const renderAckLine = (said: { text: string; time: string } | null, undo: ReactNode): ReactNode =>
-    said && (
-      <div className="flex items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-1 text-xs dark:border-slate-800 dark:bg-slate-800/40">
-        <CheckCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-        <span className="min-w-0 truncate font-bold text-slate-600 dark:text-slate-300">{said.text}</span>
-        {said.time && <span className="shrink-0 font-semibold tabular-nums text-slate-500 dark:text-slate-400">{said.time}</span>}
-        <span className="ml-auto shrink-0">{undo}</span>
+  const renderAckLine = (said: { text: string; time: string } | null, undo: ReactNode, action: ReactNode): ReactNode =>
+    (said || action) && (
+      <div className="flex min-h-9 flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-1.5 text-xs dark:border-slate-800 dark:bg-slate-800/40">
+        {said && <>
+          <CheckCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+          <span className="min-w-0 truncate font-bold text-slate-600 dark:text-slate-300">{said.text}</span>
+          {said.time && <span className="shrink-0 font-semibold tabular-nums text-slate-500 dark:text-slate-400">{said.time}</span>}
+        </>}
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">{undo}{action}</span>
       </div>
     );
 
@@ -590,6 +597,7 @@ export function EventsBoard({
     );
     // A block with no jobs at all shows nothing, rather than a row of empty lanes
     if (visibleDepts.length === 0) return null;
+    const template = lanes.map((dept) => tasks.some((task) => task.department_id === dept.id) ? 'minmax(0,1fr)' : 'max-content').join(' ');
     const colClass =
       selectedDept || visibleDepts.length === 1
         ? 'grid-cols-1'
@@ -599,16 +607,15 @@ export function EventsBoard({
 
     return (
       <div
-        className={cn('grid items-start gap-4', colClass, !selectedDept && 'xl:[grid-template-columns:repeat(var(--lanes),minmax(0,1fr))]')}
-        style={{ '--lanes': lanes.length } as React.CSSProperties}
+        className={cn('grid items-start gap-4', colClass, !selectedDept && 'xl:[grid-template-columns:var(--lane-cols)]')}
+        style={{ '--lane-cols': template } as React.CSSProperties}
       >
         {(selectedDept ? visibleDepts : lanes).map((dept, deptIndex) => {
           const Icon = departmentIcon(dept.icon);
           const deptTasks = tasks.filter((task) => task.department_id === dept.id);
           if (deptTasks.length === 0) return (
-            <div key={dept.id} aria-hidden="true" className="hidden min-h-14 items-center gap-2 rounded-2xl border border-dashed border-slate-200 px-4 py-3 text-slate-300 xl:flex dark:border-slate-700 dark:text-slate-600">
+            <div key={dept.id} aria-hidden="true" title={deptName(dept)} className="hidden h-11 w-11 items-center justify-center rounded-xl border border-dashed border-slate-200 text-slate-300 xl:flex dark:border-slate-700 dark:text-slate-600">
               <Icon className="h-5 w-5 shrink-0" />
-              <span className="truncate text-sm font-semibold">{deptName(dept)}</span>
             </div>
           );
           const done = deptTasks.filter((task) => task.status === 'completed').length;
@@ -647,10 +654,9 @@ export function EventsBoard({
                 >
                   <Icon className="h-5 w-5" />
                 </span>
-                <h3 className="min-w-0 flex-1 truncate text-[0.95rem] font-extrabold text-[color:var(--dept-ink)] dark:text-[color:var(--dept-ink-dark)]">
+                <h3 className="min-w-0 flex-1 break-words text-[0.95rem] font-extrabold leading-tight text-[color:var(--dept-ink)] dark:text-[color:var(--dept-ink-dark)]">
                   {deptName(dept)}
                 </h3>
-                {ack.action}
                 <span
                   key={bump.key}
                   className={cn(
@@ -665,7 +671,7 @@ export function EventsBoard({
                 </span>
               </div>
               {renderProgress(deptTasks, dept.color)}
-              {renderAckLine(ack.said, ack.undo)}
+              {renderAckLine(ack.said, ack.undo, ack.action)}
 
               {renderJobList(deptTasks, evt, `${blockKey}:${dept.id}`)}
             </div>
@@ -697,7 +703,7 @@ export function EventsBoard({
     return (
       <div
         data-session-bar={session.id}
-        className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border-l-[6px] bg-white px-4 py-3.5 text-navy-900 shadow-sm ring-1 ring-slate-200 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700"
+        className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl border-l-[6px] bg-white px-4 py-3.5 text-navy-900 shadow-sm ring-1 ring-slate-200 sm:gap-x-4 dark:bg-slate-900 dark:text-slate-100 dark:ring-slate-700"
         style={{ borderLeftColor: day.solid }}
       >
         {byDate ? (
@@ -744,9 +750,9 @@ export function EventsBoard({
             </span>
           </span>
         )}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-[1_1_5rem] break-words">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="text-lg font-extrabold tracking-tight">
+            <span className="min-w-0 max-w-full text-lg font-extrabold tracking-tight [overflow-wrap:anywhere]">
               {placeAsHeading ? (
                 <BoardEditableText entity="session" id={session.id} eventId={evt.id} field="location" value={session.location} label={t('common.location')} />
               ) : (
@@ -798,13 +804,13 @@ export function EventsBoard({
             )}
           </div>
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2 self-start sm:self-center">
           {editMode && (
             <button
               onClick={() => onEditSession?.(evt, session)}
               title={t('sessions.editSession')}
               aria-label={t('sessions.editSession')}
-              className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition-all hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 dark:bg-slate-800 dark:text-slate-300"
+              className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition-all hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 dark:bg-slate-800 dark:text-slate-300"
             >
               <Pencil className="h-4 w-4" />
             </button>
@@ -971,9 +977,15 @@ export function EventsBoard({
     );
     const headerColor = evt.header_color || '#1a3c5e';
     const headerText = evt.header_text_color || '#ffffff';
+    const stripStyle = { backgroundColor: headerColor + '12', borderBottom: `1px solid ${headerColor}2e` };
     const CategoryIcon = categoryIcon(evt.category);
     const dayBadge = eventDayBadge(evt, date);
     const plans = evt.attachments.filter((file) => file.mime_type.startsWith('image/') && !(evt.sessions ?? []).some(session => session.floor_plan_attachment_id === file.id));
+    const contactsStrip = evt.contacts?.some((contact) => contact.name?.trim()) && (
+      <div className="px-3 py-1.5 sm:px-4" style={stripStyle}>
+        <EventContacts contacts={evt.contacts} tone="plain" compact />
+      </div>
+    );
 
     if (selectedDept) return (
       <div key={group.blocks[0].key} data-timeline-event={evt.id} className="space-y-3">
@@ -983,64 +995,73 @@ export function EventsBoard({
           const overdue = overdueCount(session, date, tasks);
           const deptColor = departments.find((dept) => dept.id === selectedDept)?.color ?? headerColor;
           const bump = bumpKey(tasks);
+          const ack = renderAck(tasks);
+          const timeChip = session ? (
+            (session.start_time || session.end_time || session.time_note) && (
+              <FactChip icon={Clock} tone="strong">
+                <span className="flex flex-wrap items-baseline gap-x-2">
+                  {(session.start_time || session.end_time) && <span className="font-black tabular-nums">{session.start_time ? formatTime(session.start_time, lang) : '—'}{session.end_time && <> - {formatTime(session.end_time, lang)}</>}</span>}
+                  {session.time_note && <BoardEditableText entity="session" id={session.id} eventId={evt.id} field="time_note" value={session.time_note} label={t('common.notes')} />}
+                </span>
+              </FactChip>
+            )
+          ) : (
+            evt.event_start && <FactChip icon={Clock} tone="strong"><span className="font-black tabular-nums">{formatTime(evt.event_start, lang)}{evt.event_finish && <> - {formatTime(evt.event_finish, lang)}</>}</span></FactChip>
+          );
           return (
             <section key={block.key} className="relative overflow-hidden rounded-2xl bg-white ring-1 ring-slate-200 dark:bg-slate-900 dark:ring-slate-700">
               {renderStamp(tasks)}
               {/* The event's own colour, as the Events team chose it for its header */}
               <div
-                className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3"
+                className="flex flex-wrap items-start gap-2.5 gap-y-1.5 px-3 py-2 sm:px-4"
                 style={{
                   background: 'linear-gradient(120deg, ' + headerColor + ' 0%, ' + darkenColor(headerColor, 0.82) + ' 100%)',
                   color: headerText
                 }}
               >
-                {/* The time leads, so a department reads its day in order */}
-                {session ? (
-                  (session.start_time || session.end_time || session.time_note) && (
-                    <FactChip icon={Clock} tone="strong">
-                      <span className="flex flex-wrap items-baseline gap-x-2">
-                        {(session.start_time || session.end_time) && <span className="font-black tabular-nums">{session.start_time ? formatTime(session.start_time, lang) : '—'}{session.end_time && <> - {formatTime(session.end_time, lang)}</>}</span>}
-                        {session.time_note && <BoardEditableText entity="session" id={session.id} eventId={evt.id} field="time_note" value={session.time_note} label={t('common.notes')} />}
+                <div className="contents sm:flex sm:min-w-0 sm:flex-[1_1_12rem] sm:flex-wrap sm:items-center sm:gap-x-2.5 sm:gap-y-1.5">
+                  {/* The time leads, so a department reads its day in order */}
+                  {timeChip}
+                  <div className={cn('flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5 sm:contents', timeChip ? 'order-last w-full' : 'flex-[1_1_12rem]')}>
+                    <h3 className="min-w-0 break-words text-base font-extrabold leading-tight" style={{ color: headerText }}>
+                      <BoardEditableText entity="event" id={evt.id} eventId={evt.id} field="name" value={evt.name} label={t('events.eventName')} />
+                    </h3>
+                    {session ? session.title && (
+                      <span className="min-w-0 break-words font-bold opacity-90"><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="title" value={session.title} label={t('sessions.title')} /></span>
+                    ) : <span className="font-bold opacity-90">{t('sessions.generalTasks')}</span>}
+                    {session
+                      ? session.location && <FactChip icon={MapPin} tone="strong"><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="location" value={session.location} label={t('common.location')} /></FactChip>
+                      : evt.location && <FactChip icon={MapPin} tone="strong"><BoardEditableText entity="event" id={evt.id} eventId={evt.id} field="location" value={evt.location} label={t('common.location')} /></FactChip>}
+                    {renderLive(session, true)}
+                    {dayBadge && (
+                      <span
+                        data-event-day={dayBadge.tone}
+                        className={cn('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold', dayBadge.tone === 'before' && 'bg-amber-300 text-amber-950 shadow-sm')}
+                        style={dayBadge.tone === 'before' ? undefined : { backgroundColor: headerText + '26' }}
+                      >
+                        {dayBadge.tone === 'before' && <Wrench className="h-3.5 w-3.5" aria-hidden="true" />}{dayBadge.text}
                       </span>
-                    </FactChip>
-                  )
-                ) : (
-                  evt.event_start && <FactChip icon={Clock} tone="strong"><span className="font-black tabular-nums">{formatTime(evt.event_start, lang)}{evt.event_finish && <> - {formatTime(evt.event_finish, lang)}</>}</span></FactChip>
-                )}
-                <h3 className="min-w-0 break-words text-base font-extrabold" style={{ color: headerText }}>
-                  <BoardEditableText entity="event" id={evt.id} eventId={evt.id} field="name" value={evt.name} label={t('events.eventName')} />
-                </h3>
-                {session ? session.title && (
-                  <span className="min-w-0 break-words font-bold opacity-90"><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="title" value={session.title} label={t('sessions.title')} /></span>
-                ) : <span className="font-bold opacity-90">{t('sessions.generalTasks')}</span>}
-                {session
-                  ? session.location && <FactChip icon={MapPin} tone="strong"><BoardEditableText entity="session" id={session.id} eventId={evt.id} field="location" value={session.location} label={t('common.location')} /></FactChip>
-                  : evt.location && <FactChip icon={MapPin} tone="strong"><BoardEditableText entity="event" id={evt.id} eventId={evt.id} field="location" value={evt.location} label={t('common.location')} /></FactChip>}
-                {renderLive(session, true)}
-                {dayBadge && (
-                  <span
-                    data-event-day={dayBadge.tone}
-                    className={cn('inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold', dayBadge.tone === 'before' && 'bg-amber-300 text-amber-950 shadow-sm')}
-                    style={dayBadge.tone === 'before' ? undefined : { backgroundColor: headerText + '26' }}
-                  >
-                    {dayBadge.tone === 'before' && <Wrench className="h-3.5 w-3.5" aria-hidden="true" />}{dayBadge.text}
-                  </span>
-                )}
-                {overdue > 0 && <span title={t('display.overdueHint')} className="inline-flex animate-live-ring items-center gap-1.5 rounded-lg bg-red-500 px-2.5 py-1 text-xs font-extrabold text-white"><TriangleAlert className="h-3.5 w-3.5" />{overdue} {t('display.overdue')}</span>}
-                {/* Who to ask, kept in the compact card as on the full event header */}
-                <EventContacts contacts={evt.contacts} tone="onDark" className="order-last basis-full" />
-                <div className="ml-auto flex flex-wrap items-center gap-2">
-                  {renderAck(tasks)}
-                  {editMode && <button type="button" onClick={() => onEditEvent?.(evt)} aria-label={`${t('events.editEvent')}: ${evt.name}`} title={t('events.editEvent')} className="rounded-lg bg-white/20 p-2 hover:bg-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"><Pencil className="h-4 w-4" /></button>}
-                  {editMode && session && <button type="button" onClick={() => onEditSession?.(evt, session)} aria-label={t('sessions.editSession')} title={t('sessions.editSession')} className="rounded-lg bg-white/20 p-2 hover:bg-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"><Pencil className="h-4 w-4" /></button>}
-                  {plans.length > 0 && <button type="button" onClick={() => openAttachment(plans[0], plans)} title={t('display.viewFloorPlan')} aria-label={t('display.viewFloorPlan')} className="inline-flex items-center gap-1.5 rounded-lg bg-white p-2 text-sm font-bold text-navy-800 shadow-sm ring-1 ring-black/5 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"><MapIcon className="h-4 w-4" /><span className="hidden sm:inline">{t('display.floorPlan')}</span></button>}
-                  <button type="button" onClick={() => goToEvent(evt.id)} title={t('display.openEvent')} aria-label={t('display.openEvent')} className="inline-flex items-center gap-1.5 rounded-lg p-2 text-sm font-bold transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70" style={{ backgroundColor: headerText + '26', color: headerText }}><span className="hidden sm:inline">{t('display.openEvent')}</span><ChevronRight className="h-4 w-4" /></button>
+                    )}
+                    {overdue > 0 && <span title={t('display.overdueHint')} className="inline-flex animate-live-ring items-center gap-1.5 rounded-lg bg-red-500 px-2.5 py-1 text-xs font-extrabold text-white"><TriangleAlert className="h-3.5 w-3.5" />{overdue} {t('display.overdue')}</span>}
+                  </div>
+                </div>
+                <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                  {editMode && <button type="button" onClick={() => onEditEvent?.(evt)} aria-label={`${t('events.editEvent')}: ${evt.name}`} title={t('events.editEvent')} className="h-9 rounded-lg bg-white/20 p-2 hover:bg-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"><Pencil className="h-4 w-4" /></button>}
+                  {editMode && session && <button type="button" onClick={() => onEditSession?.(evt, session)} aria-label={t('sessions.editSession')} title={t('sessions.editSession')} className="h-9 rounded-lg bg-white/20 p-2 hover:bg-white/30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"><Pencil className="h-4 w-4" /></button>}
+                  {plans.length > 0 && <button type="button" onClick={() => openAttachment(plans[0], plans)} title={t('display.viewFloorPlan')} aria-label={t('display.viewFloorPlan')} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-white p-2 text-sm font-bold text-navy-800 shadow-sm ring-1 ring-black/5 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"><MapIcon className="h-4 w-4" /><span className="hidden sm:inline">{t('display.floorPlan')}</span></button>}
+                  <button type="button" onClick={() => goToEvent(evt.id)} title={t('display.openEvent')} aria-label={t('display.openEvent')} className="inline-flex h-9 items-center gap-1.5 rounded-lg p-2 text-sm font-bold transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70" style={{ backgroundColor: headerText + '26', color: headerText }}><span className="hidden sm:inline">{t('display.openEvent')}</span><ChevronRight className="h-4 w-4" /></button>
                   <span key={bump.key} className={cn('inline-flex', bump.className)}>
                     <CountPill done={tasks.filter((task) => task.status === 'completed').length} total={tasks.length} />
                   </span>
                 </div>
               </div>
               {renderProgress(tasks, deptColor)}
+              {(evt.contacts?.some((contact) => contact.name?.trim()) || ack != null) && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-1.5 sm:px-4" style={stripStyle}>
+                  <EventContacts contacts={evt.contacts} tone="plain" compact className="min-w-0 flex-[1_1_16rem]" />
+                  {ack && <span className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">{ack}</span>}
+                </div>
+              )}
               {session && (session.note || session.floor_plan) && <div className="space-y-3 px-4 py-3">{sessionNoteBar(session, evt.id)}{session.floor_plan && <FloorPlanPreview file={session.floor_plan} label={session.title ? `${t('display.floorPlan')} · ${session.title}` : t('display.floorPlan')} />}</div>}
               {renderJobList(tasks, evt, `${block.key}:${selectedDept}`)}
             </section>
@@ -1065,54 +1086,57 @@ export function EventsBoard({
       >
         {/* The event's own colour, as the Events team chose it for its header */}
         <div
-          className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3"
+          className="flex items-center gap-2.5 px-3 py-2 sm:px-4"
           style={{
             background: 'linear-gradient(120deg, ' + headerColor + ' 0%, ' + darkenColor(headerColor, 0.82) + ' 100%)',
             color: headerText
           }}
         >
-          <span
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-            style={{ backgroundColor: headerText + '26' }}
-          >
-            <CategoryIcon className="h-5 w-5" />
-          </span>
-          <h3 className="min-w-0 truncate text-lg font-black tracking-tight" style={{ color: headerText }}>
-            <BoardEditableText entity="event" id={evt.id} eventId={evt.id} field="name" value={evt.name} label={t('events.eventName')} />
-          </h3>
-          <StatusBadge status={boardStatus(evt, nowMs)} />
-          {dayBadge && (
-            <span
-              data-event-day={dayBadge.tone}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold',
-                dayBadge.tone === 'before' && 'bg-amber-300 text-amber-950 shadow-sm'
-              )}
-              style={dayBadge.tone === 'before' ? undefined : { backgroundColor: headerText + '26' }}
-            >
-              {dayBadge.tone === 'before' && <Wrench className="h-3.5 w-3.5" aria-hidden="true" />}
-              {dayBadge.text}
-            </span>
-          )}
-          {/* Its time has gone and the work is still open, so the board says so */}
-          {openWork > 0 && (
-            <span
-              title={t('display.overdueHint')}
-              className="inline-flex animate-live-ring items-center gap-1.5 rounded-lg bg-red-500 px-2.5 py-1 text-xs font-extrabold text-white"
-            >
-              <TriangleAlert className="h-3.5 w-3.5" /> {openWork} {t('display.overdue')}
-            </span>
-          )}
-          {/* Who to ask, beside the name of the thing being asked about */}
-          <EventContacts contacts={evt.contacts} tone="onDark" className="basis-full" />
-          <span className="ml-auto flex items-center gap-2">
-            {editMode && <button type="button" onClick={() => onEditEvent?.(evt)} aria-label={`${t('events.editEvent')}: ${evt.name}`} className="rounded-lg bg-white/20 p-2 hover:bg-white/30"><Pencil className="h-4 w-4" /></button>}
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
+            <div className="flex min-w-0 max-w-full items-center gap-2.5">
+              <span
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+                style={{ backgroundColor: headerText + '26' }}
+              >
+                <CategoryIcon className="h-5 w-5" />
+              </span>
+              <h3 className="min-w-0 break-words text-base font-extrabold leading-tight tracking-tight sm:truncate sm:text-lg" style={{ color: headerText }}>
+                <BoardEditableText entity="event" id={evt.id} eventId={evt.id} field="name" value={evt.name} label={t('events.eventName')} />
+              </h3>
+            </div>
+            <StatusBadge status={boardStatus(evt, nowMs)} />
+            {dayBadge && (
+              <span
+                data-event-day={dayBadge.tone}
+                className={cn(
+                  'inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold',
+                  dayBadge.tone === 'before' && 'bg-amber-300 text-amber-950 shadow-sm'
+                )}
+                style={dayBadge.tone === 'before' ? undefined : { backgroundColor: headerText + '26' }}
+              >
+                {dayBadge.tone === 'before' && <Wrench className="h-3.5 w-3.5" aria-hidden="true" />}
+                {dayBadge.text}
+              </span>
+            )}
+            {/* Its time has gone and the work is still open, so the board says so */}
+            {openWork > 0 && (
+              <span
+                title={t('display.overdueHint')}
+                className="inline-flex animate-live-ring items-center gap-1.5 rounded-lg bg-red-500 px-2.5 py-1 text-xs font-extrabold text-white"
+              >
+                <TriangleAlert className="h-3.5 w-3.5" /> {openWork} {t('display.overdue')}
+              </span>
+            )}
+          </div>
+          <span className="flex shrink-0 items-center gap-1.5">
+            {editMode && <button type="button" onClick={() => onEditEvent?.(evt)} aria-label={`${t('events.editEvent')}: ${evt.name}`} className="h-9 rounded-lg bg-white/20 p-2 hover:bg-white/30"><Pencil className="h-4 w-4" /></button>}
             {/* The plan opens straight on the board, without leaving this view */}
             {plans.length > 0 && (
               <button
                 onClick={() => openAttachment(plans[0], plans)}
                 title={t('display.viewFloorPlan')}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-white px-3 py-1.5 text-sm font-extrabold text-navy-800 shadow-sm ring-1 ring-black/5 transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                aria-label={t('display.viewFloorPlan')}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-sm font-extrabold text-navy-800 shadow-sm ring-1 ring-black/5 transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
               >
                 <MapIcon className="h-4 w-4" />
                 <span className="hidden sm:inline">{t('display.floorPlan')}</span>
@@ -1121,7 +1145,8 @@ export function EventsBoard({
             <button
               onClick={() => goToEvent(evt.id)}
               title={t('display.openEvent')}
-              className="inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-bold transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              aria-label={t('display.openEvent')}
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-bold transition-all hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
               style={{ backgroundColor: headerText + '26', color: headerText }}
             >
               <span className="hidden sm:inline">{t('display.openEvent')}</span>
@@ -1129,6 +1154,7 @@ export function EventsBoard({
             </button>
           </span>
         </div>
+        {contactsStrip}
 
         <div className="space-y-4 p-3 lg:p-4">
           {group.blocks.map((block) => (
@@ -1338,39 +1364,39 @@ export function EventsBoard({
     .filter((entry) => entry.scoped.any);
 
   const viewToggle = (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-      <div className="flex shrink-0 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
-        {([
-          ['date', CalendarRange, t('display.viewByDate')],
-          ['event', LayoutList, t('display.viewByEvent')]
-        ] as Array<[BoardView, typeof CalendarRange, string]>).map(([mode, Icon, label]) => (
-          <button
-            key={mode}
-            onClick={() => setViewMode(mode)}
-            aria-pressed={viewMode === mode}
-            className={cn(
-              'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500',
-              viewMode === mode
-                ? 'bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900'
-                : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
-            )}
-          >
-            <Icon className="h-4 w-4" /> {label}
-          </button>
-        ))}
+    <div className="contents">
+      <div className="flex min-w-0 max-w-full items-center gap-1.5">
+        <div className="flex min-w-0 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+          {([
+            ['date', CalendarRange, t('display.viewByDate')],
+            ['event', LayoutList, t('display.viewByEvent')]
+          ] as Array<[BoardView, typeof CalendarRange, string]>).map(([mode, Icon, label]) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              aria-pressed={viewMode === mode}
+              className={cn(
+                'flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500',
+                viewMode === mode
+                  ? 'bg-navy-800 text-white dark:bg-gold-400 dark:text-navy-900'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100'
+              )}
+            >
+              <Icon className="h-4 w-4 shrink-0 max-[379px]:hidden" /> {label}
+            </button>
+          ))}
+        </div>
+        {viewMode === 'date' && (
+          <button type="button" aria-expanded={showViewHint} aria-label={lang === 'th' ? 'คำอธิบาย' : 'What is this?'} onClick={() => setShowViewHint((value) => !value)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-navy-500 dark:hover:bg-slate-800"><CircleHelp className="h-5 w-5" /></button>
+        )}
       </div>
-      {viewMode === 'date' && (
-        <>
-          <button type="button" aria-expanded={showViewHint} aria-label={lang === 'th' ? 'คำอธิบาย' : 'What is this?'} onClick={() => setShowViewHint((value) => !value)} className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 focus-visible:ring-2 focus-visible:ring-navy-500 dark:hover:bg-slate-800"><CircleHelp className="h-5 w-5" /></button>
-          {showViewHint && <p className="w-full text-sm leading-relaxed text-slate-500 dark:text-slate-400">{t('display.dateViewHint')}</p>}
-        </>
-      )}
+      {viewMode === 'date' && showViewHint && <p className="order-last w-full text-sm leading-relaxed text-slate-500 dark:text-slate-400">{t('display.dateViewHint')}</p>}
     </div>
   );
 
   return (
     <div className="space-y-6">
-      {!presenting && viewToggle}
+      {!presenting && <div className="flex flex-wrap items-center gap-x-4 gap-y-2">{toolbarStart}{viewToggle}</div>}
       {viewMode === 'event' && upcoming.length > 0 && (
         <section className="animate-slide-up rounded-3xl border border-gold-200 bg-gradient-to-r from-gold-50 via-white to-white p-4 shadow-sm dark:border-gold-900 dark:from-gold-950/30 dark:via-slate-900 dark:to-slate-900">
           <div className="mb-3 flex items-center gap-2">
