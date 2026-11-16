@@ -158,12 +158,12 @@ export function RequestsBoard({ requests, departments, selectedDept, isLoading, 
                 </div>
               )}
 
-              <p className="mt-3 text-[11px] text-slate-400">{lang === 'th' ? 'ลงงาน' : 'Posted'} {scheduleLabel(request.created_at || request.request_date, lang, false)}</p>
+              <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">{lang === 'th' ? 'ลงงาน' : 'Posted'} {scheduleLabel(request.created_at || request.request_date, lang, false)}</p>
               {pendingId === request.id && <p role="status" className="mt-2 text-sm text-slate-600">{lang === 'th' ? 'กำลังบันทึก…' : 'Saving…'}</p>}
               {/* Status buttons: tap to update, tap the active one again to untick.
                   The name box records who acknowledged or completed the request. */}
               <div className="mt-4 border-t border-slate-100 pt-3 dark:border-slate-800">
-                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                   {t('display.setStatus')}
                 </p>
 

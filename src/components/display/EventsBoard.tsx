@@ -23,7 +23,7 @@ import {
 import { BoardSkeleton } from './BoardSkeleton';
 import { AskQuestionModal } from './AskQuestionModal';
 import { categoryIcon, departmentIcon } from '../../lib/constants';
-import { cn, darkenColor, extractDate, fillTemplate, formatDate, formatTime, isRichTextEmpty, lightenColor, readableTextColor, formatDateRange } from '../../lib/utils';
+import { cn, darkenColor, extractDate, fillTemplate, formatDate, formatBoardDate, formatTime, isRichTextEmpty, lightenColor, readableTextColor, formatBoardDateRange } from '../../lib/utils';
 import type { DisplayDepartment, DisplayEvent, DisplaySession, DisplayTask } from '../../types';
 
 /**
@@ -474,8 +474,15 @@ export function EventsBoard({
           const Icon = departmentIcon(dept.icon);
           const deptTasks = tasks.filter((task) => task.department_id === dept.id);
           if (deptTasks.length === 0) return (
-            <div key={dept.id} aria-hidden="true" title={deptName(dept)} className="hidden h-11 w-11 items-center justify-center rounded-xl border border-dashed border-slate-200 text-slate-300 xl:flex dark:border-slate-700 dark:text-slate-600">
-              <Icon className="h-5 w-5 shrink-0" />
+            <div
+              key={dept.id}
+              role="note"
+              title={`${deptName(dept)}: ${lang === 'th' ? 'ไม่มีงานในช่วงนี้' : 'no jobs here'}`}
+              aria-label={`${deptName(dept)}: ${lang === 'th' ? 'ไม่มีงานในช่วงนี้' : 'no jobs here'}`}
+              className="hidden w-14 flex-col items-center justify-center gap-1 rounded-xl border border-dashed border-slate-200 py-2 text-slate-400 xl:flex dark:border-slate-700 dark:text-slate-600"
+            >
+              <Icon className="h-5 w-5 shrink-0" aria-hidden="true" />
+              <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">{lang === 'th' ? 'ไม่มีงาน' : 'No jobs'}</span>
             </div>
           );
           const done = deptTasks.filter((task) => task.status === 'completed').length;
@@ -622,7 +629,7 @@ export function EventsBoard({
           {/* The date is in the block on the left (or the day banner above), so the
               place and the time carry the chips. */}
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
-            {!byDate && <FactChip icon={CalendarDays} tone="plain">{formatDate(session.session_date, lang)}</FactChip>}
+            {!byDate && <FactChip icon={CalendarDays} tone="plain">{formatBoardDate(session.session_date, lang)}</FactChip>}
             {session.location && !placeAsHeading && (
               <FactChip icon={MapPin} tone="plain">
                 <BoardEditableText
@@ -1024,7 +1031,7 @@ export function EventsBoard({
                 <div className="flex items-center gap-2 rounded-2xl border border-dashed border-slate-300 bg-slate-100/60 px-3.5 py-2.5 dark:border-slate-700 dark:bg-slate-800/30">
                   <ListChecks className="h-5 w-5 shrink-0 text-slate-400" />
                   <span className="text-base font-extrabold tracking-tight text-slate-500 dark:text-slate-300">
-                    {t('sessions.generalTasks')} · {formatDate(date, lang)}
+                    {t('sessions.generalTasks')} · {formatBoardDate(date, lang)}
                   </span>
                 </div>
               )}
@@ -1097,7 +1104,7 @@ export function EventsBoard({
           className={cn(
             'relative flex flex-wrap items-center gap-x-4 gap-y-2 overflow-hidden rounded-3xl border-2 py-3 pl-5 pr-4 shadow-lg sm:gap-x-5 sm:pl-6 sm:pr-5',
             isToday && 'ring-4 ring-gold-400/80',
-            past && 'opacity-80 saturate-[0.4]',
+            past && 'saturate-[0.4]',
             arriving && 'motion-safe:animate-day-glow'
           )}
           style={
@@ -1132,7 +1139,7 @@ export function EventsBoard({
             <span className="block text-2xl font-black leading-tight tracking-tight sm:text-[1.75rem]" style={{ color: color.ink }}>
               {lang === 'th' ? `วัน${weekday}` : weekday}
             </span>
-            <span className="block text-sm font-bold text-slate-600 sm:text-base">{formatDate(date, lang, 'd MMMM yyyy')}</span>
+            <span className="block text-sm font-bold text-slate-600 sm:text-base">{formatBoardDate(date, lang, 'd MMMM yyyy')}</span>
           </h2>
           <span
             data-day-relative
@@ -1196,7 +1203,7 @@ export function EventsBoard({
             key={day.date}
             id={`board-day-${day.date}`}
             data-board-day={day.date}
-            aria-label={formatDate(day.date, lang, 'EEEE d MMMM yyyy')}
+            aria-label={formatBoardDate(day.date, lang, 'EEEE d MMMM yyyy')}
           >
             {dayDivider(day.date, day.entries)}
             {/* A line in the day's colour runs down beside all of that day's work */}
@@ -1401,7 +1408,7 @@ export function EventsBoard({
                     className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm font-bold"
                     style={{ backgroundColor: `${headerText}26` }}
                   >
-                    <CalendarDays className="h-4 w-4" /> {formatDateRange(event.event_date, event.end_date, lang, 'EEE d MMM yyyy')}
+                    <CalendarDays className="h-4 w-4" /> {formatBoardDateRange(event.event_date, event.end_date, lang, 'EEE d MMM yyyy')}
                   </span>
                   <EventContacts contacts={event.contacts} tone="onDark" className="basis-full" />
                   {openWork > 0 && (
@@ -1534,7 +1541,7 @@ export function EventsBoard({
                             {sessionHeader(session, sessionTasks, event, 'event')}
                             {/* Operational note for this session: OT, reminders, venue instructions */}
                             {sessionNoteBar(session, event.id)}
-                            {session.floor_plan && <FloorPlanPreview file={session.floor_plan} label={`${t('display.floorPlan')} · ${session.title || formatDate(session.session_date, lang)}`} />}
+                            {session.floor_plan && <FloorPlanPreview file={session.floor_plan} label={`${t('display.floorPlan')} · ${session.title || formatBoardDate(session.session_date, lang)}`} />}
                             {panels}
                           </div>
                         );

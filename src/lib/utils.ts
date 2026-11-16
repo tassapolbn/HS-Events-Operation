@@ -34,6 +34,26 @@ export function formatDateRange(
   return `${formatDate(start, lang, startPattern)} – ${formatDate(end, lang, pattern)}`;
 }
 
+/** Reader-facing board dates use the Buddhist year in Thai. Keep data dates Gregorian. */
+export function formatBoardDate(value: string | Date | null | undefined, lang: Lang, pattern = 'EEE d MMM yyyy'): string {
+  if (!value) return '-';
+  const date = typeof value === 'string' ? parseISO(value) : value;
+  const boardPattern = lang === 'th' ? pattern.replace(/yyyy/g, `'${date.getFullYear() + 543}'`) : pattern;
+  return format(date, boardPattern, { locale: locales[lang] });
+}
+
+export function formatBoardDateRange(
+  start: string,
+  end: string | null | undefined,
+  lang: Lang,
+  pattern = 'EEE d MMM yyyy'
+): string {
+  if (!end || end <= start) return formatBoardDate(start, lang, pattern);
+  const sameYear = start.slice(0, 4) === end.slice(0, 4);
+  const startPattern = sameYear ? pattern.replace(/\s*y+\s*/g, ' ').trim() : pattern;
+  return `${formatBoardDate(start, lang, startPattern)} – ${formatBoardDate(end, lang, pattern)}`;
+}
+
 export function formatTime(value: string | Date | null | undefined, lang: Lang): string {
   if (!value) return '-';
   const date = typeof value === 'string' ? parseISO(value) : value;

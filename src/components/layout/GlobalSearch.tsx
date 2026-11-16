@@ -66,7 +66,7 @@ export function GlobalSearch() {
       >
         <Search className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
         <span className="hidden flex-1 truncate text-left text-sm md:block">{t('search.button')}</span>
-        <kbd className="hidden rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-[10px] font-semibold text-slate-400 dark:border-slate-700 dark:bg-slate-800 lg:block">
+        <kbd className="hidden rounded-md border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-[10px] font-semibold text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 lg:block">
           {isMac ? '⌘K' : 'Ctrl K'}
         </kbd>
       </button>
@@ -255,7 +255,7 @@ function SearchDialog({ onClose }: { onClose: () => void }) {
           )}
         </div>
 
-        <p className="hidden border-t border-slate-100 px-4 py-2 text-[11px] text-slate-400 dark:border-slate-800 sm:block">{t('search.keys')}</p>
+        <p className="hidden border-t border-slate-100 px-4 py-2 text-[11px] text-slate-500 dark:border-slate-800 dark:text-slate-400 sm:block">{t('search.keys')}</p>
       </div>
     </div>,
     document.body

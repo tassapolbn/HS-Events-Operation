@@ -956,7 +956,7 @@ export function TaskBoardGrid({
             </div>
           )}
         </div>
-        <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+        <span className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
           {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
           {t('grid.boardHint')}
         </span>
@@ -1218,7 +1218,7 @@ export function TaskBoardGrid({
                                     </span>
                                   )}
                                   {(task.assigned_staff || task.start_time) && (
-                                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-slate-400">
+                                    <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                                       {task.assigned_staff && (
                                         <span className="inline-flex items-center gap-1">
                                           <User className="h-3 w-3" /> {task.assigned_staff}

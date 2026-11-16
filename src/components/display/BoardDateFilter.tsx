@@ -1,6 +1,6 @@
 import { CalendarDays } from 'lucide-react';
 import { useLanguage } from '../../i18n';
-import { cn, formatDate } from '../../lib/utils';
+import { cn, formatDate, formatBoardDate } from '../../lib/utils';
 import { matchesDateScope, type DateScope } from '../../lib/boardDates';
 
 export function BoardDateFilter({ dates, today, scope, selectedDate, onChange }: {
@@ -36,7 +36,7 @@ export function BoardDateFilter({ dates, today, scope, selectedDate, onChange }:
           onChange('custom', date);
         }}>
           <option value="">{th ? 'เลือกจากวันที่มีงาน แบ่งตามเดือน' : 'Scheduled dates, grouped by month'}</option>
-          {months.map(month => <optgroup key={month} label={formatDate(`${month}-01`, lang, 'MMMM yyyy')}>
+          {months.map(month => <optgroup key={month} label={formatBoardDate(`${month}-01`, lang, 'MMMM yyyy')}>
             {dates.filter(date => date.startsWith(month)).map(date => <option key={date} value={date}>{formatDate(date, lang, 'EEEE d MMMM')}</option>)}
           </optgroup>)}
         </select>
