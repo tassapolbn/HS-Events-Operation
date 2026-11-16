@@ -9,12 +9,11 @@ import { useCurrentBoardDay } from '../../hooks/useCurrentBoardDay';
 import { FloorPlanPreview } from './FloorPlanPreview';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
-  AlarmClock, CalendarDays, CalendarRange, Check, CheckCheck, ChevronDown, ChevronRight, CircleCheckBig, CircleHelp, Clock, LayoutList,
-  ListChecks, Map as MapIcon, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, Undo2, User, Wrench
+  AlarmClock, CalendarDays, CalendarRange, Check, ChevronDown, ChevronRight, CircleCheckBig, CircleHelp, Clock, LayoutList,
+  ListChecks, Map as MapIcon, MapPin, Megaphone, MessageCircleQuestion, Pencil, TriangleAlert, User, Wrench
 } from 'lucide-react';
-import { useAcknowledgeDisplayTasks, useToggleDisplayTask, useUnacknowledgeDisplayTasks } from '../../hooks/usePublicDisplay';
-import { BoardNameDialog } from './BoardNameDialog';
-import { markNameSkipped, nameSkipped, readBoardName, saveBoardName } from '../../lib/boardIdentity';
+import { useToggleDisplayTask } from '../../hooks/usePublicDisplay';
+import { readBoardName } from '../../lib/boardIdentity';
 import { changedTaskIds, sessionLiveState } from '../../lib/boardMotion';
 import { useLanguage } from '../../i18n';
 import { EmptyState } from '../ui/EmptyState';
@@ -149,31 +148,8 @@ export function EventsBoard({
     return () => window.clearTimeout(timer);
   }, [isLoading, focusTaskId]);
 
-  const ackTasks = useAcknowledgeDisplayTasks();
-  const unackTasks = useUnacknowledgeDisplayTasks();
-  /**
-   * Every job on the board as the database has it, before any search, so the
-   * animations and the acknowledge buttons work from the whole picture. Read
-   * through a ref by actions that complete later (after the name dialog).
-   */
+  /** Every job before any search, so change animations use the whole feed. */
   const feed = liveEvents ?? events;
-  const feedRef = useRef(feed);
-  feedRef.current = feed;
-  const latestTasks = (ids: string[]): DisplayTask[] => {
-    const wanted = new Set(ids);
-    return (feedRef.current ?? []).flatMap((event) => event.tasks.filter((task) => wanted.has(task.id)));
-  };
-  /** The action waiting for the reader's name, asked once per device before an acknowledgement */
-  const [namePrompt, setNamePrompt] = useState<((name: string) => void) | null>(null);
-  const withName = (action: (name: string) => void) => {
-    const saved = readBoardName();
-    if (saved || nameSkipped()) {
-      action(saved);
-      return;
-    }
-    // Wrapped, so React stores the function rather than calling it as an updater
-    setNamePrompt(() => action);
-  };
 
   /** Finished jobs fold into one line per department panel; these panels are opened */
   const [openFolds, setOpenFolds] = useState<Set<string>>(new Set());
@@ -292,8 +268,7 @@ export function EventsBoard({
         )}
         <div className="flex items-start gap-3">
           <button
-            // No question when ticking: a name saved on this device (from acknowledging
-            // or the board settings) goes along, so the Events team can still see who
+            // Ticks send the name saved in board settings so the Events team can see who completed the job.
             onClick={() => toggleTask.mutate({ taskId: task.id, done: !completed, name: completed ? '' : readBoardName() })}
             className={cn(
               // the after: ring expands the tap area to 44px for WCAG without shifting layout
@@ -386,121 +361,6 @@ export function EventsBoard({
       </div>
     );
   };
-
-  /**
-   * The department says it has seen its jobs. Finished jobs need no answer; a job
-   * added after the last acknowledgement asks again, so new work is never missed.
-   * In parts a header can lay out to fit: `action` asks the department to
-   * acknowledge its new jobs; `said` and `undo` tell who acknowledged and when,
-   * and let a mistaken press be taken back.
-   */
-  const ackParts = (deptTasks: DisplayTask[], tone: 'panel' | 'card'): {
-    action: ReactNode;
-    said: { text: string; time: string } | null;
-    undo: ReactNode;
-  } => {
-    const none = { action: null, said: null, undo: null };
-    if (presenting) return none;
-    const open = deptTasks.filter((task) => task.status !== 'completed');
-    if (open.length === 0) return none;
-    const pending = open.filter((task) => !task.acknowledged_at);
-    const acked = open.filter((task) => task.acknowledged_at);
-    const busy = ackTasks.isPending || unackTasks.isPending;
-    // Jobs are read again when the action runs: the name dialog may have stayed open
-    // while someone else acknowledged, or a job may have been ticked done meanwhile
-    const acknowledge = (ids: string[]) =>
-      withName((name) => {
-        const still = latestTasks(ids).filter((task) => task.status !== 'completed' && !task.acknowledged_at);
-        if (still.length > 0) ackTasks.mutate({ taskIds: still.map((task) => task.id), name });
-      });
-    // An acknowledgement pressed by mistake, by another department say, can be taken back
-    const undoButton = acked.length > 0 && (
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => {
-          const still = latestTasks(acked.map((task) => task.id)).filter((task) => task.acknowledged_at);
-          if (still.length > 0) unackTasks.mutate({ taskIds: still.map((task) => task.id) });
-        }}
-        title={lang === 'th' ? 'ยกเลิกการรับทราบ เช่น ถ้ากดผิดแผนก' : 'Take the acknowledgement back, for example if it was pressed by mistake'}
-        aria-label={lang === 'th' ? 'ยกเลิกการรับทราบ' : 'Undo acknowledgement'}
-        className={cn(
-          'inline-flex min-h-9 shrink-0 items-center gap-1 text-xs font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-60',
-          tone === 'panel'
-            ? 'rounded-md px-1.5 py-0.5 text-slate-500 hover:bg-white hover:text-red-700 dark:text-slate-400 dark:hover:bg-slate-900 dark:hover:text-red-300'
-            : 'rounded-full border border-slate-300 bg-white px-2 py-1 text-slate-600 hover:bg-slate-50 hover:text-red-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300'
-        )}
-      >
-        <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
-        {lang === 'th' ? 'ยกเลิก' : 'Undo'}
-      </button>
-    );
-    const partial = pending.length > 0 && acked.length > 0;
-    const latest = acked.length > 0
-      ? acked.reduce((a, b) => ((a.acknowledged_at ?? '') >= (b.acknowledged_at ?? '') ? a : b))
-      : null;
-    const said = latest && {
-      text: (partial
-        ? (lang === 'th' ? `รับทราบแล้ว ${acked.length} งาน` : `${acked.length} acknowledged`)
-        : (lang === 'th' ? 'รับทราบแล้ว' : 'Acknowledged'))
-        + (latest.acknowledged_by ? ` · ${latest.acknowledged_by}` : ''),
-      time: latest.acknowledged_at ? formatTime(latest.acknowledged_at, lang) : ''
-    };
-    const action = pending.length > 0 && (
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => acknowledge(pending.map((task) => task.id))}
-        className={cn(
-          'inline-flex min-h-9 shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-extrabold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-60',
-          partial
-            ? 'bg-gold-400 text-navy-900 hover:bg-gold-300'
-            : 'border border-slate-300 bg-white text-navy-800 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800'
-        )}
-      >
-        <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
-        {partial
-          ? (lang === 'th' ? `รับทราบงานใหม่ (${pending.length})` : `Acknowledge new (${pending.length})`)
-          : (lang === 'th' ? 'รับทราบ' : 'Acknowledge')}
-      </button>
-    );
-    return { action: action || null, said, undo: undoButton || null };
-  };
-
-  /** Everything side by side, for a header with room to wrap (the one-department card) */
-  const renderAck = (deptTasks: DisplayTask[]): ReactNode => {
-    const { action, said, undo } = ackParts(deptTasks, 'card');
-    if (!action && !said) return null;
-    return (
-      <span className="inline-flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1">
-        {said && (
-          <span className="inline-flex min-w-0 max-w-full items-center gap-1 rounded-2xl bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-            <CheckCheck className="h-3.5 w-3.5" aria-hidden="true" />
-            <span className="min-w-0 [overflow-wrap:anywhere]">{said.text}</span>
-            {said.time && <span className="shrink-0 tabular-nums">{said.time}</span>}
-          </span>
-        )}
-        {undo}
-        {action}
-      </span>
-    );
-  };
-
-  /**
-   * Who acknowledged, on its own slim line under a department panel's header,
-   * so the header keeps room for the department's name and count.
-   */
-  const renderAckLine = (said: { text: string; time: string } | null, undo: ReactNode, action: ReactNode): ReactNode =>
-    (said || action) && (
-      <div className="flex min-h-9 flex-wrap items-center gap-2 border-b border-slate-100 bg-slate-50/80 px-4 py-1.5 text-xs dark:border-slate-800 dark:bg-slate-800/40">
-        {said && <>
-          <CheckCheck className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
-          <span className="min-w-0 truncate font-bold text-slate-600 dark:text-slate-300">{said.text}</span>
-          {said.time && <span className="shrink-0 font-semibold tabular-nums text-slate-500 dark:text-slate-400">{said.time}</span>}
-        </>}
-        <span className="ml-auto flex shrink-0 items-center gap-1.5">{undo}{action}</span>
-      </div>
-    );
 
   /** A session happening right now, or starting within half an hour */
   const renderLive = (session: DisplaySession | null | undefined, onDark = false): ReactNode => {
@@ -622,7 +482,6 @@ export function EventsBoard({
           const deptText = readableTextColor(dept.color);
           const allDone = done === deptTasks.length && deptTasks.length > 0;
           const bump = bumpKey(deptTasks);
-          const ack = ackParts(deptTasks, 'panel');
           return (
             <div
               key={dept.id}
@@ -671,7 +530,6 @@ export function EventsBoard({
                 </span>
               </div>
               {renderProgress(deptTasks, dept.color)}
-              {renderAckLine(ack.said, ack.undo, ack.action)}
 
               {renderJobList(deptTasks, evt, `${blockKey}:${dept.id}`)}
             </div>
@@ -995,7 +853,6 @@ export function EventsBoard({
           const overdue = overdueCount(session, date, tasks);
           const deptColor = departments.find((dept) => dept.id === selectedDept)?.color ?? headerColor;
           const bump = bumpKey(tasks);
-          const ack = renderAck(tasks);
           const timeChip = session ? (
             (session.start_time || session.end_time || session.time_note) && (
               <FactChip icon={Clock} tone="strong">
@@ -1056,10 +913,9 @@ export function EventsBoard({
                 </div>
               </div>
               {renderProgress(tasks, deptColor)}
-              {(evt.contacts?.some((contact) => contact.name?.trim()) || ack != null) && (
+              {evt.contacts?.some((contact) => contact.name?.trim()) && (
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-1.5 sm:px-4" style={stripStyle}>
                   <EventContacts contacts={evt.contacts} tone="plain" compact className="min-w-0 flex-[1_1_16rem]" />
-                  {ack && <span className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-2">{ack}</span>}
                 </div>
               )}
               {session && (session.note || session.floor_plan) && <div className="space-y-3 px-4 py-3">{sessionNoteBar(session, evt.id)}{session.floor_plan && <FloorPlanPreview file={session.floor_plan} label={session.title ? `${t('display.floorPlan')} · ${session.title}` : t('display.floorPlan')} />}</div>}
@@ -1704,25 +1560,6 @@ export function EventsBoard({
         eventName={askEvent?.name ?? ''}
         departments={departments}
       />
-
-      {/* Asked once per device, so the Events team can see who ticked or acknowledged */}
-      {namePrompt && (
-        <BoardNameDialog
-          onSave={(name) => {
-            saveBoardName(name);
-            const action = namePrompt;
-            setNamePrompt(null);
-            action(name);
-          }}
-          onSkip={() => {
-            markNameSkipped();
-            const action = namePrompt;
-            setNamePrompt(null);
-            action('');
-          }}
-          onClose={() => setNamePrompt(null)}
-        />
-      )}
     </div>
   );
 }

@@ -140,10 +140,6 @@ export interface EventTask {
   deleted_at: string | null;
   /** Name given on the display board when the job was ticked done ('' when none) */
   completed_by?: string;
-  /** Name given on the display board when the department acknowledged the job */
-  acknowledged_by?: string;
-  /** When the department acknowledged the job on the display board */
-  acknowledged_at?: string | null;
 }
 
 export interface ChecklistItem {
@@ -355,8 +351,6 @@ export interface DisplayTask {
   status: TaskStatus;
   notes: string;
   completed_by: string;
-  acknowledged_by: string;
-  acknowledged_at: string | null;
   attachments: DisplayAttachment[];
 }
 

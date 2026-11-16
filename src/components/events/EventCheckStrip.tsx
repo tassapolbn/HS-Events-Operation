@@ -52,7 +52,7 @@ export function EventCheckStrip({ event, departments }: { event: EventWithTasks;
       </div>
       <div id={tableId} hidden={!expanded} className="overflow-x-auto border-t border-slate-200 dark:border-slate-700">
         <table className="w-full text-left text-xs text-slate-700 dark:text-slate-200">
-          <caption className="sr-only">{text('จำนวนงาน งานเสร็จ และงานที่รับทราบ แยกตามช่วงและแผนก', 'Total, completed and acknowledged jobs by session and department')}</caption>
+          <caption className="sr-only">{text('จำนวนงานและงานเสร็จ แยกตามช่วงและแผนก', 'Total and completed jobs by session and department')}</caption>
           <thead className="bg-slate-50 dark:bg-slate-800">
             <tr>
               <th scope="col" className="px-3 py-2">{text('ช่วงกิจกรรม', 'Session')}</th>
@@ -77,9 +77,9 @@ export function EventCheckStrip({ event, departments }: { event: EventWithTasks;
                     </div>}
                   </th>
                   {departments.map((department) => {
-                    const { total, done, acknowledged } = block.counts[department.id];
+                    const { total, done } = block.counts[department.id];
                     return <td key={department.id} className="whitespace-nowrap px-3 py-2 tabular-nums">
-                      {total} · <span className="text-emerald-700 dark:text-emerald-400">✓{done}</span> · {text('รับทราบ', 'ack')} {acknowledged}/{total - done}
+                      {total} · <span className="text-emerald-700 dark:text-emerald-400">✓{done}</span>
                     </td>;
                   })}
                 </tr>

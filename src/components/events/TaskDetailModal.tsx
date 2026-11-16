@@ -14,7 +14,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../ui/Toast';
 import { useChecklist, useChecklistMutations, useTaskMutations } from '../../hooks/useTasks';
 import { TASK_STATUSES } from '../../lib/constants';
-import { cn, formatDate, formatTime, isRichTextEmpty } from '../../lib/utils';
+import { cn, formatTime, isRichTextEmpty } from '../../lib/utils';
 import type { Department, EventTask, TaskStatus } from '../../types';
 import { LinkifiedText } from '../ui/LinkifiedText';
 
@@ -145,11 +145,6 @@ export function TaskDetailModal({ open, onClose, task, department, eventId, onEd
               <CheckCheck className="h-4 w-4" />,
               lang === 'th' ? 'เสร็จโดย' : 'Done by',
               task.completed_by ?? ''
-            )}
-            {task.acknowledged_at && infoRow(
-              <CheckCheck className="h-4 w-4" />,
-              lang === 'th' ? 'รับทราบโดย' : 'Acknowledged by',
-              `${task.acknowledged_by || (lang === 'th' ? 'ไม่ระบุชื่อ' : 'No name given')} · ${formatDate(task.acknowledged_at, lang, 'd MMM')} ${formatTime(task.acknowledged_at, lang)}`
             )}
           </div>
 

@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { CalendarDays, Check, CheckCheck, Clock, EyeOff, GripVertical, Keyboard, Layers, Loader2, MapPin, Maximize2, Plus, Redo2, Undo2, User } from 'lucide-react';
+import { CalendarDays, Check, Clock, EyeOff, GripVertical, Keyboard, Layers, Loader2, MapPin, Maximize2, Plus, Redo2, Undo2, User } from 'lucide-react';
 import { ContextMenu, type ContextAction } from '../ui/ContextMenu';
 import { JobSuggestionList } from './JobSuggestionList';
 import { useJobHistory } from '../../hooks/useJobHistory';
@@ -1051,42 +1051,6 @@ export function TaskBoardGrid({
                             {done}/{total}
                           </span>
                         )}
-                        {/* Whether each department has seen its open jobs on the board */}
-                        {columns.map((dept) => {
-                          const open = (group.columns.get(dept.id) ?? []).filter((task) => task.status !== 'completed');
-                          if (open.length === 0) return null;
-                          const acked = open.filter((task) => task.acknowledged_at);
-                          const latest = acked.reduce<EventTask | null>(
-                            (best, task) => (!best || (task.acknowledged_at ?? '') > (best.acknowledged_at ?? '') ? task : best),
-                            null
-                          );
-                          const state = acked.length === open.length ? 'all' : acked.length > 0 ? 'some' : 'none';
-                          return (
-                            <span
-                              key={dept.id}
-                              title={deptName(dept)}
-                              className={cn(
-                                'inline-flex items-center gap-1 rounded-full bg-white/70 px-2 py-0.5 text-[11px] font-bold',
-                                state === 'none' && 'text-amber-800',
-                                state === 'all' && 'text-slate-700'
-                              )}
-                            >
-                              <span aria-hidden="true" className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dept.color }} />
-                              <span className="sr-only">{deptName(dept)}: </span>
-                              {state === 'all' && latest ? (
-                                <>
-                                  <CheckCheck className="h-3 w-3" aria-hidden="true" />
-                                  {latest.acknowledged_by && <span>{latest.acknowledged_by}</span>}
-                                  <span className="tabular-nums">{formatTime(latest.acknowledged_at, lang)}</span>
-                                </>
-                              ) : state === 'some' ? (
-                                lang === 'th' ? `รับทราบ ${acked.length}/${open.length}` : `acknowledged ${acked.length}/${open.length}`
-                              ) : (
-                                lang === 'th' ? 'ยังไม่รับทราบ' : 'not acknowledged yet'
-                              )}
-                            </span>
-                          );
-                        })}
                         {canEdit && session && renderSessionTools && (
                           <div className="ml-auto" onMouseDown={(event) => event.stopPropagation()} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
                             {renderSessionTools(session)}

@@ -82,7 +82,7 @@ export function DisplayShell({ tab, onTabChange, scale, onScaleChange, departmen
   const [now, setNow] = useState(new Date());
   const [settings, setSettings] = useState(false);
   const [myName, setMyName] = useState(readName);
-  // Refresh when opening settings because the tick/acknowledge dialog can save a name too.
+  // Refresh the saved name when opening settings; this box saves the name sent with job ticks.
   useEffect(() => { if (settings) setMyName(readName()); }, [settings]);
   const saveName = () => {
     const name = myName.trim().slice(0, 60);

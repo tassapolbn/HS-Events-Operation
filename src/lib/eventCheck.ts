@@ -4,7 +4,6 @@ export type EventCheckWarning = 'no-jobs' | 'no-time' | 'no-place' | 'hidden';
 export interface EventCheckCounts {
   total: number;
   done: number;
-  acknowledged: number;
 }
 export interface EventCheckBlock {
   key: string;
@@ -17,13 +16,13 @@ export interface EventCheckBlock {
 interface EventCheckInput {
   event_date: string;
   sessions: Pick<EventSession, 'id' | 'session_date' | 'start_time' | 'end_time' | 'time_note' | 'location' | 'is_hidden' | 'sort_order'>[];
-  tasks: Pick<EventTask, 'session_id' | 'department_id' | 'status' | 'acknowledged_at' | 'deleted_at'>[];
+  tasks: Pick<EventTask, 'session_id' | 'department_id' | 'status' | 'deleted_at'>[];
 }
 
 /** Count all jobs, including hidden sessions, so preparation gaps remain visible. */
 export function eventCheck({ event_date, sessions, tasks }: EventCheckInput, departmentIds: string[]) {
   const emptyCounts = (): Record<string, EventCheckCounts> => Object.fromEntries(
-    departmentIds.map((id) => [id, { total: 0, done: 0, acknowledged: 0 }])
+    departmentIds.map((id) => [id, { total: 0, done: 0 }])
   );
   const totals = emptyCounts();
   const blocks: EventCheckBlock[] = [...sessions]
@@ -55,7 +54,6 @@ export function eventCheck({ event_date, sessions, tasks }: EventCheckInput, dep
       if (!count) continue;
       count.total++;
       if (task.status === 'completed') count.done++;
-      else if (task.acknowledged_at) count.acknowledged++;
     }
   }
   for (const block of blocks) {
