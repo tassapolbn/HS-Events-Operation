@@ -47,6 +47,7 @@ export function AttachmentSection({ entityType, entityId, canManage, compact }: 
   const { data: attachments, isLoading } = useAttachments(entityType, entityId);
   const { upload, remove } = useAttachmentMutations(entityType, entityId);
   const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [preview, setPreview] = useState<{ attachment: Attachment; url: string } | null>(null);
   const [toDelete, setToDelete] = useState<Attachment | null>(null);
@@ -90,7 +91,7 @@ export function AttachmentSection({ entityType, entityId, canManage, compact }: 
     : '';
 
   return (
-    <div className="space-y-3">
+    <div ref={rootRef} tabIndex={-1} className="space-y-3 focus:outline-none">
       {canManage && (
         <div
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -150,6 +151,7 @@ export function AttachmentSection({ entityType, entityId, canManage, compact }: 
                 <p className="text-xs text-slate-400">{formatFileSize(attachment.size_bytes)}</p>
               </div>
               <button
+                type="button"
                 onClick={() => openPreview(attachment)}
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-navy-700 dark:hover:bg-slate-800 dark:hover:text-gold-300"
                 title={t('common.preview')}
@@ -157,6 +159,7 @@ export function AttachmentSection({ entityType, entityId, canManage, compact }: 
                 <Eye className="h-4 w-4" />
               </button>
               <button
+                type="button"
                 onClick={() => downloadAttachment(attachment)}
                 className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-navy-700 dark:hover:bg-slate-800 dark:hover:text-gold-300"
                 title={t('common.download')}
@@ -165,6 +168,7 @@ export function AttachmentSection({ entityType, entityId, canManage, compact }: 
               </button>
               {canManage && (
                 <button
+                  type="button"
                   onClick={() => setToDelete(attachment)}
                   className="rounded-lg p-2 text-slate-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
                   title={t('common.delete')}
@@ -189,11 +193,11 @@ export function AttachmentSection({ entityType, entityId, canManage, compact }: 
           preview && (
             <>
               <a href={preview.url} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" size="sm">
+                <Button type="button" variant="outline" size="sm">
                   <ExternalLink className="h-4 w-4" /> {t('attachments.openTab')}
                 </Button>
               </a>
-              <Button size="sm" onClick={() => preview && downloadAttachment(preview.attachment)}>
+              <Button type="button" size="sm" onClick={() => preview && downloadAttachment(preview.attachment)}>
                 <Download className="h-4 w-4" /> {t('common.download')}
               </Button>
             </>
@@ -224,8 +228,17 @@ export function AttachmentSection({ entityType, entityId, canManage, compact }: 
         onClose={() => setToDelete(null)}
         onConfirm={async () => {
           if (toDelete) {
-            await remove.mutateAsync(toDelete);
-            setToDelete(null);
+            try {
+              await remove.mutateAsync(toDelete);
+              setToDelete(null);
+              // The deleted row's bin button is gone, so focus lands on the section when no surviving dialog took it.
+              requestAnimationFrame(() => {
+                const active = document.activeElement;
+                if (!active || active === document.body) rootRef.current?.focus();
+              });
+            } catch {
+              toast(t('common.errorGeneric'), 'error');
+            }
           }
         }}
         title={t('attachments.deleteConfirm')}

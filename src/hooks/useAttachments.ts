@@ -59,9 +59,10 @@ export function useAttachmentPhotoCounts(entityType: EntityType, entityIds: stri
 export function useAttachmentMutations(entityType: EntityType, entityId: string | undefined) {
   const queryClient = useQueryClient();
   const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ['attachments', entityType, entityId] });
+    queryClient.invalidateQueries({ queryKey: ['attachment-photo-counts'] });
     queryClient.invalidateQueries({ queryKey: ['display'] });
     queryClient.invalidateQueries({ queryKey: ['events'] });
+    return queryClient.invalidateQueries({ queryKey: ['attachments', entityType, entityId] });
   };
 
   const upload = useMutation({
@@ -98,9 +99,10 @@ export function useAttachmentMutations(entityType: EntityType, entityId: string 
 
   const remove = useMutation({
     mutationFn: async (attachment: Attachment) => {
-      await supabase.storage.from('attachments').remove([attachment.storage_path]);
       const { error } = await supabase.from('attachments').delete().eq('id', attachment.id);
       if (error) throw error;
+      // Ignore storage errors: the row is gone, so a leftover object is invisible and harmless.
+      await supabase.storage.from('attachments').remove([attachment.storage_path]);
     },
     onSuccess: invalidate
   });

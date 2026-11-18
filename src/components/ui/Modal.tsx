@@ -51,10 +51,12 @@ export function Modal({ open, onClose, title, subtitle, size = 'md', children, f
     document.body.style.overflow = 'hidden';
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
+      const dialogs = document.querySelectorAll<HTMLElement>('[role=dialog]');
+      if (dialogs.length === 0) document.body.style.overflow = '';
       const opener = openerRef.current;
       openerRef.current = null;
       if (opener && opener !== document.body && opener.isConnected) opener.focus();
+      else dialogs[dialogs.length - 1]?.focus();
     };
   }, [open]);
 
@@ -68,6 +70,9 @@ export function Modal({ open, onClose, title, subtitle, size = 'md', children, f
         tabIndex={-1}
         onKeyDownCapture={e => {
           if (!onConfirm || e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey || e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+          // Portal events reach ancestor dialogs too; only the top dialog owns Enter.
+          const dialogs = document.querySelectorAll('[role=dialog]');
+          if (dialogs[dialogs.length - 1] !== dialogRef.current || !dialogRef.current?.contains(e.target as Node)) return;
           // Keep native button activation and selecting an option intact.
           if (e.target instanceof HTMLElement && e.target.closest('button,select,[role=combobox]')) return;
           e.preventDefault();
@@ -89,6 +94,7 @@ export function Modal({ open, onClose, title, subtitle, size = 'md', children, f
             {subtitle && <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>}
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
             aria-label="Close"
