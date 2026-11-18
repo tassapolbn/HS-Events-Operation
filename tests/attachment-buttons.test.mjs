@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const attachments = readFileSync(new URL('../src/components/attachments/AttachmentSection.tsx', import.meta.url), 'utf8');
 const modal = readFileSync(new URL('../src/components/ui/Modal.tsx', import.meta.url), 'utf8');
+const taskDetail = readFileSync(new URL('../src/components/events/TaskDetailModal.tsx', import.meta.url), 'utf8');
 const mutations = readFileSync(new URL('../src/hooks/useAttachments.ts', import.meta.url), 'utf8');
 
 test('attachment buttons cannot submit an enclosing form', () => {
@@ -23,6 +24,34 @@ test('Enter only confirms the top dialog containing the event target', () => {
   assert.match(guard, /document\.querySelectorAll\(['"]\[role=dialog\]['"]\)/);
   assert.match(guard, /if\s*\(dialogs\[dialogs\.length\s*-\s*1\]\s*!==\s*dialogRef\.current\s*\|\|\s*!dialogRef\.current\?\.contains\(e\.target as Node\)\)\s*return;/);
   assert.ok(handler.indexOf('e.stopPropagation()') > guard.length);
+});
+
+test('Enter leaves textarea and contenteditable targets to their own handlers', () => {
+  const handler = modal.match(/onKeyDownCapture=\{e\s*=>\s*\{([\s\S]*?)\}\}/)?.[1];
+  assert.ok(handler, 'Modal must retain its Enter capture handler');
+  const preventDefault = handler.indexOf('e.preventDefault()');
+  assert.ok(preventDefault >= 0);
+  const guard = handler.slice(0, preventDefault);
+  assert.match(guard, /if\s*\(e\.target instanceof HTMLElement && \(e\.target\.isContentEditable \|\| e\.target\.closest\('textarea,\[contenteditable\]:not\(\[contenteditable="false"\]\)'\)\)\)\s*return;/);
+  assert.ok(handler.indexOf('e.stopPropagation()') > preventDefault);
+  assert.ok(handler.indexOf('.then(onConfirm)') > preventDefault);
+});
+
+test('Enter leaves native controls including the colour picker alone', () => {
+  const handler = modal.match(/onKeyDownCapture=\{e\s*=>\s*\{([\s\S]*?)\}\}/)?.[1];
+  assert.ok(handler);
+  const preventDefault = handler.indexOf('e.preventDefault()');
+  assert.ok(preventDefault >= 0);
+  assert.match(handler.slice(0, preventDefault), /if \(e\.target instanceof HTMLElement && e\.target\.closest\('button,select,\[role=combobox\],input\[type=color\]'\)\) return;/);
+});
+
+test('Department notes leave list Enter to the editor and retain Enter to save', () => {
+  const handler = taskDetail.split('{/* Department notes */}')[1]?.match(/onKeyDownCapture=\{e\s*=>\s*\{([\s\S]*?)\}\}/)?.[1];
+  assert.ok(handler);
+  const preventDefault = handler.indexOf('e.preventDefault()');
+  assert.ok(preventDefault >= 0);
+  assert.match(handler.slice(0, preventDefault), /if \(e\.target instanceof HTMLElement && e\.target\.isContentEditable\) \{\s*\/\/[^\n]*\n\s*const node = window\.getSelection\(\)\?\.anchorNode;\s*const el = node instanceof Element \? node : node\?\.parentElement;\s*if \(el\?\.closest\('li'\)\) return;\s*\}/);
+  assert.ok(handler.includes("if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229 && !e.repeat && !(e.target instanceof HTMLElement && e.target.closest('button,input[type=color]'))) { e.preventDefault(); void saveNotes(); }"));
 });
 
 test('attachment deletion removes the row before the storage object', () => {

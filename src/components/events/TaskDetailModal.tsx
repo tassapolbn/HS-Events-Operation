@@ -220,7 +220,13 @@ export function TaskDetailModal({ open, onClose, task, department, eventId, onEd
             </h4>
             {canUpdate ? (
               <div className="space-y-2" onKeyDownCapture={e => {
-                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229 && !e.repeat && !(e.target instanceof HTMLElement && e.target.closest('button'))) { e.preventDefault(); void saveNotes(); }
+                if (e.target instanceof HTMLElement && e.target.isContentEditable) {
+                  // Let the editor continue or exit lists on Enter.
+                  const node = window.getSelection()?.anchorNode;
+                  const el = node instanceof Element ? node : node?.parentElement;
+                  if (el?.closest('li')) return;
+                }
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229 && !e.repeat && !(e.target instanceof HTMLElement && e.target.closest('button,input[type=color]'))) { e.preventDefault(); void saveNotes(); }
               }}>
                 <RichTextEditor
                   value={notesDraft ?? task.notes}

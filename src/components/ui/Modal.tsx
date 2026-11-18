@@ -74,7 +74,9 @@ export function Modal({ open, onClose, title, subtitle, size = 'md', children, f
           const dialogs = document.querySelectorAll('[role=dialog]');
           if (dialogs[dialogs.length - 1] !== dialogRef.current || !dialogRef.current?.contains(e.target as Node)) return;
           // Keep native button activation and selecting an option intact.
-          if (e.target instanceof HTMLElement && e.target.closest('button,select,[role=combobox]')) return;
+          if (e.target instanceof HTMLElement && e.target.closest('button,select,[role=combobox],input[type=color]')) return;
+          // Let multiline fields and rich-text editors handle Enter themselves.
+          if (e.target instanceof HTMLElement && (e.target.isContentEditable || e.target.closest('textarea,[contenteditable]:not([contenteditable="false"])'))) return;
           e.preventDefault();
           e.stopPropagation();
           if (confirmDisabled || confirming.current || e.repeat) return;
